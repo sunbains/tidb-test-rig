@@ -71,17 +71,18 @@ impl StateContext {
 }
 
 /// Trait for state handlers
+#[async_trait::async_trait]
 pub trait StateHandler {
-    fn enter(&self, context: &mut StateContext) -> Result<State, Box<dyn std::error::Error>>;
-    fn execute(&self, context: &mut StateContext) -> Result<State, Box<dyn std::error::Error>>;
-    fn exit(&self, context: &mut StateContext) -> Result<(), Box<dyn std::error::Error>>;
+    async fn enter(&self, context: &mut StateContext) -> Result<State, Box<dyn std::error::Error>>;
+    async fn execute(&self, context: &mut StateContext) -> Result<State, Box<dyn std::error::Error>>;
+    async fn exit(&self, context: &mut StateContext) -> Result<(), Box<dyn std::error::Error>>;
 }
 
 /// State machine that manages the flow between states
 pub struct StateMachine {
     current_state: State,
     context: StateContext,
-    handlers: std::collections::HashMap<State, Box<dyn StateHandler>>,
+    handlers: std::collections::HashMap<State, Box<dyn StateHandler + Send + Sync>>,
 }
 
 impl StateMachine {
@@ -93,7 +94,7 @@ impl StateMachine {
         }
     }
 
-    pub fn register_handler(&mut self, state: State, handler: Box<dyn StateHandler>) {
+    pub fn register_handler(&mut self, state: State, handler: Box<dyn StateHandler + Send + Sync>) {
         self.handlers.insert(state, handler);
     }
 
@@ -109,19 +110,19 @@ impl StateMachine {
         &mut self.context
     }
 
-    pub fn run(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn run(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         println!("Starting TiDB connection state machine...");
         
         while self.current_state != State::Completed && self.current_state != State::Error("".to_string()) {
             if let Some(handler) = self.handlers.get(&self.current_state) {
                 // Enter state
-                let _next_state = handler.enter(&mut self.context)?;
+                let _next_state = handler.enter(&mut self.context).await?;
                 
                 // Execute state logic
-                let next_state = handler.execute(&mut self.context)?;
+                let next_state = handler.execute(&mut self.context).await?;
                 
                 // Exit current state
-                handler.exit(&mut self.context)?;
+                handler.exit(&mut self.context).await?;
                 
                 // Transition to next state
                 self.current_state = next_state;

@@ -1,7 +1,8 @@
 use clap::Parser;
 use std::process;
 use connect::state_machine::{StateMachine, State};
-use connect::state_handlers::{InitialHandler, ParsingConfigHandler, ConnectingHandler, TestingConnectionHandler, VerifyingDatabaseHandler, GettingVersionHandler, CheckingImportJobsHandler, ShowingImportJobDetailsHandler};
+use connect::state_handlers::{InitialHandler, ParsingConfigHandler, ConnectingHandler, TestingConnectionHandler, VerifyingDatabaseHandler, GettingVersionHandler};
+use connect::{CheckingImportJobsHandler, ShowingImportJobDetailsHandler};
 use rpassword::prompt_password;
 
 #[derive(Parser)]
@@ -19,9 +20,14 @@ struct Args {
     /// Database name (optional)
     #[arg(short = 'd', long)]
     database: Option<String>,
+
+    /// Duration to monitor import jobs in seconds (default: 60)
+    #[arg(short = 't', long, default_value = "60")]
+    monitor_duration: u64,
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let args = Args::parse();
 
     // Prompt for password securely
@@ -32,7 +38,6 @@ fn main() {
     
     // Register state handlers
     state_machine.register_handler(State::Initial, Box::new(InitialHandler));
-
     state_machine.register_handler(
         State::ParsingConfig,
         Box::new(ParsingConfigHandler::new(
@@ -42,16 +47,18 @@ fn main() {
             args.database.clone()
         ))
     );
-
     state_machine.register_handler(State::Connecting, Box::new(ConnectingHandler));
     state_machine.register_handler(State::TestingConnection, Box::new(TestingConnectionHandler));
     state_machine.register_handler(State::VerifyingDatabase, Box::new(VerifyingDatabaseHandler));
     state_machine.register_handler(State::GettingVersion, Box::new(GettingVersionHandler));
     state_machine.register_handler(State::CheckingImportJobs, Box::new(CheckingImportJobsHandler));
-    state_machine.register_handler(State::ShowingImportJobDetails, Box::new(ShowingImportJobDetailsHandler));
+    state_machine.register_handler(
+        State::ShowingImportJobDetails, 
+        Box::new(ShowingImportJobDetailsHandler::new(args.monitor_duration))
+    );
     
     // Run the state machine
-    match state_machine.run() {
+    match state_machine.run().await {
         Ok(_) => {
             println!("Connection test completed successfully!");
         }

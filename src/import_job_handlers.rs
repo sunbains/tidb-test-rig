@@ -4,6 +4,10 @@ use crate::state_machine::{State, StateContext, StateHandler};
 use mysql::prelude::*;
 use mysql::*;
 use chrono::{NaiveDateTime, Utc};
+use std::time::Duration;
+use tokio::time::sleep;
+use async_trait::async_trait;
+
 #[derive(Debug, Clone, FromRow)]
 pub struct ImportJob {
     #[allow(non_snake_case)]
@@ -37,13 +41,14 @@ pub struct ImportJob {
 /// Handler for checking import jobs
 pub struct CheckingImportJobsHandler;
 
+#[async_trait]
 impl StateHandler for CheckingImportJobsHandler {
-    fn enter(&self, _context: &mut StateContext) -> Result<State, Box<dyn std::error::Error>> {
+    async fn enter(&self, _context: &mut StateContext) -> Result<State, Box<dyn std::error::Error>> {
         println!("Checking for active import jobs...");
         Ok(State::CheckingImportJobs)
     }
 
-    fn execute(&self, context: &mut StateContext) -> Result<State, Box<dyn std::error::Error>> {
+    async fn execute(&self, context: &mut StateContext) -> Result<State, Box<dyn std::error::Error>> {
         if let Some(ref mut conn) = context.connection {
             // Execute SHOW IMPORT JOBS
             let query = "SHOW IMPORT JOBS";
@@ -71,55 +76,76 @@ impl StateHandler for CheckingImportJobsHandler {
         }
     }
 
-    fn exit(&self, _context: &mut StateContext) -> Result<(), Box<dyn std::error::Error>> {
+    async fn exit(&self, _context: &mut StateContext) -> Result<(), Box<dyn std::error::Error>> {
         Ok(())
     }
 }
 
 /// Handler for showing import job details
-pub struct ShowingImportJobDetailsHandler;
+pub struct ShowingImportJobDetailsHandler {
+    monitor_duration: u64,
+}
 
+impl ShowingImportJobDetailsHandler {
+    pub fn new(monitor_duration: u64) -> Self {
+        Self { monitor_duration }
+    }
+}
+
+#[async_trait]
 impl StateHandler for ShowingImportJobDetailsHandler {
-    fn enter(&self, context: &mut StateContext) -> Result<State, Box<dyn std::error::Error>> {
-        println!("Showing details for {} active import job(s)...", context.active_import_jobs.len());
+    async fn enter(&self, context: &mut StateContext) -> Result<State, Box<dyn std::error::Error>> {
+        println!("Monitoring {} active import job(s) for {} seconds...", 
+                context.active_import_jobs.len(), self.monitor_duration);
         Ok(State::ShowingImportJobDetails)
     }
 
-    fn execute(&self, context: &mut StateContext) -> Result<State, Box<dyn std::error::Error>> {
+    async fn execute(&self, context: &mut StateContext) -> Result<State, Box<dyn std::error::Error>> {
         if let Some(ref mut conn) = context.connection {
-            for job_id in &context.active_import_jobs {
-                println!("\n--- Import Job {} ---", job_id);
-                let query = format!("SHOW IMPORT JOB {}", job_id);
-                let results: Vec<ImportJob> = conn.exec(&query, ())?;
-                for job in results {
-                    if job.End_Time.is_none() {
-                        // Calculate time elapsed using UTC for consistency
-                        let now = Utc::now().naive_utc();
-                        let start_time = job.Start_Time.unwrap_or(now);
-                        let elapsed = now - start_time;
-                        let elapsed_h = elapsed.num_hours();
-                        let elapsed_m = (elapsed.num_minutes() % 60).abs();
-                        let elapsed_s = (elapsed.num_seconds() % 60).abs();
-                        println!(
-                            "Job_ID: {} | Phase: {} | Start_Time: {} | Source_File_Size: {} | Imported_Rows: {} | Time elapsed: {:02}:{:02}:{:02}",
-                            job.Job_ID,
-                            job.Phase,
-                            job.Start_Time.map(|t| t.to_string()).unwrap_or_else(|| "N/A".to_string()),
-                            job.Source_File_Size,
-                            job.Imported_Rows,
-                            elapsed_h, elapsed_m, elapsed_s
-                        );
+            let start_time = std::time::Instant::now();
+            let duration = Duration::from_secs(self.monitor_duration);
+            
+            while start_time.elapsed() < duration {
+                println!("\n--- Import Job Status Update ({}s remaining) ---", 
+                        (duration - start_time.elapsed()).as_secs());
+                
+                for job_id in &context.active_import_jobs {
+                    let query = format!("SHOW IMPORT JOB {}", job_id);
+                    let results: Vec<ImportJob> = conn.exec(&query, ())?;
+                    for job in results {
+                        if job.End_Time.is_none() {
+                            // Calculate time elapsed using UTC for consistency
+                            let now = Utc::now().naive_utc();
+                            let start_time = job.Start_Time.unwrap_or(now);
+                            let elapsed = now - start_time;
+                            let elapsed_h = elapsed.num_hours();
+                            let elapsed_m = (elapsed.num_minutes() % 60).abs();
+                            let elapsed_s = (elapsed.num_seconds() % 60).abs();
+                            println!(
+                                "Job_ID: {} | Phase: {} | Start_Time: {} | Source_File_Size: {} | Imported_Rows: {} | Time elapsed: {:02}:{:02}:{:02}",
+                                job.Job_ID,
+                                job.Phase,
+                                job.Start_Time.map(|t| t.to_string()).unwrap_or_else(|| "N/A".to_string()),
+                                job.Source_File_Size,
+                                job.Imported_Rows,
+                                elapsed_h, elapsed_m, elapsed_s
+                            );
+                        }
                     }
                 }
+                
+                // Sleep for 5 seconds before next update
+                sleep(Duration::from_secs(5)).await;
             }
-            println!("\n✓ Import job details displayed");
+            
+            println!("\n✓ Import job monitoring completed after {} seconds", self.monitor_duration);
         } else {
             return Err("No connection available for showing import job details".into());
         }
         Ok(State::Completed)
     }
 
-    fn exit(&self, _context: &mut StateContext) -> Result<(), Box<dyn std::error::Error>> {
+    async fn exit(&self, _context: &mut StateContext) -> Result<(), Box<dyn std::error::Error>> {
         Ok(())
     }
 } 

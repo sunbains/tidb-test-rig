@@ -1,38 +1,40 @@
 use crate::state_machine::{State, StateContext, StateHandler};
-use crate::connection::{parse_host_port, create_connection, test_connection, verify_database_exists, get_server_version};
-pub use crate::import_job_handlers::{ImportJob, CheckingImportJobsHandler, ShowingImportJobDetailsHandler};
+use crate::connection::{parse_connection_string, create_connection_pool};
+use mysql::prelude::*;
+use mysql::*;
+use async_trait::async_trait;
 
 /// Handler for the initial state
 pub struct InitialHandler;
 
+#[async_trait]
 impl StateHandler for InitialHandler {
-    fn enter(&self, _context: &mut StateContext) -> Result<State, Box<dyn std::error::Error>> {
-        println!("Initializing TiDB connection test...");
+    async fn enter(&self, _context: &mut StateContext) -> Result<State, Box<dyn std::error::Error>> {
+        println!("Starting TiDB connection test...");
         Ok(State::Initial)
     }
 
-    fn execute(&self, _context: &mut StateContext) -> Result<State, Box<dyn std::error::Error>> {
-        // Initial state just transitions to parsing configuration
+    async fn execute(&self, _context: &mut StateContext) -> Result<State, Box<dyn std::error::Error>> {
         Ok(State::ParsingConfig)
     }
 
-    fn exit(&self, _context: &mut StateContext) -> Result<(), Box<dyn std::error::Error>> {
+    async fn exit(&self, _context: &mut StateContext) -> Result<(), Box<dyn std::error::Error>> {
         Ok(())
     }
 }
 
-/// Handler for parsing configuration from command line arguments
+/// Handler for parsing configuration
 pub struct ParsingConfigHandler {
-    host_port: String,
+    host: String,
     username: String,
     password: String,
     database: Option<String>,
 }
 
 impl ParsingConfigHandler {
-    pub fn new(host_port: String, username: String, password: String, database: Option<String>) -> Self {
+    pub fn new(host: String, username: String, password: String, database: Option<String>) -> Self {
         Self {
-            host_port,
+            host,
             username,
             password,
             database,
@@ -40,59 +42,62 @@ impl ParsingConfigHandler {
     }
 }
 
+#[async_trait]
 impl StateHandler for ParsingConfigHandler {
-    fn enter(&self, _context: &mut StateContext) -> Result<State, Box<dyn std::error::Error>> {
-        println!("Parsing configuration...");
+    async fn enter(&self, context: &mut StateContext) -> Result<State, Box<dyn std::error::Error>> {
+        println!("Parsing connection configuration...");
         Ok(State::ParsingConfig)
     }
 
-    fn execute(&self, context: &mut StateContext) -> Result<State, Box<dyn std::error::Error>> {
-        // Parse host:port
-        let (host, port) = parse_host_port(&self.host_port)?;
+    async fn execute(&self, context: &mut StateContext) -> Result<State, Box<dyn std::error::Error>> {
+        // Parse host and port from connection string
+        let (host, port) = parse_connection_string(&self.host)?;
+        
+        // Store configuration in context
         context.host = host;
         context.port = port;
-
-        // Set username and password
         context.username = self.username.clone();
         context.password = self.password.clone();
-
-        // Set database if provided
         context.database = self.database.clone();
-
-        println!("✓ Configuration parsed successfully");
+        
+        println!("✓ Configuration parsed: {}:{}", context.host, context.port);
         Ok(State::Connecting)
     }
 
-    fn exit(&self, _context: &mut StateContext) -> Result<(), Box<dyn std::error::Error>> {
+    async fn exit(&self, _context: &mut StateContext) -> Result<(), Box<dyn std::error::Error>> {
         Ok(())
     }
 }
 
-/// Handler for establishing connection to TiDB
+/// Handler for establishing connection
 pub struct ConnectingHandler;
 
+#[async_trait]
 impl StateHandler for ConnectingHandler {
-    fn enter(&self, context: &mut StateContext) -> Result<State, Box<dyn std::error::Error>> {
-        println!("Connecting to TiDB at {}:{} as user '{}'", 
-                context.host, context.port, context.username);
+    async fn enter(&self, _context: &mut StateContext) -> Result<State, Box<dyn std::error::Error>> {
+        println!("Establishing connection to TiDB...");
         Ok(State::Connecting)
     }
 
-    fn execute(&self, context: &mut StateContext) -> Result<State, Box<dyn std::error::Error>> {
-        let conn = create_connection(
+    async fn execute(&self, context: &mut StateContext) -> Result<State, Box<dyn std::error::Error>> {
+        // Create connection pool
+        let pool = create_connection_pool(
             &context.host,
             context.port,
             &context.username,
             &context.password,
-            context.database.as_deref()
+            context.database.as_deref(),
         )?;
-
+        
+        // Get a connection from the pool
+        let conn = pool.get_conn()?;
         context.connection = Some(conn);
-        println!("✓ Successfully connected to TiDB");
+        
+        println!("✓ Connection established successfully");
         Ok(State::TestingConnection)
     }
 
-    fn exit(&self, _context: &mut StateContext) -> Result<(), Box<dyn std::error::Error>> {
+    async fn exit(&self, _context: &mut StateContext) -> Result<(), Box<dyn std::error::Error>> {
         Ok(())
     }
 }
@@ -100,63 +105,77 @@ impl StateHandler for ConnectingHandler {
 /// Handler for testing the connection
 pub struct TestingConnectionHandler;
 
+#[async_trait]
 impl StateHandler for TestingConnectionHandler {
-    fn enter(&self, _context: &mut StateContext) -> Result<State, Box<dyn std::error::Error>> {
+    async fn enter(&self, _context: &mut StateContext) -> Result<State, Box<dyn std::error::Error>> {
         println!("Testing connection...");
         Ok(State::TestingConnection)
     }
 
-    fn execute(&self, context: &mut StateContext) -> Result<State, Box<dyn std::error::Error>> {
+    async fn execute(&self, context: &mut StateContext) -> Result<State, Box<dyn std::error::Error>> {
         if let Some(ref mut conn) = context.connection {
-            test_connection(conn)?;
-            println!("✓ Connection test successful");
+            // Simple ping test
+            let result: Result<Vec<Row>, Error> = conn.exec("SELECT 1", ());
+            match result {
+                Ok(_) => {
+                    println!("✓ Connection test passed");
+                    Ok(State::VerifyingDatabase)
+                }
+                Err(e) => {
+                    context.set_error(format!("Connection test failed: {}", e));
+                    Err(format!("Connection test failed: {}", e).into())
+                }
+            }
         } else {
-            return Err("No connection available for testing".into());
-        }
-
-        // Determine next state based on whether database was specified
-        if context.database.is_some() {
-            Ok(State::VerifyingDatabase)
-        } else {
-            Ok(State::GettingVersion)
+            let error_msg = "No connection available for testing";
+            context.set_error(error_msg.to_string());
+            Err(error_msg.into())
         }
     }
 
-    fn exit(&self, _context: &mut StateContext) -> Result<(), Box<dyn std::error::Error>> {
+    async fn exit(&self, _context: &mut StateContext) -> Result<(), Box<dyn std::error::Error>> {
         Ok(())
     }
 }
 
-/// Handler for verifying database existence
+/// Handler for verifying database
 pub struct VerifyingDatabaseHandler;
 
+#[async_trait]
 impl StateHandler for VerifyingDatabaseHandler {
-    fn enter(&self, context: &mut StateContext) -> Result<State, Box<dyn std::error::Error>> {
-        if let Some(ref db_name) = context.database {
-            println!("Verifying database '{}' exists...", db_name);
-        }
+    async fn enter(&self, _context: &mut StateContext) -> Result<State, Box<dyn std::error::Error>> {
+        println!("Verifying database...");
         Ok(State::VerifyingDatabase)
     }
 
-    fn execute(&self, context: &mut StateContext) -> Result<State, Box<dyn std::error::Error>> {
-        if let Some(ref db_name) = context.database {
-            if let Some(ref mut conn) = context.connection {
-                let exists = verify_database_exists(conn, db_name)?;
-                if exists {
-                    println!("✓ Database '{}' exists and is accessible", db_name);
-                } else {
-                    context.set_error(format!("Database '{}' does not exist", db_name));
-                    return Ok(State::Error(context.error_message.clone().unwrap()));
+    async fn execute(&self, context: &mut StateContext) -> Result<State, Box<dyn std::error::Error>> {
+        if let Some(ref mut conn) = context.connection {
+            if let Some(ref db_name) = context.database {
+                // Test if we can access the specified database
+                let query = format!("USE `{}`", db_name);
+                match conn.query_drop(query) {
+                    Ok(_) => {
+                        println!("✓ Database '{}' verified", db_name);
+                        Ok(State::GettingVersion)
+                    }
+                    Err(e) => {
+                        context.set_error(format!("Database verification failed: {}", e));
+                        Err(format!("Database verification failed: {}", e).into())
+                    }
                 }
             } else {
-                return Err("No connection available for database verification".into());
+                // No specific database specified, just proceed
+                println!("✓ No specific database specified, proceeding...");
+                Ok(State::GettingVersion)
             }
+        } else {
+            let error_msg = "No connection available for database verification";
+            context.set_error(error_msg.to_string());
+            Err(error_msg.into())
         }
-
-        Ok(State::GettingVersion)
     }
 
-    fn exit(&self, _context: &mut StateContext) -> Result<(), Box<dyn std::error::Error>> {
+    async fn exit(&self, _context: &mut StateContext) -> Result<(), Box<dyn std::error::Error>> {
         Ok(())
     }
 }
@@ -164,31 +183,47 @@ impl StateHandler for VerifyingDatabaseHandler {
 /// Handler for getting server version
 pub struct GettingVersionHandler;
 
+#[async_trait]
 impl StateHandler for GettingVersionHandler {
-    fn enter(&self, _context: &mut StateContext) -> Result<State, Box<dyn std::error::Error>> {
+    async fn enter(&self, _context: &mut StateContext) -> Result<State, Box<dyn std::error::Error>> {
         println!("Getting server version...");
         Ok(State::GettingVersion)
     }
 
-    fn execute(&self, context: &mut StateContext) -> Result<State, Box<dyn std::error::Error>> {
+    async fn execute(&self, context: &mut StateContext) -> Result<State, Box<dyn std::error::Error>> {
         if let Some(ref mut conn) = context.connection {
-            let version = get_server_version(conn)?;
-            context.server_version = version.clone();
+            let query = "SELECT VERSION() as version";
+            let result: Result<Vec<Row>, Error> = conn.exec(query, ());
             
-            match version {
-                Some(ver) => println!("✓ TiDB version: {}", ver),
-                None => println!("! Could not retrieve TiDB version"),
+            match result {
+                Ok(rows) => {
+                    if let Some(row) = rows.first() {
+                        if let Some(version) = row.get::<String, _>("version") {
+                            context.server_version = Some(version.clone());
+                            println!("✓ Server version: {}", version);
+                            Ok(State::CheckingImportJobs)
+                        } else {
+                            context.set_error("Could not extract version from result".to_string());
+                            Err("Could not extract version from result".into())
+                        }
+                    } else {
+                        context.set_error("No version information returned".to_string());
+                        Err("No version information returned".into())
+                    }
+                }
+                Err(e) => {
+                    context.set_error(format!("Failed to get server version: {}", e));
+                    Err(format!("Failed to get server version: {}", e).into())
+                }
             }
         } else {
-            return Err("No connection available for version retrieval".into());
+            let error_msg = "No connection available for getting version";
+            context.set_error(error_msg.to_string());
+            Err(error_msg.into())
         }
-
-        Ok(State::CheckingImportJobs)
     }
 
-    fn exit(&self, _context: &mut StateContext) -> Result<(), Box<dyn std::error::Error>> {
-        println!("✓ Disconnecting from TiDB");
-        // Connection will be dropped when context goes out of scope
+    async fn exit(&self, _context: &mut StateContext) -> Result<(), Box<dyn std::error::Error>> {
         Ok(())
     }
 } 

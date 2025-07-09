@@ -8,3 +8,5 @@ clap = { version = "4.0", features = ["derive"] }
 mysql = { version = "26.0", features = ["chrono"] }
 rpassword = "7.2"
 chrono = { version = "0.4" }
+tokio = { version = "1.0", features = ["full"] }
+async-trait = "0.1"

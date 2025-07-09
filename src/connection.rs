@@ -15,6 +15,11 @@ pub fn parse_host_port(host_port: &str) -> Result<(String, u16), Box<dyn std::er
     Ok((host, port))
 }
 
+/// Parse connection string (alias for parse_host_port for compatibility)
+pub fn parse_connection_string(connection_string: &str) -> Result<(String, u16), Box<dyn std::error::Error>> {
+    parse_host_port(connection_string)
+}
+
 /// Parse username and password from a string in format "username:password"
 pub fn parse_user_pass(user_pass: &str) -> Result<(String, String), Box<dyn std::error::Error>> {
     let parts: Vec<&str> = user_pass.splitn(2, ':').collect();
@@ -25,9 +30,9 @@ pub fn parse_user_pass(user_pass: &str) -> Result<(String, String), Box<dyn std:
     Ok((parts[0].to_string(), parts[1].to_string()))
 }
 
-/// Create a connection to TiDB using the provided parameters
-pub fn create_connection(host: &str, port: u16, user: &str, password: &str, database: Option<&str>) 
-    -> Result<PooledConn, Box<dyn std::error::Error>> {
+/// Create a connection pool to TiDB using the provided parameters
+pub fn create_connection_pool(host: &str, port: u16, user: &str, password: &str, database: Option<&str>) 
+    -> Result<Pool, Box<dyn std::error::Error>> {
     
     let mut builder = OptsBuilder::new()
         .ip_or_hostname(Some(host))
@@ -40,6 +45,14 @@ pub fn create_connection(host: &str, port: u16, user: &str, password: &str, data
     }
     
     let pool = Pool::new(builder)?;
+    Ok(pool)
+}
+
+/// Create a connection to TiDB using the provided parameters
+pub fn create_connection(host: &str, port: u16, user: &str, password: &str, database: Option<&str>) 
+    -> Result<PooledConn, Box<dyn std::error::Error>> {
+    
+    let pool = create_connection_pool(host, port, user, password, database)?;
     let conn = pool.get_conn()?;
     
     Ok(conn)
