@@ -1,0 +1,9 @@
+[package]
+name = "connect"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+clap = { version = "4.0", features = ["derive"] }
+mysql = "25.0"
+rpassword = "7.2"
