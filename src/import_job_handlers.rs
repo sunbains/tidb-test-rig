@@ -3,7 +3,7 @@
 use crate::state_machine::{State, StateContext, StateHandler};
 use mysql::prelude::*;
 use mysql::*;
-use chrono::NaiveDateTime;
+use chrono::{NaiveDateTime, Utc};
 #[derive(Debug, Clone, FromRow)]
 pub struct ImportJob {
     #[allow(non_snake_case)]
@@ -89,20 +89,33 @@ impl StateHandler for ShowingImportJobDetailsHandler {
         if let Some(ref mut conn) = context.connection {
             for job_id in &context.active_import_jobs {
                 println!("\n--- Import Job {} ---", job_id);
-                
                 let query = format!("SHOW IMPORT JOB {}", job_id);
-                let results: Vec<(String, String)> = conn.exec(&query, ())?;
-                
-                for (key, value) in results {
-                    println!("  {}: {}", key, value);
+                let results: Vec<ImportJob> = conn.exec(&query, ())?;
+                for job in results {
+                    if job.End_Time.is_none() {
+                        // Calculate time elapsed using UTC for consistency
+                        let now = Utc::now().naive_utc();
+                        let start_time = job.Start_Time.unwrap_or(now);
+                        let elapsed = now - start_time;
+                        let elapsed_h = elapsed.num_hours();
+                        let elapsed_m = (elapsed.num_minutes() % 60).abs();
+                        let elapsed_s = (elapsed.num_seconds() % 60).abs();
+                        println!(
+                            "Job_ID: {} | Phase: {} | Start_Time: {} | Source_File_Size: {} | Imported_Rows: {} | Time elapsed: {:02}:{:02}:{:02}",
+                            job.Job_ID,
+                            job.Phase,
+                            job.Start_Time.map(|t| t.to_string()).unwrap_or_else(|| "N/A".to_string()),
+                            job.Source_File_Size,
+                            job.Imported_Rows,
+                            elapsed_h, elapsed_m, elapsed_s
+                        );
+                    }
                 }
             }
-            
             println!("\n✓ Import job details displayed");
         } else {
             return Err("No connection available for showing import job details".into());
         }
-        
         Ok(State::Completed)
     }
 
