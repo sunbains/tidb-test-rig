@@ -44,7 +44,7 @@ impl ParsingConfigHandler {
 
 #[async_trait]
 impl StateHandler for ParsingConfigHandler {
-    async fn enter(&self, context: &mut StateContext) -> Result<State, Box<dyn std::error::Error>> {
+    async fn enter(&self, _context: &mut StateContext) -> Result<State, Box<dyn std::error::Error>> {
         println!("Parsing connection configuration...");
         Ok(State::ParsingConfig)
     }
