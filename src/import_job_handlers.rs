@@ -1,36 +1,36 @@
+#![allow(non_snake_case)]
+
 use crate::state_machine::{State, StateContext, StateHandler};
 use mysql::prelude::*;
 use mysql::*;
-use serde::Deserialize;
-
-#[derive(Debug, Clone, FromRow, Deserialize)]
+#[derive(Debug, Clone, FromRow)]
 pub struct ImportJob {
-    #[serde(rename = "Job_ID")]
-    pub job_id: i32,
-    #[serde(rename = "Data_Source")]
-    pub data_source: String,
-    #[serde(rename = "Target_Table")]
-    pub target_table: String,
-    #[serde(rename = "Table_ID")]
-    pub table_id: i32,
-    #[serde(rename = "Phase")]
-    pub phase: String,
-    #[serde(rename = "Status")]
-    pub status: String,
-    #[serde(rename = "Source_File_Size")]
-    pub source_file_size: String,
-    #[serde(rename = "Imported_Rows")]
-    pub imported_rows: i64,
-    #[serde(rename = "Result_Message")]
-    pub result_message: String,
-    #[serde(rename = "Create_Time")]
-    pub create_time: String,
-    #[serde(rename = "Start_Time")]
-    pub start_time: String,
-    #[serde(rename = "End_Time")]
-    pub end_time: Option<String>,
-    #[serde(rename = "Created_By")]
-    pub created_by: String,
+    #[allow(non_snake_case)]
+    pub Job_ID: i32,
+    #[allow(non_snake_case)]
+    pub Data_Source: String,
+    #[allow(non_snake_case)]
+    pub Target_Table: String,
+    #[allow(non_snake_case)]
+    pub Table_ID: i32,
+    #[allow(non_snake_case)]
+    pub Phase: String,
+    #[allow(non_snake_case)]
+    pub Status: String,
+    #[allow(non_snake_case)]
+    pub Source_File_Size: String,
+    #[allow(non_snake_case)]
+    pub Imported_Rows: i64,
+    #[allow(non_snake_case)]
+    pub Result_Message: String,
+    #[allow(non_snake_case)]
+    pub Create_Time: mysql::Value,
+    #[allow(non_snake_case)]
+    pub Start_Time: mysql::Value,
+    #[allow(non_snake_case)]
+    pub End_Time: mysql::Value,
+    #[allow(non_snake_case)]
+    pub Created_By: String,
 }
 
 /// Handler for checking import jobs
@@ -51,9 +51,8 @@ impl StateHandler for CheckingImportJobsHandler {
             // Extract job IDs where End_Time is NULL
             let mut active_jobs = Vec::new();
             for job in results {
-                if job.end_time.is_none() {
-                    println!("Found active import job: {}", job.job_id);
-                    active_jobs.push(job.job_id.to_string());
+                if matches!(job.End_Time, mysql::Value::NULL) {
+                    active_jobs.push(job.Job_ID.to_string());
                 }
             }
             
