@@ -1,5 +1,6 @@
 use std::fmt;
 use mysql::PooledConn;
+use std::any::Any;
 
 /// Represents the different states in the TiDB connection process
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -33,7 +34,7 @@ impl fmt::Display for State {
     }
 }
 
-/// Context data that flows through the state machine
+/// Minimal context data that flows through the state machine
 pub struct StateContext {
     pub host: String,
     pub port: u16,
@@ -43,7 +44,8 @@ pub struct StateContext {
     pub connection: Option<PooledConn>,
     pub server_version: Option<String>,
     pub error_message: Option<String>,
-    pub active_import_jobs: Vec<String>, // Store job IDs of active import jobs
+    // Handler-specific context storage
+    handler_contexts: std::collections::HashMap<State, Box<dyn Any + Send + Sync>>,
 }
 
 impl StateContext {
@@ -57,7 +59,7 @@ impl StateContext {
             connection: None,
             server_version: None,
             error_message: None,
-            active_import_jobs: Vec::new(),
+            handler_contexts: std::collections::HashMap::new(),
         }
     }
 
@@ -67,6 +69,48 @@ impl StateContext {
 
     pub fn clear_error(&mut self) {
         self.error_message = None;
+    }
+
+    /// Store handler-specific context
+    pub fn set_handler_context<T: Any + Send + Sync>(&mut self, state: State, context: T) {
+        self.handler_contexts.insert(state, Box::new(context));
+    }
+
+    /// Retrieve handler-specific context
+    pub fn get_handler_context<T: Any + Send + Sync>(&self, state: &State) -> Option<&T> {
+        self.handler_contexts.get(state)
+            .and_then(|boxed| boxed.downcast_ref::<T>())
+    }
+
+    /// Retrieve mutable handler-specific context
+    pub fn get_handler_context_mut<T: Any + Send + Sync>(&mut self, state: &State) -> Option<&mut T> {
+        self.handler_contexts.get_mut(state)
+            .and_then(|boxed| boxed.downcast_mut::<T>())
+    }
+
+    /// Remove handler-specific context
+    pub fn remove_handler_context(&mut self, state: &State) {
+        self.handler_contexts.remove(state);
+    }
+
+    /// Move handler context from one state to another
+    pub fn move_handler_context<T: Any + Send + Sync + Clone>(&mut self, from_state: &State, to_state: State) -> Option<T> {
+        if let Some(boxed) = self.handler_contexts.remove(from_state) {
+            match boxed.downcast::<T>() {
+                Ok(context) => {
+                    let context = *context;
+                    self.handler_contexts.insert(to_state, Box::new(context.clone()));
+                    Some(context)
+                }
+                Err(boxed) => {
+                    // If downcast fails, put it back
+                    self.handler_contexts.insert(from_state.clone(), boxed);
+                    None
+                }
+            }
+        } else {
+            None
+        }
     }
 }
 
