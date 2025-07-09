@@ -5,9 +5,6 @@ edition = "2024"
 
 [dependencies]
 clap = { version = "4.0", features = ["derive"] }
-mysql = "26.0"
-mysql_common = { version = "0.35", features = ["chrono", "derive", "time"] }
-time = { version = "0.3", features = ["serde"] }
+mysql = { version = "26.0", features = ["chrono"] }
 rpassword = "7.2"
-serde = { version = "1.0", features = ["derive"] }
-chrono = { version = "0.4", features = ["serde"] }
+chrono = { version = "0.4" }

@@ -3,6 +3,7 @@
 use crate::state_machine::{State, StateContext, StateHandler};
 use mysql::prelude::*;
 use mysql::*;
+use chrono::NaiveDateTime;
 #[derive(Debug, Clone, FromRow)]
 pub struct ImportJob {
     #[allow(non_snake_case)]
@@ -24,11 +25,11 @@ pub struct ImportJob {
     #[allow(non_snake_case)]
     pub Result_Message: String,
     #[allow(non_snake_case)]
-    pub Create_Time: mysql::Value,
+    pub Create_Time: Option<NaiveDateTime>,
     #[allow(non_snake_case)]
-    pub Start_Time: mysql::Value,
+    pub Start_Time: Option<NaiveDateTime>,
     #[allow(non_snake_case)]
-    pub End_Time: mysql::Value,
+    pub End_Time: Option<NaiveDateTime>,
     #[allow(non_snake_case)]
     pub Created_By: String,
 }
@@ -51,7 +52,7 @@ impl StateHandler for CheckingImportJobsHandler {
             // Extract job IDs where End_Time is NULL
             let mut active_jobs = Vec::new();
             for job in results {
-                if matches!(job.End_Time, mysql::Value::NULL) {
+                if job.End_Time.is_none() {
                     active_jobs.push(job.Job_ID.to_string());
                 }
             }
