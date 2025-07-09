@@ -1,7 +1,7 @@
 use clap::Parser;
 use std::process;
 use connect::state_machine::{StateMachine, State};
-use connect::state_handlers::{InitialHandler, ParsingConfigHandler, ConnectingHandler, TestingConnectionHandler, VerifyingDatabaseHandler, GettingVersionHandler};
+use connect::state_handlers::{InitialHandler, ParsingConfigHandler, ConnectingHandler, TestingConnectionHandler, VerifyingDatabaseHandler, GettingVersionHandler, CheckingImportJobsHandler, ShowingImportJobDetailsHandler};
 use rpassword::prompt_password;
 
 #[derive(Parser)]
@@ -47,6 +47,8 @@ fn main() {
     state_machine.register_handler(State::TestingConnection, Box::new(TestingConnectionHandler));
     state_machine.register_handler(State::VerifyingDatabase, Box::new(VerifyingDatabaseHandler));
     state_machine.register_handler(State::GettingVersion, Box::new(GettingVersionHandler));
+    state_machine.register_handler(State::CheckingImportJobs, Box::new(CheckingImportJobsHandler));
+    state_machine.register_handler(State::ShowingImportJobDetails, Box::new(ShowingImportJobDetailsHandler));
     
     // Run the state machine
     match state_machine.run() {

@@ -10,6 +10,8 @@ pub enum State {
     TestingConnection,
     VerifyingDatabase,
     GettingVersion,
+    CheckingImportJobs,
+    ShowingImportJobDetails,
     Completed,
     Error(String),
 }
@@ -23,6 +25,8 @@ impl fmt::Display for State {
             State::TestingConnection => write!(f, "Testing Connection"),
             State::VerifyingDatabase => write!(f, "Verifying Database"),
             State::GettingVersion => write!(f, "Getting Server Version"),
+            State::CheckingImportJobs => write!(f, "Checking Import Jobs"),
+            State::ShowingImportJobDetails => write!(f, "Showing Import Job Details"),
             State::Completed => write!(f, "Completed"),
             State::Error(msg) => write!(f, "Error: {}", msg),
         }
@@ -39,6 +43,7 @@ pub struct StateContext {
     pub connection: Option<PooledConn>,
     pub server_version: Option<String>,
     pub error_message: Option<String>,
+    pub active_import_jobs: Vec<String>, // Store job IDs of active import jobs
 }
 
 impl StateContext {
@@ -52,6 +57,7 @@ impl StateContext {
             connection: None,
             server_version: None,
             error_message: None,
+            active_import_jobs: Vec::new(),
         }
     }
 

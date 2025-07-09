@@ -1,5 +1,6 @@
 use crate::state_machine::{State, StateContext, StateHandler};
 use crate::connection::{parse_host_port, create_connection, test_connection, verify_database_exists, get_server_version};
+pub use crate::import_job_handlers::{ImportJob, CheckingImportJobsHandler, ShowingImportJobDetailsHandler};
 
 /// Handler for the initial state
 pub struct InitialHandler;
@@ -182,7 +183,7 @@ impl StateHandler for GettingVersionHandler {
             return Err("No connection available for version retrieval".into());
         }
 
-        Ok(State::Completed)
+        Ok(State::CheckingImportJobs)
     }
 
     fn exit(&self, _context: &mut StateContext) -> Result<(), Box<dyn std::error::Error>> {
