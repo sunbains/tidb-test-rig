@@ -198,7 +198,116 @@ A specialized test for monitoring TiDB import jobs.
 - Monitors active import jobs
 - Shows job progress and status updates
 - Uses custom state machine flow with job monitoring states
-- Demonstrates the generic `NextStateVersionHandler` pattern
+
+## Python Plugin Support
+
+The framework now includes Python plugin support, allowing you to write state handlers in Python while leveraging the Rust state machine infrastructure.
+
+### Python Demo Binary (`python_demo.rs`)
+
+A demonstration binary showing how to integrate Python handlers with the Rust state machine.
+
+**Features:**
+- Loads Python handlers from modules
+- Registers Python handlers with the state machine
+- Demonstrates Python-Rust integration
+- Supports the same CLI arguments as other binaries
+
+**Usage:**
+```bash
+# Run with Python handlers
+cargo run --bin python_demo --features python_plugins
+
+# Run with specific Python module
+cargo run --bin python_demo --features python_plugins -- --python-module examples.python_handlers
+```
+
+### Python Handler Integration
+
+Python handlers can be registered with the state machine to handle specific states:
+
+```rust
+use test_rig::python_bindings::{load_python_handlers, register_python_handler};
+
+// Load all handlers from a Python module
+load_python_handlers(&mut state_machine, "examples.python_handlers")?;
+
+// Or register a specific handler
+let py_handler = load_python_handler("examples.python_handlers.IsolationTestPythonHandler")?;
+register_python_handler(&mut state_machine, State::TestingIsolation, py_handler)?;
+```
+
+### Python Handler Interface
+
+Python handlers must implement the `PyStateHandler` interface:
+
+```python
+from test_rig_python import PyStateHandler, PyStateContext, PyState
+
+class MyHandler(PyStateHandler):
+    def enter(self, context: PyStateContext) -> str:
+        """Called when entering the state"""
+        return PyState.initial()
+    
+    def execute(self, context: PyStateContext) -> str:
+        """Called during state execution"""
+        return PyState.completed()
+    
+    def exit(self, context: PyStateContext) -> None:
+        """Called when exiting the state"""
+        pass
+```
+
+### Available Python Examples
+
+- **`examples/python_handlers.py`**: Collection of example Python handlers including:
+  - `ExamplePythonHandler`: Basic handler demonstrating the interface
+  - `ImportJobPythonHandler`: Handler for checking import jobs
+  - `MonitoringPythonHandler`: Handler for monitoring job details
+  - `IsolationTestPythonHandler`: Handler for testing transaction isolation
+
+- **`examples/run_isolation_test.py`**: Standalone Python isolation test that can run independently
+
+- **`examples/test_rig_python.pyi`**: Type stubs for IDE support and type checking
+
+### Configuration Support
+
+Python scripts support the same configuration sources as Rust binaries:
+
+```bash
+# Environment variables
+export TIDB_HOST=localhost:4000
+export TIDB_USER=root
+export TIDB_PASSWORD=mypassword
+export TIDB_DATABASE=test
+
+# Configuration files
+python3 examples/run_isolation_test.py --config tidb_config.json
+
+# Command line arguments
+python3 examples/run_isolation_test.py --host localhost:4000 --user root
+```
+
+### Development Setup
+
+To develop with Python plugins:
+
+1. **Install Python dependencies:**
+   ```bash
+   pip install mysql-connector-python
+   ```
+
+2. **Enable Python plugin feature:**
+   ```bash
+   cargo build --features python_plugins
+   ```
+
+3. **Run Python demo:**
+   ```bash
+   cargo run --bin python_demo --features python_plugins
+   ```
+
+For more detailed information about the Python plugin system, see the [Python Plugin Documentation](../docs/PYTHON_PLUGIN.md).
 
 ## Building and Running Tests
 

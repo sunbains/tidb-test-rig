@@ -98,6 +98,105 @@ match classify_error(&error) {
 }
 ```
 
+## Python Plugin Support
+
+The framework now supports Python plugins for state handlers, allowing you to write test logic in Python while leveraging the Rust state machine infrastructure.
+
+### Features
+
+- **Python State Handlers**: Write state handlers in Python using the `PyStateHandler` base class
+- **Seamless Integration**: Python handlers integrate with the Rust state machine
+- **Type Safety**: Full type hints and validation between Rust and Python
+- **Standalone Testing**: Python handlers can be tested independently
+- **Configuration Support**: Python scripts read from the same config files and environment variables
+
+### Quick Start with Python
+
+#### 1. Install Python Dependencies
+
+```bash
+# Install mysql-connector-python for database connections
+pip install mysql-connector-python
+```
+
+#### 2. Run Python Isolation Test
+
+```bash
+# Using environment variables
+export TIDB_HOST=tidb.qyruvz1u6xtd.clusters.dev.tidb-cloud.com:4000
+export TIDB_USER=your_user
+export TIDB_PASSWORD=your_password
+export TIDB_DATABASE=your_database
+python3 examples/run_isolation_test.py
+
+# Using command line arguments
+python3 examples/run_isolation_test.py \
+  --host tidb.qyruvz1u6xtd.clusters.dev.tidb-cloud.com:4000 \
+  --user your_user \
+  --password your_password \
+  --database your_database
+
+# Using configuration file
+python3 examples/run_isolation_test.py --config tidb_config.json
+```
+
+#### 3. Create Custom Python Handlers
+
+```python
+from test_rig_python import PyStateHandler, PyStateContext, PyState
+
+class MyCustomHandler(PyStateHandler):
+    def __init__(self):
+        super().__init__()
+        self.counter = 0
+    
+    def enter(self, context: PyStateContext) -> str:
+        print(f"Entering state with host: {context.host}")
+        return PyState.initial()
+    
+    def execute(self, context: PyStateContext) -> str:
+        self.counter += 1
+        print(f"Executing (attempt {self.counter})")
+        
+        if context.connection:
+            # Execute database operations
+            results = context.connection.execute_query("SELECT 1")
+            return PyState.completed()
+        else:
+            return PyState.connecting()
+    
+    def exit(self, context: PyStateContext) -> None:
+        print(f"Exiting state (total executions: {self.counter})")
+```
+
+### Python Handler Integration
+
+Python handlers can be integrated with the Rust state machine:
+
+```rust
+use test_rig::python_bindings::register_python_handler;
+
+// Register Python handler for a specific state
+let py_handler = load_python_handler("my_module.MyCustomHandler")?;
+register_python_handler(&mut state_machine, State::TestingConnection, py_handler)?;
+```
+
+### Available Python Examples
+
+- **`examples/python_handlers.py`**: Collection of example Python handlers
+- **`examples/run_isolation_test.py`**: Standalone Python isolation test
+- **`examples/test_rig_python.pyi`**: Type stubs for IDE support
+
+### Configuration Priority
+
+Python scripts follow the same configuration priority as Rust binaries:
+1. Command-line arguments (highest priority)
+2. Environment variables (`TIDB_HOST`, `TIDB_USER`, `TIDB_PASSWORD`, `TIDB_DATABASE`)
+3. Configuration file (`tidb_config.json` or `tidb_config.toml`)
+4. Default values (lowest priority)
+
+For more detailed information about the Python plugin system, see the [Python Plugin Documentation](docs/PYTHON_PLUGIN.md).
+
 ## Quick Start
 
 ### 1. Generate Configuration
