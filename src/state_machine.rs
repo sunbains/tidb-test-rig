@@ -2,6 +2,9 @@ use std::fmt;
 use mysql::PooledConn;
 use std::any::Any;
 
+/// Type alias for error types used in state handlers
+pub type StateError = Box<dyn std::error::Error + Send + Sync>;
+
 /// Represents the different states in the TiDB connection process
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum State {
@@ -29,7 +32,7 @@ impl fmt::Display for State {
             State::CheckingImportJobs => write!(f, "Checking Import Jobs"),
             State::ShowingImportJobDetails => write!(f, "Showing Import Job Details"),
             State::Completed => write!(f, "Completed"),
-            State::Error(msg) => write!(f, "Error: {}", msg),
+            State::Error(msg) => write!(f, "Error: {msg}"),
         }
     }
 }
@@ -46,6 +49,12 @@ pub struct StateContext {
     pub error_message: Option<String>,
     // Handler-specific context storage
     handler_contexts: std::collections::HashMap<State, Box<dyn Any + Send + Sync>>,
+}
+
+impl Default for StateContext {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl StateContext {
@@ -117,9 +126,9 @@ impl StateContext {
 /// Trait for state handlers
 #[async_trait::async_trait]
 pub trait StateHandler {
-    async fn enter(&self, context: &mut StateContext) -> Result<State, Box<dyn std::error::Error>>;
-    async fn execute(&self, context: &mut StateContext) -> Result<State, Box<dyn std::error::Error>>;
-    async fn exit(&self, context: &mut StateContext) -> Result<(), Box<dyn std::error::Error>>;
+    async fn enter(&self, context: &mut StateContext) -> Result<State, StateError>;
+    async fn execute(&self, context: &mut StateContext) -> Result<State, StateError>;
+    async fn exit(&self, context: &mut StateContext) -> Result<(), StateError>;
 }
 
 /// State machine that manages the flow between states
@@ -127,6 +136,12 @@ pub struct StateMachine {
     current_state: State,
     context: StateContext,
     handlers: std::collections::HashMap<State, Box<dyn StateHandler + Send + Sync>>,
+}
+
+impl Default for StateMachine {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl StateMachine {
@@ -154,7 +169,7 @@ impl StateMachine {
         &mut self.context
     }
 
-    pub async fn run(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn run(&mut self) -> Result<(), StateError> {
         println!("Starting TiDB connection state machine...");
         
         while self.current_state != State::Completed && self.current_state != State::Error("".to_string()) {
@@ -181,7 +196,7 @@ impl StateMachine {
                 Ok(())
             }
             State::Error(msg) => {
-                eprintln!("✗ State machine failed: {}", msg);
+                eprintln!("✗ State machine failed: {msg}");
                 Err(msg.clone().into())
             }
             _ => Err("Unexpected final state".into()),

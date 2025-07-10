@@ -59,14 +59,14 @@ pub struct CheckingImportJobsHandler;
 
 #[async_trait]
 impl StateHandler for CheckingImportJobsHandler {
-    async fn enter(&self, context: &mut StateContext) -> Result<State, Box<dyn std::error::Error>> {
+    async fn enter(&self, context: &mut StateContext) -> Result<State, crate::state_machine::StateError> {
         println!("Checking for active import jobs...");
         // Initialize import job context
         context.set_handler_context(State::CheckingImportJobs, ImportJobContext::new(0));
         Ok(State::CheckingImportJobs)
     }
 
-    async fn execute(&self, context: &mut StateContext) -> Result<State, Box<dyn std::error::Error>> {
+    async fn execute(&self, context: &mut StateContext) -> Result<State, crate::state_machine::StateError> {
         if let Some(ref mut conn) = context.connection {
             // Execute SHOW IMPORT JOBS
             let query = "SHOW IMPORT JOBS";
@@ -98,7 +98,7 @@ impl StateHandler for CheckingImportJobsHandler {
         }
     }
 
-    async fn exit(&self, context: &mut StateContext) -> Result<(), Box<dyn std::error::Error>> {
+    async fn exit(&self, context: &mut StateContext) -> Result<(), crate::state_machine::StateError> {
         // Move the context to the next state
         context.move_handler_context::<ImportJobContext>(&State::CheckingImportJobs, State::ShowingImportJobDetails);
         Ok(())
@@ -118,7 +118,7 @@ impl ShowingImportJobDetailsHandler {
 
 #[async_trait]
 impl StateHandler for ShowingImportJobDetailsHandler {
-    async fn enter(&self, context: &mut StateContext) -> Result<State, Box<dyn std::error::Error>> {
+    async fn enter(&self, context: &mut StateContext) -> Result<State, crate::state_machine::StateError> {
         // Update the monitor duration in the context
         if let Some(import_context) = context.get_handler_context_mut::<ImportJobContext>(&State::ShowingImportJobDetails) {
             import_context.monitor_duration = self.monitor_duration;
@@ -128,7 +128,7 @@ impl StateHandler for ShowingImportJobDetailsHandler {
         Ok(State::ShowingImportJobDetails)
     }
 
-    async fn execute(&self, context: &mut StateContext) -> Result<State, Box<dyn std::error::Error>> {
+    async fn execute(&self, context: &mut StateContext) -> Result<State, crate::state_machine::StateError> {
         // Extract context data first to avoid borrowing conflicts
         let (monitor_duration, active_jobs) = if let Some(import_context) = context.get_handler_context::<ImportJobContext>(&State::ShowingImportJobDetails) {
             (import_context.monitor_duration, import_context.active_import_jobs.clone())
@@ -145,7 +145,7 @@ impl StateHandler for ShowingImportJobDetailsHandler {
                         (duration - start_time.elapsed()).as_secs());
                 
                 for job_id in &active_jobs {
-                    let query = format!("SHOW IMPORT JOB {}", job_id);
+                    let query = format!("SHOW IMPORT JOB {job_id}");
                     let results: Vec<ImportJob> = conn.exec(&query, ())?;
                     for job in results {
                         if job.End_Time.is_none() {
@@ -173,14 +173,14 @@ impl StateHandler for ShowingImportJobDetailsHandler {
                 sleep(Duration::from_secs(5)).await;
             }
             
-            println!("\n✓ Import job monitoring completed after {} seconds", monitor_duration);
+            println!("\n✓ Import job monitoring completed after {monitor_duration} seconds");
         } else {
             return Err("No connection available for showing import job details".into());
         }
         Ok(State::Completed)
     }
 
-    async fn exit(&self, context: &mut StateContext) -> Result<(), Box<dyn std::error::Error>> {
+    async fn exit(&self, context: &mut StateContext) -> Result<(), crate::state_machine::StateError> {
         // Clean up the context
         context.remove_handler_context(&State::ShowingImportJobDetails);
         Ok(())

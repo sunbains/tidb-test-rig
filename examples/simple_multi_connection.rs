@@ -1,0 +1,238 @@
+use connect::state_machine::{StateMachine, State, StateError};
+use connect::state_handlers::{InitialHandler, ParsingConfigHandler, ConnectingHandler, TestingConnectionHandler, VerifyingDatabaseHandler, GettingVersionHandler};
+use connect::{CheckingImportJobsHandler, ShowingImportJobDetailsHandler};
+use std::sync::{Arc, Mutex};
+use tokio::task::JoinHandle;
+use std::collections::HashMap;
+
+/// Simple shared state for coordination
+#[derive(Debug, Clone)]
+pub struct SharedTestState {
+    pub connection_results: HashMap<String, ConnectionResult>,
+    pub global_status: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct ConnectionResult {
+    pub connection_id: String,
+    pub host: String,
+    pub status: ConnectionStatus,
+    pub error: Option<String>,
+    pub version: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub enum ConnectionStatus {
+    NotStarted,
+    Connecting,
+    Connected,
+    Testing,
+    Completed,
+    Failed,
+}
+
+impl Default for SharedTestState {
+    fn default() -> Self {
+        Self {
+            connection_results: HashMap::new(),
+            global_status: "Initialized".to_string(),
+        }
+    }
+}
+
+/// Simple multi-connection coordinator
+pub struct SimpleMultiConnectionCoordinator {
+    shared_state: Arc<Mutex<SharedTestState>>,
+    connections: Vec<ConnectionConfig>,
+}
+
+pub struct ConnectionConfig {
+    pub id: String,
+    pub host: String,
+    pub port: u16,
+    pub username: String,
+    pub password: String,
+    pub database: Option<String>,
+}
+
+impl SimpleMultiConnectionCoordinator {
+    pub fn new() -> Self {
+        Self {
+            shared_state: Arc::new(Mutex::new(SharedTestState::default())),
+            connections: Vec::new(),
+        }
+    }
+
+    pub fn add_connection(&mut self, config: ConnectionConfig) {
+        // Initialize connection result
+        if let Ok(mut state) = self.shared_state.lock() {
+            state.connection_results.insert(config.id.clone(), ConnectionResult {
+                connection_id: config.id.clone(),
+                host: config.host.clone(),
+                status: ConnectionStatus::NotStarted,
+                error: None,
+                version: None,
+            });
+        }
+        self.connections.push(config);
+    }
+
+    pub fn get_shared_state(&self) -> Arc<Mutex<SharedTestState>> {
+        Arc::clone(&self.shared_state)
+    }
+
+    /// Run all connections concurrently
+    pub async fn run_all_connections(&self) -> Result<(), StateError> {
+        println!("Starting {} connections concurrently...", self.connections.len());
+        
+        let mut handles: Vec<JoinHandle<Result<(), StateError>>> = Vec::new();
+        
+        for connection in &self.connections {
+            let shared_state = Arc::clone(&self.shared_state);
+            let connection_id = connection.id.clone();
+            let host = connection.host.clone();
+            let username = connection.username.clone();
+            let password = connection.password.clone();
+            let database = connection.database.clone();
+            
+            let handle = tokio::spawn(async move {
+                // Create state machine for this connection
+                let mut state_machine = StateMachine::new();
+                
+                // Register handlers
+                state_machine.register_handler(State::Initial, Box::new(InitialHandler));
+                state_machine.register_handler(
+                    State::ParsingConfig,
+                    Box::new(ParsingConfigHandler::new(
+                        host,
+                        username,
+                        password,
+                        database
+                    ))
+                );
+                state_machine.register_handler(State::Connecting, Box::new(ConnectingHandler));
+                state_machine.register_handler(State::TestingConnection, Box::new(TestingConnectionHandler));
+                state_machine.register_handler(State::VerifyingDatabase, Box::new(VerifyingDatabaseHandler));
+                state_machine.register_handler(State::GettingVersion, Box::new(GettingVersionHandler));
+                state_machine.register_handler(State::CheckingImportJobs, Box::new(CheckingImportJobsHandler));
+                state_machine.register_handler(
+                    State::ShowingImportJobDetails, 
+                    Box::new(ShowingImportJobDetailsHandler::new(30)) // 30 seconds monitoring
+                );
+                
+                // Update status to connecting
+                if let Ok(mut state) = shared_state.lock() {
+                    if let Some(result) = state.connection_results.get_mut(&connection_id) {
+                        result.status = ConnectionStatus::Connecting;
+                    }
+                }
+                
+                // Run the state machine
+                match state_machine.run().await {
+                    Ok(_) => {
+                        // Update status to completed
+                        if let Ok(mut state) = shared_state.lock() {
+                            if let Some(result) = state.connection_results.get_mut(&connection_id) {
+                                result.status = ConnectionStatus::Completed;
+                            }
+                            state.global_status = "All connections completed".to_string();
+                        }
+                        println!("✓ Connection {} completed successfully", connection_id);
+                        Ok(())
+                    }
+                    Err(e) => {
+                        // Update status to failed
+                        if let Ok(mut state) = shared_state.lock() {
+                            if let Some(result) = state.connection_results.get_mut(&connection_id) {
+                                result.status = ConnectionStatus::Failed;
+                                result.error = Some(e.to_string());
+                            }
+                        }
+                        eprintln!("✗ Connection {} failed: {}", connection_id, e);
+                        Err(e)
+                    }
+                }
+            });
+            
+            handles.push(handle);
+        }
+        
+        // Wait for all connections to complete
+        for handle in handles {
+            match handle.await {
+                Ok(Ok(_)) => {},
+                Ok(Err(e)) => eprintln!("Connection task failed: {}", e),
+                Err(e) => eprintln!("Task join failed: {}", e),
+            }
+        }
+        
+        Ok(())
+    }
+
+    /// Print final results
+    pub fn print_results(&self) {
+        if let Ok(state) = self.shared_state.lock() {
+            println!("\n=== Final Results ===");
+            println!("Global Status: {}", state.global_status);
+            println!("\nConnection Results:");
+            
+            for (conn_id, result) in &state.connection_results {
+                println!("  {}: {:?} - {}", conn_id, result.status, result.host);
+                if let Some(error) = &result.error {
+                    println!("    Error: {}", error);
+                }
+                if let Some(version) = &result.version {
+                    println!("    Version: {}", version);
+                }
+            }
+        }
+    }
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    println!("Simple Multi-Connection TiDB Testing");
+    println!("====================================");
+
+    let mut coordinator = SimpleMultiConnectionCoordinator::new();
+
+    // Add multiple connections
+    coordinator.add_connection(ConnectionConfig {
+        id: "primary".to_string(),
+        host: "tidb-primary.example.com".to_string(),
+        port: 4000,
+        username: "user1".to_string(),
+        password: "password1".to_string(),
+        database: Some("test_db".to_string()),
+    });
+
+    coordinator.add_connection(ConnectionConfig {
+        id: "secondary".to_string(),
+        host: "tidb-secondary.example.com".to_string(),
+        port: 4000,
+        username: "user2".to_string(),
+        password: "password2".to_string(),
+        database: Some("test_db".to_string()),
+    });
+
+    coordinator.add_connection(ConnectionConfig {
+        id: "backup".to_string(),
+        host: "tidb-backup.example.com".to_string(),
+        port: 4000,
+        username: "user3".to_string(),
+        password: "password3".to_string(),
+        database: Some("backup_db".to_string()),
+    });
+
+    // Run all connections concurrently
+    if let Err(e) = coordinator.run_all_connections().await {
+        eprintln!("Failed to run connections: {}", e);
+        return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())) as Box<dyn std::error::Error>);
+    }
+
+    // Print results
+    coordinator.print_results();
+
+    println!("\n✓ Multi-connection testing completed!");
+    Ok(())
+} 

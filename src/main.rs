@@ -63,7 +63,7 @@ async fn main() {
             println!("Connection test completed successfully!");
         }
         Err(e) => {
-            eprintln!("✗ Failed to complete connection test: {}", e);
+            eprintln!("✗ Failed to complete connection test: {e}");
             
             // Try to provide more specific error messages
             let error_msg = e.to_string().to_lowercase();

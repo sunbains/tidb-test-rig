@@ -9,16 +9,16 @@ pub struct InitialHandler;
 
 #[async_trait]
 impl StateHandler for InitialHandler {
-    async fn enter(&self, _context: &mut StateContext) -> Result<State, Box<dyn std::error::Error>> {
+    async fn enter(&self, _context: &mut StateContext) -> Result<State, Box<dyn std::error::Error + Send + Sync>> {
         println!("Starting TiDB connection test...");
         Ok(State::Initial)
     }
 
-    async fn execute(&self, _context: &mut StateContext) -> Result<State, Box<dyn std::error::Error>> {
+    async fn execute(&self, _context: &mut StateContext) -> Result<State, Box<dyn std::error::Error + Send + Sync>> {
         Ok(State::ParsingConfig)
     }
 
-    async fn exit(&self, _context: &mut StateContext) -> Result<(), Box<dyn std::error::Error>> {
+    async fn exit(&self, _context: &mut StateContext) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         Ok(())
     }
 }
@@ -44,12 +44,12 @@ impl ParsingConfigHandler {
 
 #[async_trait]
 impl StateHandler for ParsingConfigHandler {
-    async fn enter(&self, _context: &mut StateContext) -> Result<State, Box<dyn std::error::Error>> {
+    async fn enter(&self, _context: &mut StateContext) -> Result<State, crate::state_machine::StateError> {
         println!("Parsing connection configuration...");
         Ok(State::ParsingConfig)
     }
 
-    async fn execute(&self, context: &mut StateContext) -> Result<State, Box<dyn std::error::Error>> {
+    async fn execute(&self, context: &mut StateContext) -> Result<State, crate::state_machine::StateError> {
         // Parse host and port from connection string
         let (host, port) = parse_connection_string(&self.host)?;
         
@@ -64,7 +64,7 @@ impl StateHandler for ParsingConfigHandler {
         Ok(State::Connecting)
     }
 
-    async fn exit(&self, _context: &mut StateContext) -> Result<(), Box<dyn std::error::Error>> {
+    async fn exit(&self, _context: &mut StateContext) -> Result<(), crate::state_machine::StateError> {
         Ok(())
     }
 }
@@ -74,12 +74,12 @@ pub struct ConnectingHandler;
 
 #[async_trait]
 impl StateHandler for ConnectingHandler {
-    async fn enter(&self, _context: &mut StateContext) -> Result<State, Box<dyn std::error::Error>> {
+    async fn enter(&self, _context: &mut StateContext) -> Result<State, crate::state_machine::StateError> {
         println!("Establishing connection to TiDB...");
         Ok(State::Connecting)
     }
 
-    async fn execute(&self, context: &mut StateContext) -> Result<State, Box<dyn std::error::Error>> {
+    async fn execute(&self, context: &mut StateContext) -> Result<State, crate::state_machine::StateError> {
         // Create connection pool
         let pool = create_connection_pool(
             &context.host,
@@ -97,7 +97,7 @@ impl StateHandler for ConnectingHandler {
         Ok(State::TestingConnection)
     }
 
-    async fn exit(&self, _context: &mut StateContext) -> Result<(), Box<dyn std::error::Error>> {
+    async fn exit(&self, _context: &mut StateContext) -> Result<(), crate::state_machine::StateError> {
         Ok(())
     }
 }
@@ -107,12 +107,12 @@ pub struct TestingConnectionHandler;
 
 #[async_trait]
 impl StateHandler for TestingConnectionHandler {
-    async fn enter(&self, _context: &mut StateContext) -> Result<State, Box<dyn std::error::Error>> {
+    async fn enter(&self, _context: &mut StateContext) -> Result<State, crate::state_machine::StateError> {
         println!("Testing connection...");
         Ok(State::TestingConnection)
     }
 
-    async fn execute(&self, context: &mut StateContext) -> Result<State, Box<dyn std::error::Error>> {
+    async fn execute(&self, context: &mut StateContext) -> Result<State, crate::state_machine::StateError> {
         if let Some(ref mut conn) = context.connection {
             // Simple ping test
             let result: Result<Vec<Row>, Error> = conn.exec("SELECT 1", ());
@@ -122,8 +122,8 @@ impl StateHandler for TestingConnectionHandler {
                     Ok(State::VerifyingDatabase)
                 }
                 Err(e) => {
-                    context.set_error(format!("Connection test failed: {}", e));
-                    Err(format!("Connection test failed: {}", e).into())
+                    context.set_error(format!("Connection test failed: {e}"));
+                    Err(format!("Connection test failed: {e}").into())
                 }
             }
         } else {
@@ -133,7 +133,7 @@ impl StateHandler for TestingConnectionHandler {
         }
     }
 
-    async fn exit(&self, _context: &mut StateContext) -> Result<(), Box<dyn std::error::Error>> {
+    async fn exit(&self, _context: &mut StateContext) -> Result<(), crate::state_machine::StateError> {
         Ok(())
     }
 }
@@ -143,24 +143,24 @@ pub struct VerifyingDatabaseHandler;
 
 #[async_trait]
 impl StateHandler for VerifyingDatabaseHandler {
-    async fn enter(&self, _context: &mut StateContext) -> Result<State, Box<dyn std::error::Error>> {
+    async fn enter(&self, _context: &mut StateContext) -> Result<State, crate::state_machine::StateError> {
         println!("Verifying database...");
         Ok(State::VerifyingDatabase)
     }
 
-    async fn execute(&self, context: &mut StateContext) -> Result<State, Box<dyn std::error::Error>> {
+    async fn execute(&self, context: &mut StateContext) -> Result<State, crate::state_machine::StateError> {
         if let Some(ref mut conn) = context.connection {
             if let Some(ref db_name) = context.database {
                 // Test if we can access the specified database
-                let query = format!("USE `{}`", db_name);
+                let query = format!("USE `{db_name}`");
                 match conn.query_drop(query) {
                     Ok(_) => {
-                        println!("✓ Database '{}' verified", db_name);
+                        println!("✓ Database '{db_name}' verified");
                         Ok(State::GettingVersion)
                     }
                     Err(e) => {
-                        context.set_error(format!("Database verification failed: {}", e));
-                        Err(format!("Database verification failed: {}", e).into())
+                        context.set_error(format!("Database verification failed: {e}"));
+                        Err(format!("Database verification failed: {e}").into())
                     }
                 }
             } else {
@@ -175,7 +175,7 @@ impl StateHandler for VerifyingDatabaseHandler {
         }
     }
 
-    async fn exit(&self, _context: &mut StateContext) -> Result<(), Box<dyn std::error::Error>> {
+    async fn exit(&self, _context: &mut StateContext) -> Result<(), crate::state_machine::StateError> {
         Ok(())
     }
 }
@@ -185,12 +185,12 @@ pub struct GettingVersionHandler;
 
 #[async_trait]
 impl StateHandler for GettingVersionHandler {
-    async fn enter(&self, _context: &mut StateContext) -> Result<State, Box<dyn std::error::Error>> {
+    async fn enter(&self, _context: &mut StateContext) -> Result<State, crate::state_machine::StateError> {
         println!("Getting server version...");
         Ok(State::GettingVersion)
     }
 
-    async fn execute(&self, context: &mut StateContext) -> Result<State, Box<dyn std::error::Error>> {
+    async fn execute(&self, context: &mut StateContext) -> Result<State, crate::state_machine::StateError> {
         if let Some(ref mut conn) = context.connection {
             let query = "SELECT VERSION() as version";
             let result: Result<Vec<Row>, Error> = conn.exec(query, ());
@@ -200,7 +200,7 @@ impl StateHandler for GettingVersionHandler {
                     if let Some(row) = rows.first() {
                         if let Some(version) = row.get::<String, _>("version") {
                             context.server_version = Some(version.clone());
-                            println!("✓ Server version: {}", version);
+                            println!("✓ Server version: {version}");
                             Ok(State::CheckingImportJobs)
                         } else {
                             context.set_error("Could not extract version from result".to_string());
@@ -212,8 +212,8 @@ impl StateHandler for GettingVersionHandler {
                     }
                 }
                 Err(e) => {
-                    context.set_error(format!("Failed to get server version: {}", e));
-                    Err(format!("Failed to get server version: {}", e).into())
+                    context.set_error(format!("Failed to get server version: {e}"));
+                    Err(format!("Failed to get server version: {e}").into())
                 }
             }
         } else {
@@ -223,7 +223,7 @@ impl StateHandler for GettingVersionHandler {
         }
     }
 
-    async fn exit(&self, _context: &mut StateContext) -> Result<(), Box<dyn std::error::Error>> {
+    async fn exit(&self, _context: &mut StateContext) -> Result<(), crate::state_machine::StateError> {
         Ok(())
     }
 } 
