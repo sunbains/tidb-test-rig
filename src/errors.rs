@@ -1,8 +1,8 @@
-use thiserror::Error;
-use std::time::Duration;
-use std::pin::Pin;
-use std::future::Future;
 use crate::state_machine::State;
+use std::future::Future;
+use std::pin::Pin;
+use std::time::Duration;
+use thiserror::Error;
 
 /// Main error type for the TiDB connection and testing framework
 #[derive(Error, Debug)]
@@ -70,19 +70,23 @@ pub enum ConnectError {
 pub enum StateError {
     #[error("Connection timeout after {timeout:?}")]
     ConnectionTimeout { timeout: Duration },
-    
+
     #[error("Authentication failed: {reason}")]
     AuthenticationFailure { reason: String },
-    
+
     #[error("SQL execution failed - Query: {query}, Error: {error}")]
     SqlExecutionError { query: String, error: String },
-    
+
     #[error("State transition failed from {from:?} to {to:?}: {reason}")]
-    StateTransitionError { from: State, to: State, reason: String },
-    
+    StateTransitionError {
+        from: State,
+        to: State,
+        reason: String,
+    },
+
     #[error("Configuration error: {0}")]
     ConfigError(#[from] ConfigError),
-    
+
     #[error("Network error: {0}")]
     NetworkError(#[from] std::io::Error),
 
@@ -107,13 +111,13 @@ pub enum StateError {
 pub enum ConfigError {
     #[error("Invalid configuration: {message}")]
     Invalid { message: String },
-    
+
     #[error("Missing required configuration: {field}")]
     Missing { field: String },
-    
+
     #[error("Configuration file not found: {path}")]
     FileNotFound { path: String },
-    
+
     #[error("Configuration parse error: {0}")]
     ParseError(#[from] serde_json::Error),
 }
@@ -158,7 +162,7 @@ impl RetryStrategy {
         E: std::error::Error,
     {
         let mut delay = self.config.base_delay;
-        
+
         for attempt in 0..self.config.max_retries {
             match operation().await {
                 Ok(result) => return Ok(result),
@@ -166,8 +170,9 @@ impl RetryStrategy {
                 Err(_) => {
                     tokio::time::sleep(delay).await;
                     delay = Duration::from_millis(
-                        (delay.as_millis() as f64 * self.config.backoff_multiplier) as u64
-                    ).min(self.config.max_delay);
+                        (delay.as_millis() as f64 * self.config.backoff_multiplier) as u64,
+                    )
+                    .min(self.config.max_delay);
                 }
             }
         }
@@ -175,14 +180,18 @@ impl RetryStrategy {
     }
 
     /// Retry with custom error transformation
-    pub async fn retry_with_transform<F, T, E, E2>(&self, mut operation: F, transform: impl Fn(E) -> E2) -> std::result::Result<T, E2>
+    pub async fn retry_with_transform<F, T, E, E2>(
+        &self,
+        mut operation: F,
+        transform: impl Fn(E) -> E2,
+    ) -> std::result::Result<T, E2>
     where
         F: FnMut() -> Pin<Box<dyn Future<Output = std::result::Result<T, E>> + Send>>,
         E: std::error::Error,
         E2: std::error::Error,
     {
         let mut delay = self.config.base_delay;
-        
+
         for attempt in 0..self.config.max_retries {
             match operation().await {
                 Ok(result) => return Ok(result),
@@ -190,8 +199,9 @@ impl RetryStrategy {
                 Err(_) => {
                     tokio::time::sleep(delay).await;
                     delay = Duration::from_millis(
-                        (delay.as_millis() as f64 * self.config.backoff_multiplier) as u64
-                    ).min(self.config.max_delay);
+                        (delay.as_millis() as f64 * self.config.backoff_multiplier) as u64,
+                    )
+                    .min(self.config.max_delay);
                 }
             }
         }
@@ -385,9 +395,11 @@ impl From<&str> for ConnectError {
 impl From<ConnectionError> for ConnectError {
     fn from(err: ConnectionError) -> Self {
         match err {
-            ConnectionError::ConnectFailed { host: _, port: _, message: _ } => {
-                ConnectError::Connection(mysql::Error::server_disconnected())
-            }
+            ConnectionError::ConnectFailed {
+                host: _,
+                port: _,
+                message: _,
+            } => ConnectError::Connection(mysql::Error::server_disconnected()),
             ConnectionError::AuthFailed { user, message } => {
                 ConnectError::Authentication(format!("User {user}: {message}"))
             }
@@ -410,12 +422,10 @@ impl From<ConnectionError> for ConnectError {
             ConnectionError::DnsResolutionFailed { host, message } => {
                 ConnectError::Network(format!("DNS resolution failed for {host}: {message}"))
             }
-            ConnectionError::PoolExhausted { max_connections } => {
-                ConnectError::Resource(format!("Connection pool exhausted (max: {max_connections})"))
-            }
-            ConnectionError::ValidationFailed { reason } => {
-                ConnectError::Validation(reason)
-            }
+            ConnectionError::PoolExhausted { max_connections } => ConnectError::Resource(format!(
+                "Connection pool exhausted (max: {max_connections})"
+            )),
+            ConnectionError::ValidationFailed { reason } => ConnectError::Validation(reason),
         }
     }
 }
@@ -480,6 +490,9 @@ mod tests {
         assert_eq!(context.host, Some("localhost".to_string()));
         assert_eq!(context.database, Some("testdb".to_string()));
         assert_eq!(context.user, Some("testuser".to_string()));
-        assert_eq!(context.additional_info.get("key"), Some(&"value".to_string()));
+        assert_eq!(
+            context.additional_info.get("key"),
+            Some(&"value".to_string())
+        );
     }
 }

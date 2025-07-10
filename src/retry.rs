@@ -1,6 +1,6 @@
-use std::time::{Duration, Instant};
-use std::sync::{Arc, Mutex};
 use crate::errors::{ConnectError, RetryConfig};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 // RetryConfig is now defined in errors.rs
 
@@ -68,16 +68,14 @@ impl CircuitBreaker {
         E: Into<ConnectError>,
     {
         let state = self.get_state();
-        
+
         match state {
             CircuitState::Open => {
                 if self.should_attempt_reset() {
                     self.set_state(CircuitState::HalfOpen);
                     self.call_half_open(f)
                 } else {
-                    Err(ConnectError::Connection(
-                        mysql::Error::server_disconnected()
-                    ))
+                    Err(ConnectError::Connection(mysql::Error::server_disconnected()))
                 }
             }
             CircuitState::HalfOpen => self.call_half_open(f),
@@ -137,7 +135,7 @@ impl CircuitBreaker {
     fn record_failure(&self) {
         let mut failure_count = self.failure_count.lock().unwrap();
         let mut last_failure_time = self.last_failure_time.lock().unwrap();
-        
+
         *failure_count += 1;
         *last_failure_time = Some(Instant::now());
 
@@ -175,18 +173,18 @@ where
         match operation() {
             Ok(result) => return Ok(result),
             Err(error) => {
-                        if attempt >= config.max_retries {
-            return Err(error.into());
-        }
+                if attempt >= config.max_retries {
+                    return Err(error.into());
+                }
 
-        // Simple exponential backoff without jitter for now
-        tokio::time::sleep(delay).await;
+                // Simple exponential backoff without jitter for now
+                tokio::time::sleep(delay).await;
 
-        // Exponential backoff
-        delay = Duration::from_millis(
-            (delay.as_millis() as f64 * config.backoff_multiplier) as u64
-        );
-        delay = delay.min(config.max_delay);
+                // Exponential backoff
+                delay = Duration::from_millis(
+                    (delay.as_millis() as f64 * config.backoff_multiplier) as u64,
+                );
+                delay = delay.min(config.max_delay);
             }
         }
     }
@@ -321,4 +319,4 @@ mod tests {
         assert!(result.is_ok());
         assert_eq!(circuit_breaker.get_state(), CircuitState::Closed);
     }
-} 
+}

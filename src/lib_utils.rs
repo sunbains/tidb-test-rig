@@ -1,5 +1,5 @@
 use crate::cli::CommonArgs;
-use crate::errors::{Result, ConnectError};
+use crate::errors::{ConnectError, Result};
 use crate::state_handlers::GettingVersionHandler;
 use crate::state_machine::{State, StateMachine};
 use crate::{

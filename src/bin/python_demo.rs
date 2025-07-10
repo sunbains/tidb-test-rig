@@ -1,7 +1,6 @@
 use clap::Parser;
 use test_rig::{
-    CommonArgs, print_error_and_exit, print_success, print_test_header,
-    StateMachine,
+    CommonArgs, StateMachine, print_error_and_exit, print_success, print_test_header,
     state_handlers::{
         ConnectingHandler, InitialHandler, NextStateVersionHandler, ParsingConfigHandler,
         TestingConnectionHandler, VerifyingDatabaseHandler,
@@ -59,7 +58,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     register_rust_handlers(&mut state_machine, host, user, password, database);
 
     // Load Python handlers
-    println!("\nLoading Python handlers from module: {}", args.python_module);
+    println!(
+        "\nLoading Python handlers from module: {}",
+        args.python_module
+    );
     #[cfg(feature = "python_plugins")]
     match load_python_handlers(&mut state_machine, &args.python_module) {
         Ok(_) => println!("✓ Python handlers loaded successfully"),
@@ -85,7 +87,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             print_error_and_exit("State machine execution failed", &e);
         }
     }
-    
+
     Ok(())
 }
 
@@ -98,11 +100,24 @@ fn register_rust_handlers(
 ) {
     // Register standard handlers
     state_machine.register_handler(State::Initial, Box::new(InitialHandler));
-    state_machine.register_handler(State::ParsingConfig, Box::new(ParsingConfigHandler::new(host.clone(), user.clone(), password.clone(), database.clone())));
+    state_machine.register_handler(
+        State::ParsingConfig,
+        Box::new(ParsingConfigHandler::new(
+            host.clone(),
+            user.clone(),
+            password.clone(),
+            database.clone(),
+        )),
+    );
     state_machine.register_handler(State::TestingConnection, Box::new(TestingConnectionHandler));
     state_machine.register_handler(State::Connecting, Box::new(ConnectingHandler));
     state_machine.register_handler(State::VerifyingDatabase, Box::new(VerifyingDatabaseHandler));
-    state_machine.register_handler(State::GettingVersion, Box::new(NextStateVersionHandler { next_state: State::Completed }));
+    state_machine.register_handler(
+        State::GettingVersion,
+        Box::new(NextStateVersionHandler {
+            next_state: State::Completed,
+        }),
+    );
 
     // Set up connection info in the state machine context
     let context = state_machine.get_context_mut();
@@ -139,4 +154,4 @@ mod tests {
         assert_eq!(args.common.host, "localhost:4000");
         assert_eq!(args.common.user, "root");
     }
-} 
+}

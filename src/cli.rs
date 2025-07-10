@@ -130,7 +130,9 @@ impl CommonArgs {
     }
 
     pub fn get_database(&self) -> Option<String> {
-        self.database.clone().or_else(|| env::var("TIDB_DATABASE").ok())
+        self.database
+            .clone()
+            .or_else(|| env::var("TIDB_DATABASE").ok())
     }
 
     pub fn get_connection_info(&self) -> ConnInfoResult {

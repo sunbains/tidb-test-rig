@@ -1,8 +1,8 @@
-use crate::state_machine::{State, StateContext, StateHandler};
 use crate::connection_manager::{
     ConnectionCoordinator, ConnectionInfo, ConnectionState, ConnectionStatus, CoordinationMessage,
 };
 use crate::errors::Result;
+use crate::state_machine::{State, StateContext, StateHandler};
 use async_trait::async_trait;
 use std::sync::Arc;
 use tokio::sync::mpsc;

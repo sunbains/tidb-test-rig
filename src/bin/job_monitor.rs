@@ -1,18 +1,18 @@
 #![allow(non_snake_case)]
+use async_trait::async_trait;
+use chrono::{NaiveDateTime, Utc};
 use clap::Parser;
 use mysql::prelude::*;
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
+use test_rig::errors::{ConnectError, Result};
 use test_rig::state_handlers::{
     ConnectingHandler, InitialHandler, NextStateVersionHandler, ParsingConfigHandler,
     TestingConnectionHandler, VerifyingDatabaseHandler,
 };
 use test_rig::state_machine::{State, StateMachine};
-use test_rig::{CommonArgs, print_error_and_exit, print_success, print_test_header};
-use test_rig::errors::{Result, ConnectError};
 use test_rig::state_machine::{StateContext, StateHandler};
-use async_trait::async_trait;
-use chrono::{NaiveDateTime, Utc};
-use std::time::Duration;
+use test_rig::{CommonArgs, print_error_and_exit, print_success, print_test_header};
 use tokio::time::sleep;
 
 // Import job types needed for the binary
@@ -168,7 +168,9 @@ impl StateHandler for ShowingImportJobDetailsHandler {
                 import_context.active_import_jobs.clone(),
             )
         } else {
-            return Err(ConnectError::StateMachine("Import job context not found".to_string()));
+            return Err(ConnectError::StateMachine(
+                "Import job context not found".to_string(),
+            ));
         };
 
         if let Some(ref mut conn) = context.connection {
@@ -269,9 +271,7 @@ fn default_show_details() -> bool {
 
 impl ImportJobConfig {
     /// Load configuration from a file
-    pub fn from_file<P: AsRef<std::path::Path>>(
-        path: P,
-    ) -> Result<Self> {
+    pub fn from_file<P: AsRef<std::path::Path>>(path: P) -> Result<Self> {
         let path = path.as_ref();
         let extension = path
             .extension()
@@ -294,10 +294,7 @@ impl ImportJobConfig {
     }
 
     /// Save configuration to a file
-    pub fn save_to_file<P: AsRef<std::path::Path>>(
-        &self,
-        path: P,
-    ) -> Result<()> {
+    pub fn save_to_file<P: AsRef<std::path::Path>>(&self, path: P) -> Result<()> {
         let path = path.as_ref();
         let extension = path
             .extension()
@@ -305,8 +302,12 @@ impl ImportJobConfig {
             .unwrap_or("json");
 
         let content = match extension {
-            "json" => serde_json::to_string_pretty(self).map_err(|e| ConnectError::from(e.to_string()))?,
-            "toml" => toml::to_string_pretty(self).map_err(|e| ConnectError::from(e.to_string()))?,
+            "json" => {
+                serde_json::to_string_pretty(self).map_err(|e| ConnectError::from(e.to_string()))?
+            }
+            "toml" => {
+                toml::to_string_pretty(self).map_err(|e| ConnectError::from(e.to_string()))?
+            }
             _ => return Err(format!("Unsupported config file format: {extension}").into()),
         };
 
@@ -317,13 +318,15 @@ impl ImportJobConfig {
     /// Apply environment variable overrides
     pub fn apply_environment_overrides(&mut self) {
         if let Ok(duration) = std::env::var("TIDB_MONITOR_DURATION")
-            && let Ok(duration) = duration.parse() {
-                self.monitor_duration = duration;
-            }
+            && let Ok(duration) = duration.parse()
+        {
+            self.monitor_duration = duration;
+        }
         if let Ok(interval) = std::env::var("TIDB_UPDATE_INTERVAL")
-            && let Ok(interval) = interval.parse() {
-                self.update_interval = interval;
-            }
+            && let Ok(interval) = interval.parse()
+        {
+            self.update_interval = interval;
+        }
         if let Ok(show_details) = std::env::var("TIDB_SHOW_DETAILS") {
             self.show_details = show_details.to_lowercase() == "true";
         }
@@ -362,7 +365,9 @@ struct Args {
 
 impl Args {
     pub fn init_logging(&self) -> Result<()> {
-        self.common.init_logging().map_err(|e| ConnectError::from(e.to_string()))
+        self.common
+            .init_logging()
+            .map_err(|e| ConnectError::from(e.to_string()))
     }
 
     pub fn get_connection_info(&self) -> test_rig::cli::ConnInfoResult {
@@ -372,7 +377,8 @@ impl Args {
     /// Load import job configuration, merging CLI args and config file
     pub fn get_import_config(&self) -> Result<ImportJobConfig> {
         let mut config = if let Some(ref config_path) = self.import_config {
-            ImportJobConfig::from_file(config_path).map_err(|e| ConnectError::from(e.to_string()))?
+            ImportJobConfig::from_file(config_path)
+                .map_err(|e| ConnectError::from(e.to_string()))?
         } else {
             ImportJobConfig::default()
         };
@@ -384,7 +390,9 @@ impl Args {
         config.monitor_duration = self.monitor_duration;
 
         // Validate the configuration
-        config.validate().map_err(|e| ConnectError::from(e.to_string()))?;
+        config
+            .validate()
+            .map_err(|e| ConnectError::from(e.to_string()))?;
 
         Ok(config)
     }

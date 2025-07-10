@@ -19,7 +19,15 @@ class IsolationTest:
     """Standalone isolation test implementation."""
 
     def __init__(self, host: str, user: str, password: str, database: str, test_rows: int = 10):
-        self.host = host
+        # Parse host and port
+        if ":" in host:
+            host_parts = host.split(":", 1)
+            self.host = host_parts[0]
+            self.port = int(host_parts[1])
+        else:
+            self.host = host
+            self.port = 4000  # Default TiDB port
+        
         self.user = user
         self.password = password
         self.database = database
@@ -31,6 +39,7 @@ class IsolationTest:
         """Create a database connection."""
         return mysql.connector.connect(
             host=self.host,
+            port=self.port,
             user=self.user,
             password=self.password,
             database=self.database,
@@ -206,31 +215,81 @@ class IsolationTest:
 def main():
     """Main function to run the isolation test."""
     import argparse
+    import os
+    import json
+    
+    def load_config_from_file(config_path):
+        """Load configuration from JSON file."""
+        try:
+            with open(config_path, 'r') as f:
+                config = json.load(f)
+            return config
+        except (FileNotFoundError, json.JSONDecodeError):
+            return None
     
     parser = argparse.ArgumentParser(description="Run TiDB isolation test")
-    parser.add_argument("--host", default="localhost:4000", help="Database host:port")
-    parser.add_argument("--user", default="root", help="Database user")
-    parser.add_argument("--password", default="", help="Database password")
-    parser.add_argument("--database", default="test", help="Database name")
-    parser.add_argument("--test-rows", type=int, default=10, help="Number of test rows")
+    parser.add_argument("--host", help="Database host:port (overrides config file and env vars)")
+    parser.add_argument("--user", help="Database user (overrides config file and env vars)")
+    parser.add_argument("--password", help="Database password (overrides config file and env vars)")
+    parser.add_argument("--database", help="Database name (overrides config file and env vars)")
+    parser.add_argument("--test-rows", type=int, help="Number of test rows (overrides config file and env vars)")
+    parser.add_argument("--config", default="tidb_config.json", help="Configuration file path")
     
     args = parser.parse_args()
     
-    # Parse host and port
-    if ":" in args.host:
-        host, port = args.host.split(":", 1)
-        host = f"{host}:{port}"
-    else:
-        host = f"{args.host}:4000"
+    # Load configuration from file first
+    config = load_config_from_file(args.config)
+    print(f"Debug: Config file '{args.config}' loaded: {config is not None}")
+    if config:
+        print(f"Debug: Config file host: {config.get('database', {}).get('host')}")
+    
+    # Priority: command line args > environment variables > config file > defaults
+    host = (args.host or 
+            os.environ.get("TIDB_HOST") or 
+            (config.get("database", {}).get("host") if config else None) or 
+            "localhost:4000")
+    
+    user = (args.user or 
+            os.environ.get("TIDB_USER") or 
+            (config.get("database", {}).get("username") if config else None) or 
+            "root")
+    
+    password = (args.password or 
+                os.environ.get("TIDB_PASSWORD") or 
+                (config.get("database", {}).get("password") if config else None) or 
+                "")
+    
+    database = (args.database or 
+                os.environ.get("TIDB_DATABASE") or 
+                (config.get("database", {}).get("database") if config else None) or 
+                "test")
+    
+    test_rows = (args.test_rows or 
+                 int(os.environ.get("TIDB_TEST_ROWS", "0")) or 
+                 (config.get("test", {}).get("rows") if config else None) or 
+                 10)
+    
+    print(f"Debug: Final configuration:")
+    print(f"  Host: '{host}' (from: {'args' if args.host else 'env' if os.environ.get('TIDB_HOST') else 'config' if config else 'default'})")
+    print(f"  User: '{user}' (from: {'args' if args.user else 'env' if os.environ.get('TIDB_USER') else 'config' if config else 'default'})")
+    print(f"  Database: '{database}' (from: {'args' if args.database else 'env' if os.environ.get('TIDB_DATABASE') else 'config' if config else 'default'})")
+    print(f"  Test rows: {test_rows} (from: {'args' if args.test_rows else 'env' if os.environ.get('TIDB_TEST_ROWS') else 'config' if config else 'default'})")
+    print()
     
     # Get password if not provided
-    password = args.password
     if not password:
         import getpass
         password = getpass.getpass("Password: ")
     
+    print(f"Configuration:")
+    print(f"  Host: {host}")
+    print(f"  User: {user}")
+    print(f"  Database: {database}")
+    print(f"  Test rows: {test_rows}")
+    print()
+    
     # Run the test
-    test = IsolationTest(host, args.user, password, args.database, args.test_rows)
+    test = IsolationTest(host, user, password, database, test_rows)
     test.run()
 
 

@@ -73,16 +73,13 @@ use clap::Parser;
 use mysql::prelude::*;
 use mysql::*;
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
+use test_rig::ConfigExtension;
 use test_rig::errors::Result;
 use test_rig::state_handlers::NextStateVersionHandler;
 use test_rig::state_machine::{State, StateContext, StateHandler, StateMachine};
-use test_rig::{
-    CommonArgs, print_error_and_exit, print_success, print_test_header,
-    ConnectError,
-};
+use test_rig::{CommonArgs, ConnectError, print_error_and_exit, print_success, print_test_header};
 use thiserror::Error;
-use std::time::Duration;
-use test_rig::ConfigExtension;
 
 #[derive(Error, Debug)]
 pub enum IsolationTestError {
@@ -133,9 +130,10 @@ impl ConfigExtension for IsolationConfigExtension {
         config: &mut test_rig::config::AppConfig,
     ) -> std::result::Result<(), Box<dyn std::error::Error>> {
         if let Some(test_rows) = args.get_one::<String>("test-rows")
-            && let Ok(rows) = test_rows.parse::<u32>() {
-                config.test.rows = rows;
-            }
+            && let Ok(rows) = test_rows.parse::<u32>()
+        {
+            config.test.rows = rows;
+        }
         Ok(())
     }
 
@@ -296,9 +294,8 @@ impl StateHandler for PopulatingDataHandler {
             let table_name = test_context.test_table_name.clone();
             // Insert 10 test rows
             for i in 1..=10 {
-                let insert_sql = format!(
-                    "INSERT INTO {table_name} (id, name, value) VALUES (?, ?, ?)"
-                );
+                let insert_sql =
+                    format!("INSERT INTO {table_name} (id, name, value) VALUES (?, ?, ?)");
                 conn.exec_drop(&insert_sql, (i, format!("row_{i}"), i * 10))?;
             }
 
@@ -398,7 +395,8 @@ impl StateHandler for TestingIsolationHandler {
             test_context.add_result("✓ Connection 1 updated row with id=5 (value=999)");
 
             // Step 4: Connection 2 tries to read the same data (should see old values due to repeatable read)
-            test_context.add_result("Step 4: Connection 2 reading data again (should see old values)...");
+            test_context
+                .add_result("Step 4: Connection 2 reading data again (should see old values)...");
             let query = format!("SELECT id, name, value FROM {table_name} WHERE id = 5");
             let conn2_data_after_update: Vec<Row> = conn2.exec(&query, ())?;
 
@@ -406,7 +404,9 @@ impl StateHandler for TestingIsolationHandler {
                 let value: i32 = row.get("value").unwrap_or(0);
                 if value == 50 {
                     // Original value for id=5
-                    test_context.add_result("✓ Connection 2 correctly sees old value (50) - Repeatable Read working!");
+                    test_context.add_result(
+                        "✓ Connection 2 correctly sees old value (50) - Repeatable Read working!",
+                    );
                 } else {
                     test_context.add_result(&format!(
                         "✗ Connection 2 sees new value ({value}) - Repeatable Read may not be working"
@@ -420,7 +420,8 @@ impl StateHandler for TestingIsolationHandler {
             test_context.add_result("✓ Connection 1 committed transaction");
 
             // Step 6: Connection 2 reads again (should still see old values until it commits)
-            test_context.add_result("Step 6: Connection 2 reading data after connection 1 commit...");
+            test_context
+                .add_result("Step 6: Connection 2 reading data after connection 1 commit...");
             let query = format!("SELECT id, name, value FROM {table_name} WHERE id = 5");
             let conn2_data_after_commit: Vec<Row> = conn2.exec(&query, ())?;
 
@@ -428,7 +429,9 @@ impl StateHandler for TestingIsolationHandler {
                 let value: i32 = row.get("value").unwrap_or(0);
                 if value == 50 {
                     // Should still see old value
-                    test_context.add_result("✓ Connection 2 still sees old value (50) - Isolation maintained!");
+                    test_context.add_result(
+                        "✓ Connection 2 still sees old value (50) - Isolation maintained!",
+                    );
                 } else {
                     test_context.add_result(&format!(
                         "✗ Connection 2 sees new value ({value}) - Isolation may be broken"

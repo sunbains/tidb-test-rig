@@ -220,7 +220,9 @@ impl StateMachine {
                 eprintln!("✗ State machine failed: {msg}");
                 Err(ConnectError::StateMachine(msg.clone()))
             }
-            _ => Err(ConnectError::StateMachine("Unexpected final state".to_string())),
+            _ => Err(ConnectError::StateMachine(
+                "Unexpected final state".to_string(),
+            )),
         }
     }
 

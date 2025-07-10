@@ -71,6 +71,7 @@ use clap::Parser;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
+use test_rig::errors::ConnectError;
 use test_rig::errors::StateError;
 use test_rig::state_handlers::{
     ConnectingHandler, GettingVersionHandler, InitialHandler, ParsingConfigHandler,
@@ -79,7 +80,6 @@ use test_rig::state_handlers::{
 use test_rig::state_machine::{State, StateMachine};
 use test_rig::{CommonArgs, print_success, print_test_header};
 use tokio::task::JoinHandle;
-use test_rig::errors::ConnectError;
 
 #[derive(Parser, Debug)]
 #[command(name = "simple-multi-connection")]
@@ -229,9 +229,10 @@ impl SimpleMultiConnectionCoordinator {
 
                 // Update status to connecting
                 if let Ok(mut state) = shared_state.lock()
-                    && let Some(result) = state.connection_results.get_mut(&connection_id) {
-                        result.status = ConnectionStatus::Connecting;
-                    }
+                    && let Some(result) = state.connection_results.get_mut(&connection_id)
+                {
+                    result.status = ConnectionStatus::Connecting;
+                }
 
                 // Run the state machine
                 match state_machine.run().await {
@@ -250,10 +251,11 @@ impl SimpleMultiConnectionCoordinator {
                     Err(e) => {
                         // Update status to failed
                         if let Ok(mut state) = shared_state.lock()
-                            && let Some(result) = state.connection_results.get_mut(&connection_id) {
-                                result.status = ConnectionStatus::Failed;
-                                result.error = Some(e.to_string());
-                            }
+                            && let Some(result) = state.connection_results.get_mut(&connection_id)
+                        {
+                            result.status = ConnectionStatus::Failed;
+                            result.error = Some(e.to_string());
+                        }
                         eprintln!("✗ Connection {connection_id} failed: {e}");
                         Err(e)
                     }

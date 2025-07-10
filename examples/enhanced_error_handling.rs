@@ -1,15 +1,11 @@
-use test_rig::error_utils::{
-    ResilientConnectionManager,
-    create_db_retry_config,
-    create_db_circuit_breaker_config,
-    classify_error,
-    get_recovery_strategy,
-    ErrorContextBuilder,
-};
-use test_rig::errors::{ConnectError, RetryStrategy, RetryConfig};
-use test_rig::retry::CircuitBreaker;
-use mysql::{Pool, Opts};
+use mysql::{Opts, Pool};
 use std::time::Duration;
+use test_rig::error_utils::{
+    ErrorContextBuilder, ResilientConnectionManager, classify_error,
+    create_db_circuit_breaker_config, create_db_retry_config, get_recovery_strategy,
+};
+use test_rig::errors::{ConnectError, RetryConfig, RetryStrategy};
+use test_rig::retry::CircuitBreaker;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -25,14 +21,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n=== Example 2: Error Classification ===");
     let connection_error = ConnectError::Connection(mysql::Error::server_disconnected());
     let auth_error = ConnectError::Authentication("invalid credentials".to_string());
-    
-    println!("Connection error category: {:?}", classify_error(&connection_error));
+
+    println!(
+        "Connection error category: {:?}",
+        classify_error(&connection_error)
+    );
     println!("Auth error category: {:?}", classify_error(&auth_error));
 
     // Example 3: Recovery strategies
     println!("\n=== Example 3: Recovery Strategies ===");
-    println!("Connection error recovery: {:?}", get_recovery_strategy(&connection_error));
-    println!("Auth error recovery: {:?}", get_recovery_strategy(&auth_error));
+    println!(
+        "Connection error recovery: {:?}",
+        get_recovery_strategy(&connection_error)
+    );
+    println!(
+        "Auth error recovery: {:?}",
+        get_recovery_strategy(&auth_error)
+    );
 
     // Example 4: Error context building
     println!("\n=== Example 4: Error Context Building ===");
@@ -63,14 +68,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
 
         // Example operation with resilience
-        let result = manager.execute_with_resilience("test_query", || {
-            // Simulate a database operation
-            if rand::random::<bool>() {
-                Ok("success")
-            } else {
-                Err(ConnectError::Connection(mysql::Error::server_disconnected()))
-            }
-        }).await;
+        let result = manager
+            .execute_with_resilience("test_query", || {
+                // Simulate a database operation
+                if rand::random::<bool>() {
+                    Ok("success")
+                } else {
+                    Err(ConnectError::Connection(mysql::Error::server_disconnected()))
+                }
+            })
+            .await;
 
         match result {
             Ok(value) => println!("Operation succeeded: {}", value),
@@ -96,7 +103,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Example 7: Circuit breaker states
     println!("\n=== Example 7: Circuit Breaker States ===");
     let circuit_breaker = CircuitBreaker::new(circuit_config);
-    println!("Initial circuit breaker state: {:?}", circuit_breaker.get_state());
+    println!(
+        "Initial circuit breaker state: {:?}",
+        circuit_breaker.get_state()
+    );
 
     // Example 8: Error handling patterns
     println!("\n=== Example 8: Error Handling Patterns ===");
@@ -118,21 +128,23 @@ async fn demonstrate_error_handling_patterns() {
     println!("Pattern 1: Simple retry with exponential backoff");
     let retry_config = create_db_retry_config();
     let retry_strategy = RetryStrategy::new(retry_config);
-    
-    let result = retry_strategy.retry(|| {
-        Box::pin(async {
-            // Simulate a failure that succeeds on the third attempt
-            static mut ATTEMPT_COUNT: usize = 0;
-            unsafe {
-                ATTEMPT_COUNT += 1;
-                if ATTEMPT_COUNT < 3 {
-                    Err(ConnectError::Connection(mysql::Error::server_disconnected()))
-                } else {
-                    Ok("success after retries")
+
+    let result = retry_strategy
+        .retry(|| {
+            Box::pin(async {
+                // Simulate a failure that succeeds on the third attempt
+                static mut ATTEMPT_COUNT: usize = 0;
+                unsafe {
+                    ATTEMPT_COUNT += 1;
+                    if ATTEMPT_COUNT < 3 {
+                        Err(ConnectError::Connection(mysql::Error::server_disconnected()))
+                    } else {
+                        Ok("success after retries")
+                    }
                 }
-            }
+            })
         })
-    }).await;
+        .await;
 
     match result {
         Ok(value) => println!("  Success: {}", value),
@@ -143,17 +155,19 @@ async fn demonstrate_error_handling_patterns() {
     println!("Pattern 2: Circuit breaker with retry");
     let circuit_config = create_db_circuit_breaker_config();
     let _circuit_breaker = test_rig::CircuitBreaker::new(circuit_config);
-    
-    let result = retry_strategy.retry(|| {
-        Box::pin(async {
-            // Simulate intermittent failures with circuit breaker
-            if rand::random::<f64>() < 0.7 {
-                Err(ConnectError::Connection(mysql::Error::server_disconnected()))
-            } else {
-                Ok("circuit breaker success")
-            }
+
+    let result = retry_strategy
+        .retry(|| {
+            Box::pin(async {
+                // Simulate intermittent failures with circuit breaker
+                if rand::random::<f64>() < 0.7 {
+                    Err(ConnectError::Connection(mysql::Error::server_disconnected()))
+                } else {
+                    Ok("circuit breaker success")
+                }
+            })
         })
-    }).await;
+        .await;
 
     match result {
         Ok(value) => println!("  Success: {}", value),
@@ -183,25 +197,37 @@ mod tests {
     #[tokio::test]
     async fn test_error_classification() {
         let connection_error = ConnectError::Connection(mysql::Error::server_disconnected());
-        assert_eq!(classify_error(&connection_error), test_rig::error_utils::ErrorCategory::Transient);
+        assert_eq!(
+            classify_error(&connection_error),
+            test_rig::error_utils::ErrorCategory::Transient
+        );
 
         let auth_error = ConnectError::Authentication("invalid".to_string());
-        assert_eq!(classify_error(&auth_error), test_rig::error_utils::ErrorCategory::Permanent);
+        assert_eq!(
+            classify_error(&auth_error),
+            test_rig::error_utils::ErrorCategory::Permanent
+        );
     }
 
     #[tokio::test]
     async fn test_recovery_strategies() {
         let connection_error = ConnectError::Connection(mysql::Error::server_disconnected());
-        assert_eq!(get_recovery_strategy(&connection_error), test_rig::error_utils::RecoveryStrategy::Retry);
+        assert_eq!(
+            get_recovery_strategy(&connection_error),
+            test_rig::error_utils::RecoveryStrategy::Retry
+        );
 
         let auth_error = ConnectError::Authentication("invalid".to_string());
-        assert_eq!(get_recovery_strategy(&auth_error), test_rig::error_utils::RecoveryStrategy::FailFast);
+        assert_eq!(
+            get_recovery_strategy(&auth_error),
+            test_rig::error_utils::RecoveryStrategy::FailFast
+        );
     }
 
     #[tokio::test]
     async fn test_retry_with_backoff() {
         let config = create_db_retry_config();
-        
+
         let result = test_rig::retry_with_backoff(&config, || {
             // Simulate a failure that succeeds on the third attempt
             static mut ATTEMPT_COUNT: usize = 0;
@@ -213,8 +239,9 @@ mod tests {
                     Ok("success")
                 }
             }
-        }).await;
+        })
+        .await;
 
         assert!(result.is_ok());
     }
-} 
+}

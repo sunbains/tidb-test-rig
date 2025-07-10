@@ -1,6 +1,6 @@
-use crate::errors::{ConnectError, ErrorContext, EnhancedError};
-use crate::retry::{CircuitBreaker, CircuitBreakerConfig, retry_with_circuit_breaker};
 use crate::errors::RetryConfig;
+use crate::errors::{ConnectError, EnhancedError, ErrorContext};
+use crate::retry::{CircuitBreaker, CircuitBreakerConfig, retry_with_circuit_breaker};
 use mysql::{Pool, PooledConn};
 use std::time::Duration;
 
@@ -18,7 +18,7 @@ impl ResilientConnectionManager {
     pub fn new(pool: Pool, host: String, database: String, user: String) -> Self {
         let circuit_config = CircuitBreakerConfig::default();
         let retry_config = RetryConfig::default();
-        
+
         Self {
             pool,
             circuit_breaker: CircuitBreaker::new(circuit_config),
@@ -62,12 +62,8 @@ impl ResilientConnectionManager {
             .with_user(self.user.clone());
 
         let start_time = std::time::Instant::now();
-        
-        let result = retry_with_circuit_breaker(
-            &self.circuit_breaker,
-            &self.retry_config,
-            f,
-        ).await;
+
+        let result = retry_with_circuit_breaker(&self.circuit_breaker, &self.retry_config, f).await;
 
         let duration = start_time.elapsed();
         let context = context.with_duration(duration);
@@ -83,20 +79,16 @@ impl ResilientConnectionManager {
                             context,
                         }
                     }
-                    ConnectError::Network(_) => {
-                        EnhancedError::NetworkOperation {
-                            operation: operation.to_string(),
-                            error: Box::new(error),
-                            context,
-                        }
-                    }
-                    _ => {
-                        EnhancedError::DatabaseOperation {
-                            operation: operation.to_string(),
-                            error: Box::new(error),
-                            context,
-                        }
-                    }
+                    ConnectError::Network(_) => EnhancedError::NetworkOperation {
+                        operation: operation.to_string(),
+                        error: Box::new(error),
+                        context,
+                    },
+                    _ => EnhancedError::DatabaseOperation {
+                        operation: operation.to_string(),
+                        error: Box::new(error),
+                        context,
+                    },
                 };
                 Err(enhanced_error)
             }
@@ -107,22 +99,20 @@ impl ResilientConnectionManager {
     pub async fn get_connection(&self) -> Result<PooledConn, EnhancedError> {
         self.execute_with_resilience("get_connection", || {
             self.pool.get_conn().map_err(ConnectError::from)
-        }).await
+        })
+        .await
     }
 
     /// Execute a query with retry logic
-    pub async fn execute_query<F, T>(
-        &self,
-        _query: &str,
-        f: F,
-    ) -> Result<T, EnhancedError>
+    pub async fn execute_query<F, T>(&self, _query: &str, f: F) -> Result<T, EnhancedError>
     where
         F: Fn(&mut PooledConn) -> Result<T, ConnectError> + Send + Sync,
     {
         self.execute_with_resilience("execute_query", || {
             let mut conn = self.pool.get_conn()?;
             f(&mut conn)
-        }).await
+        })
+        .await
     }
 }
 
@@ -173,9 +163,9 @@ pub fn classify_error(error: &ConnectError) -> ErrorCategory {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ErrorCategory {
-    Transient,  // Can be retried
-    Permanent,  // Should not be retried
-    Unknown,    // Unknown if retryable
+    Transient, // Can be retried
+    Permanent, // Should not be retried
+    Unknown,   // Unknown if retryable
 }
 
 /// Error recovery strategies
@@ -189,9 +179,9 @@ pub fn get_recovery_strategy(error: &ConnectError) -> RecoveryStrategy {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum RecoveryStrategy {
-    Retry,           // Retry with exponential backoff
-    FailFast,        // Don't retry, fail immediately
-    RetryWithLimit,  // Retry with limited attempts
+    Retry,          // Retry with exponential backoff
+    FailFast,       // Don't retry, fail immediately
+    RetryWithLimit, // Retry with limited attempts
 }
 
 /// Error context builder for database operations
@@ -207,7 +197,8 @@ impl ErrorContextBuilder {
     }
 
     pub fn with_connection_info(mut self, host: String, database: String, user: String) -> Self {
-        self.context = self.context
+        self.context = self
+            .context
             .with_host(host)
             .with_database(database)
             .with_user(user);
@@ -255,10 +246,16 @@ mod tests {
     #[test]
     fn test_recovery_strategies() {
         let connection_error = ConnectError::Connection(mysql::Error::server_disconnected());
-        assert_eq!(get_recovery_strategy(&connection_error), RecoveryStrategy::Retry);
+        assert_eq!(
+            get_recovery_strategy(&connection_error),
+            RecoveryStrategy::Retry
+        );
 
         let auth_error = ConnectError::Authentication("invalid credentials".to_string());
-        assert_eq!(get_recovery_strategy(&auth_error), RecoveryStrategy::FailFast);
+        assert_eq!(
+            get_recovery_strategy(&auth_error),
+            RecoveryStrategy::FailFast
+        );
     }
 
     #[test]
@@ -290,4 +287,4 @@ mod tests {
             Some(&"custom_value".to_string())
         );
     }
-} 
+}
