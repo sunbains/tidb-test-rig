@@ -304,3 +304,352 @@ pub fn load_python_handlers(
         Ok(())
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::state_machine::StateMachine;
+
+    #[test]
+    fn test_parse_state_string() {
+        // Test all valid state strings
+        assert_eq!(parse_state_string("initial"), State::Initial);
+        assert_eq!(parse_state_string("INITIAL"), State::Initial);
+        assert_eq!(parse_state_string("Initial"), State::Initial);
+
+        assert_eq!(parse_state_string("parsing_config"), State::ParsingConfig);
+        assert_eq!(parse_state_string("connecting"), State::Connecting);
+        assert_eq!(
+            parse_state_string("testing_connection"),
+            State::TestingConnection
+        );
+        assert_eq!(
+            parse_state_string("verifying_database"),
+            State::VerifyingDatabase
+        );
+        assert_eq!(parse_state_string("getting_version"), State::GettingVersion);
+        assert_eq!(
+            parse_state_string("checking_import_jobs"),
+            State::CheckingImportJobs
+        );
+        assert_eq!(
+            parse_state_string("showing_import_job_details"),
+            State::ShowingImportJobDetails
+        );
+        assert_eq!(parse_state_string("completed"), State::Completed);
+
+        // Test unknown state (should default to completed)
+        assert_eq!(parse_state_string("unknown_state"), State::Completed);
+        assert_eq!(parse_state_string(""), State::Completed);
+    }
+
+    #[test]
+    fn test_py_state_context_new() {
+        let mut context = StateContext::default();
+        context.host = "testhost".to_string();
+        context.port = 4000;
+        context.username = "testuser".to_string();
+        context.password = "testpass".to_string();
+        context.database = Some("testdb".to_string());
+
+        let py_context = PyStateContext::new(&context);
+
+        assert_eq!(py_context.host, Some("testhost".to_string()));
+        assert_eq!(py_context.port, Some(4000));
+        assert_eq!(py_context.username, Some("testuser".to_string()));
+        assert_eq!(py_context.password, Some("testpass".to_string()));
+        assert_eq!(py_context.database, Some("testdb".to_string()));
+        assert!(py_context.connection.is_none());
+    }
+
+    #[test]
+    fn test_py_state_context_with_none_database() {
+        let mut context = StateContext::default();
+        context.host = "testhost".to_string();
+        context.port = 4000;
+        context.username = "testuser".to_string();
+        context.password = "testpass".to_string();
+        context.database = None;
+
+        let py_context = PyStateContext::new(&context);
+
+        assert!(py_context.database.is_none());
+    }
+
+    #[test]
+    fn test_py_state_methods() {
+        Python::with_gil(|_py| {
+            // Test all PyState static methods
+            assert_eq!(PyState::initial(), "Initial");
+            assert_eq!(PyState::parsing_config(), "ParsingConfig");
+            assert_eq!(PyState::connecting(), "Connecting");
+            assert_eq!(PyState::testing_connection(), "TestingConnection");
+            assert_eq!(PyState::verifying_database(), "VerifyingDatabase");
+            assert_eq!(PyState::getting_version(), "GettingVersion");
+            assert_eq!(PyState::checking_import_jobs(), "CheckingImportJobs");
+            assert_eq!(
+                PyState::showing_import_job_details(),
+                "ShowingImportJobDetails"
+            );
+            assert_eq!(PyState::completed(), "Completed");
+        });
+    }
+
+    #[test]
+    fn test_py_state_handler_new() {
+        Python::with_gil(|_py| {
+            let handler = PyStateHandler::new();
+
+            // Test that the handler can be created
+            assert!(
+                handler
+                    .enter(&PyStateContext::new(&StateContext::default()))
+                    .is_ok()
+            );
+            assert!(
+                handler
+                    .execute(&PyStateContext::new(&StateContext::default()))
+                    .is_ok()
+            );
+            assert!(
+                handler
+                    .exit(&PyStateContext::new(&StateContext::default()))
+                    .is_ok()
+            );
+        });
+    }
+
+    #[test]
+    fn test_py_state_handler_default_behavior() {
+        Python::with_gil(|_py| {
+            let handler = PyStateHandler::new();
+            let context = PyStateContext::new(&StateContext::default());
+
+            // Test default enter behavior
+            let enter_result = handler.enter(&context).unwrap();
+            assert_eq!(enter_result, "Initial");
+
+            // Test default execute behavior
+            let execute_result = handler.execute(&context).unwrap();
+            assert_eq!(execute_result, "Completed");
+
+            // Test default exit behavior (should not panic)
+            assert!(handler.exit(&context).is_ok());
+        });
+    }
+
+    #[test]
+    fn test_python_handler_wrapper() {
+        Python::with_gil(|py| {
+            // Create a mock Python handler
+            let py_handler_class = py.get_type::<PyStateHandler>();
+            let py_handler = py_handler_class.call0().unwrap();
+            let py_object = py_handler.into();
+
+            let rust_handler = PythonHandler::new(py_object);
+
+            // Test that the wrapper can be created
+            assert!(
+                rust_handler
+                    .py_handler
+                    .as_ref(py)
+                    .is_instance_of::<PyStateHandler>()
+            );
+        });
+    }
+
+    #[test]
+    fn test_register_python_handler() {
+        Python::with_gil(|py| {
+            let mut state_machine = StateMachine::new();
+            let py_handler_class = py.get_type::<PyStateHandler>();
+            let py_handler = py_handler_class.call0().unwrap();
+            let py_object = py_handler.into();
+
+            // Test registering a Python handler
+            let result =
+                register_python_handler(&mut state_machine, State::TestingConnection, py_object);
+            assert!(result.is_ok());
+        });
+    }
+
+    #[test]
+    fn test_py_connection_new() {
+        let pool = mysql::Pool::new(
+            mysql::OptsBuilder::default()
+                .ip_or_hostname(Some("localhost"))
+                .tcp_port(4000)
+                .user(Some("root"))
+                .pass(Some(""))
+                .db_name(Some("test")),
+        )
+        .unwrap();
+        let conn = pool.get_conn().unwrap();
+        let py_conn = PyConnection::new(conn);
+        assert!(py_conn.inner.try_lock().is_ok());
+    }
+
+    #[test]
+    fn test_py_connection_execute_query_with_mock() {
+        Python::with_gil(|_py| {
+            let pool = mysql::Pool::new(
+                mysql::OptsBuilder::default()
+                    .ip_or_hostname(Some("localhost"))
+                    .tcp_port(4000)
+                    .user(Some("root"))
+                    .pass(Some(""))
+                    .db_name(Some("test")),
+            )
+            .unwrap();
+            let conn = pool.get_conn().unwrap();
+            let py_conn = PyConnection::new(conn);
+            let result = py_conn.execute_query("SELECT 1".to_string());
+            assert!(result.is_err());
+        });
+    }
+
+    #[test]
+    fn test_py_state_context_clone() {
+        let mut context = StateContext::default();
+        context.host = "testhost".to_string();
+        context.port = 4000;
+        context.username = "testuser".to_string();
+        context.password = "testpass".to_string();
+        context.database = Some("testdb".to_string());
+
+        let py_context = PyStateContext::new(&context);
+        let cloned_context = py_context.clone();
+
+        assert_eq!(py_context.host, cloned_context.host);
+        assert_eq!(py_context.port, cloned_context.port);
+        assert_eq!(py_context.username, cloned_context.username);
+        assert_eq!(py_context.password, cloned_context.password);
+        assert_eq!(py_context.database, cloned_context.database);
+    }
+
+    #[test]
+    fn test_py_connection_clone() {
+        let pool = mysql::Pool::new(
+            mysql::OptsBuilder::default()
+                .ip_or_hostname(Some("localhost"))
+                .tcp_port(4000)
+                .user(Some("root"))
+                .pass(Some(""))
+                .db_name(Some("test")),
+        )
+        .unwrap();
+        let conn = pool.get_conn().unwrap();
+        let py_conn = PyConnection::new(conn);
+        let cloned_conn = py_conn.clone();
+
+        // Both should reference the same underlying connection
+        assert!(py_conn.inner.try_lock().is_ok());
+        assert!(cloned_conn.inner.try_lock().is_ok());
+    }
+
+    #[test]
+    fn test_state_machine_integration() {
+        Python::with_gil(|py| {
+            let mut state_machine = StateMachine::new();
+
+            // Test that we can create and register a Python handler
+            let py_handler_class = py.get_type::<PyStateHandler>();
+            let py_handler = py_handler_class.call0().unwrap();
+            let py_object = py_handler.into();
+
+            let result =
+                register_python_handler(&mut state_machine, State::TestingConnection, py_object);
+            assert!(result.is_ok());
+
+            // Test that the state machine has the handler registered
+            // (This would require exposing the internal state of StateMachine for testing)
+        });
+    }
+
+    #[test]
+    fn test_error_handling() {
+        Python::with_gil(|_py| {
+            // Test error handling in Python handler calls
+            let handler = PyStateHandler::new();
+            let context = PyStateContext::new(&StateContext::default());
+
+            // These should not panic and should return valid results
+            let enter_result = handler.enter(&context);
+            assert!(enter_result.is_ok());
+
+            let execute_result = handler.execute(&context);
+            assert!(execute_result.is_ok());
+
+            let exit_result = handler.exit(&context);
+            assert!(exit_result.is_ok());
+        });
+    }
+
+    #[test]
+    fn test_py_module_registration() {
+        Python::with_gil(|py| {
+            let module = PyModule::new(py, "test_module").unwrap();
+
+            // Test that we can register the module
+            let result = test_rig_python(py, module);
+            assert!(result.is_ok());
+
+            // Test that the classes are available in the module
+            assert!(module.getattr("PyStateContext").is_ok());
+            assert!(module.getattr("PyConnection").is_ok());
+            assert!(module.getattr("PyState").is_ok());
+            assert!(module.getattr("PyStateHandler").is_ok());
+        });
+    }
+
+    #[test]
+    fn test_load_python_handlers_invalid_module() {
+        let mut state_machine = StateMachine::new();
+
+        // Test loading from a non-existent module
+        let result = load_python_handlers(&mut state_machine, "nonexistent_module");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_py_state_context_attributes() {
+        Python::with_gil(|py| {
+            let mut context = StateContext::default();
+            context.host = "testhost".to_string();
+            context.port = 4000;
+            context.username = "testuser".to_string();
+            context.password = "testpass".to_string();
+            context.database = Some("testdb".to_string());
+
+            let py_context = PyStateContext::new(&context);
+
+            // Test that attributes are accessible from Python
+            let py_context_obj = py_context.into_py(py);
+            let py_context_ref = py_context_obj.as_ref(py);
+
+            // Test host attribute
+            let host_attr = py_context_ref.getattr("host").unwrap();
+            assert!(host_attr.is_instance_of::<pyo3::types::PyAny>());
+
+            // Test port attribute
+            let port_attr = py_context_ref.getattr("port").unwrap();
+            assert!(port_attr.is_instance_of::<pyo3::types::PyAny>());
+
+            // Test username attribute
+            let username_attr = py_context_ref.getattr("username").unwrap();
+            assert!(username_attr.is_instance_of::<pyo3::types::PyAny>());
+
+            // Test password attribute
+            let password_attr = py_context_ref.getattr("password").unwrap();
+            assert!(password_attr.is_instance_of::<pyo3::types::PyAny>());
+
+            // Test database attribute
+            let database_attr = py_context_ref.getattr("database").unwrap();
+            assert!(database_attr.is_instance_of::<pyo3::types::PyAny>());
+
+            // Test connection attribute
+            let connection_attr = py_context_ref.getattr("connection").unwrap();
+            assert!(connection_attr.is_instance_of::<pyo3::types::PyAny>());
+        });
+    }
+}
