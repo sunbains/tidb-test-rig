@@ -66,7 +66,7 @@ impl ImportJobConfig {
                 let content = std::fs::read_to_string(path)?;
                 toml::from_str(&content)?
             }
-            _ => return Err(format!("Unsupported config file format: {}", extension).into()),
+            _ => return Err(format!("Unsupported config file format: {extension}").into()),
         };
 
         Ok(config)
@@ -86,7 +86,7 @@ impl ImportJobConfig {
         let content = match extension {
             "json" => serde_json::to_string_pretty(self)?,
             "toml" => toml::to_string_pretty(self)?,
-            _ => return Err(format!("Unsupported config file format: {}", extension).into()),
+            _ => return Err(format!("Unsupported config file format: {extension}").into()),
         };
 
         std::fs::write(path, content)?;
@@ -95,16 +95,14 @@ impl ImportJobConfig {
 
     /// Apply environment variable overrides
     pub fn apply_environment_overrides(&mut self) {
-        if let Ok(duration) = std::env::var("TIDB_MONITOR_DURATION") {
-            if let Ok(duration) = duration.parse() {
+        if let Ok(duration) = std::env::var("TIDB_MONITOR_DURATION")
+            && let Ok(duration) = duration.parse() {
                 self.monitor_duration = duration;
             }
-        }
-        if let Ok(interval) = std::env::var("TIDB_UPDATE_INTERVAL") {
-            if let Ok(interval) = interval.parse() {
+        if let Ok(interval) = std::env::var("TIDB_UPDATE_INTERVAL")
+            && let Ok(interval) = interval.parse() {
                 self.update_interval = interval;
             }
-        }
         if let Ok(show_details) = std::env::var("TIDB_SHOW_DETAILS") {
             self.show_details = show_details.to_lowercase() == "true";
         }

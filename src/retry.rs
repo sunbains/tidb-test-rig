@@ -59,7 +59,7 @@ impl CircuitBreaker {
     }
 
     pub fn get_state(&self) -> CircuitState {
-        self.state.lock().unwrap().clone()
+        *self.state.lock().unwrap()
     }
 
     pub fn call<F, T, E>(&self, f: F) -> Result<T, ConnectError>

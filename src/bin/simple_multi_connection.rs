@@ -228,11 +228,10 @@ impl SimpleMultiConnectionCoordinator {
                     .register_handler(State::GettingVersion, Box::new(GettingVersionHandler));
 
                 // Update status to connecting
-                if let Ok(mut state) = shared_state.lock() {
-                    if let Some(result) = state.connection_results.get_mut(&connection_id) {
+                if let Ok(mut state) = shared_state.lock()
+                    && let Some(result) = state.connection_results.get_mut(&connection_id) {
                         result.status = ConnectionStatus::Connecting;
                     }
-                }
 
                 // Run the state machine
                 match state_machine.run().await {
@@ -244,12 +243,11 @@ impl SimpleMultiConnectionCoordinator {
                             }
                             state.global_status = "All connections completed".to_string();
                         }
-                        println!("✓ Connection {} completed successfully", connection_id);
+                        println!("✓ Connection {connection_id} completed successfully");
 
                         // Run job monitoring for this connection
                         println!(
-                            "Starting job monitoring for connection {}...",
-                            connection_id
+                            "Starting job monitoring for connection {connection_id}..."
                         );
                         let mut job_monitor = JobMonitor::new(30); // 30 seconds monitoring
 
@@ -269,8 +267,7 @@ impl SimpleMultiConnectionCoordinator {
                             // Run the job monitor
                             if let Err(e) = job_monitor.run().await {
                                 eprintln!(
-                                    "✗ Job monitoring failed for connection {}: {}",
-                                    connection_id, e
+                                    "✗ Job monitoring failed for connection {connection_id}: {e}"
                                 );
                             }
                         }
@@ -279,13 +276,12 @@ impl SimpleMultiConnectionCoordinator {
                     }
                     Err(e) => {
                         // Update status to failed
-                        if let Ok(mut state) = shared_state.lock() {
-                            if let Some(result) = state.connection_results.get_mut(&connection_id) {
+                        if let Ok(mut state) = shared_state.lock()
+                            && let Some(result) = state.connection_results.get_mut(&connection_id) {
                                 result.status = ConnectionStatus::Failed;
                                 result.error = Some(e.to_string());
                             }
-                        }
-                        eprintln!("✗ Connection {} failed: {}", connection_id, e);
+                        eprintln!("✗ Connection {connection_id} failed: {e}");
                         Err(e)
                     }
                 }
@@ -298,8 +294,8 @@ impl SimpleMultiConnectionCoordinator {
         for handle in handles {
             match handle.await {
                 Ok(Ok(_)) => {}
-                Ok(Err(e)) => eprintln!("Connection task failed: {}", e),
-                Err(e) => eprintln!("Task join failed: {}", e),
+                Ok(Err(e)) => eprintln!("Connection task failed: {e}"),
+                Err(e) => eprintln!("Task join failed: {e}"),
             }
         }
 
@@ -316,10 +312,10 @@ impl SimpleMultiConnectionCoordinator {
             for (conn_id, result) in &state.connection_results {
                 println!("  {}: {:?} - {}", conn_id, result.status, result.host);
                 if let Some(error) = &result.error {
-                    println!("    Error: {}", error);
+                    println!("    Error: {error}");
                 }
                 if let Some(version) = &result.version {
-                    println!("    Version: {}", version);
+                    println!("    Version: {version}");
                 }
             }
         }
@@ -365,7 +361,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Run all connections concurrently
     if let Err(e) = coordinator.run_all_connections().await {
-        eprintln!("Failed to run connections: {}", e);
+        eprintln!("Failed to run connections: {e}");
         return Err(Box::new(std::io::Error::other(e.to_string())) as Box<dyn std::error::Error>);
     }
 

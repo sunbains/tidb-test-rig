@@ -177,14 +177,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Add connections to the multi-state machine
     for (connection_id, connection_info) in connections {
-        println!("Adding connection: {}", connection_id);
+        println!("Adding connection: {connection_id}");
         multi_sm.add_connection(connection_id, connection_info);
     }
 
     // Run all connections concurrently
     println!("\nStarting concurrent connection testing...");
     if let Err(e) = multi_sm.run_all().await {
-        eprintln!("Failed to run multi-connection test: {}", e);
+        eprintln!("Failed to run multi-connection test: {e}");
         return Err(Box::new(std::io::Error::other(e.to_string())) as Box<dyn std::error::Error>);
     }
 
@@ -197,7 +197,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         for (conn_id, status) in &state.connection_status {
             println!("  {}: {:?} - {}", conn_id, status.status, status.host);
             if let Some(error) = &status.error_message {
-                println!("    Error: {}", error);
+                println!("    Error: {error}");
             }
         }
 
@@ -213,7 +213,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         println!("\nCoordination Events:");
         for event in &state.coordination_events {
-            println!("  {:?}", event);
+            println!("  {event:?}");
         }
     }
 

@@ -186,7 +186,7 @@ impl RetryStrategy {
         for attempt in 0..self.config.max_retries {
             match operation().await {
                 Ok(result) => return Ok(result),
-                Err(e) if attempt == self.config.max_retries - 1 => return Err(transform(e).into()),
+                Err(e) if attempt == self.config.max_retries - 1 => return Err(transform(e)),
                 Err(_) => {
                     tokio::time::sleep(delay).await;
                     delay = Duration::from_millis(
@@ -449,14 +449,14 @@ impl From<ConnectionError> for ConnectError {
                 ConnectError::Connection(mysql::Error::server_disconnected())
             }
             ConnectionError::AuthFailed { user, message } => {
-                ConnectError::Authentication(format!("User {}: {}", user, message))
+                ConnectError::Authentication(format!("User {user}: {message}"))
             }
             ConnectionError::DatabaseNotFound { database } => {
-                ConnectError::Database(format!("Database {} not found", database))
+                ConnectError::Database(format!("Database {database} not found"))
             }
             ConnectionError::PoolError(e) => ConnectError::Connection(e),
             ConnectionError::Timeout { timeout_secs } => {
-                ConnectError::Timeout(format!("Connection timeout after {} seconds", timeout_secs))
+                ConnectError::Timeout(format!("Connection timeout after {timeout_secs} seconds"))
             }
             ConnectionError::ConnectionLost { reason: _ } => {
                 ConnectError::Connection(mysql::Error::server_disconnected())
@@ -468,10 +468,10 @@ impl From<ConnectionError> for ConnectError {
                 ConnectError::Connection(mysql::Error::server_disconnected())
             }
             ConnectionError::DnsResolutionFailed { host, message } => {
-                ConnectError::Network(format!("DNS resolution failed for {}: {}", host, message))
+                ConnectError::Network(format!("DNS resolution failed for {host}: {message}"))
             }
             ConnectionError::PoolExhausted { max_connections } => {
-                ConnectError::Resource(format!("Connection pool exhausted (max: {})", max_connections))
+                ConnectError::Resource(format!("Connection pool exhausted (max: {max_connections})"))
             }
             ConnectionError::ValidationFailed { reason } => {
                 ConnectError::Validation(reason)
