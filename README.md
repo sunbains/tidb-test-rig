@@ -1,4 +1,4 @@
-# TiDB Multi-Connection Test Tool
+# TiDB Test Rig Library
 
 A sophisticated Rust-based testing framework for TiDB databases that provides multi-connection coordination, state machine-driven workflows, and comprehensive monitoring capabilities.
 
