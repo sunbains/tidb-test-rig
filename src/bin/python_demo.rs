@@ -47,9 +47,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("Python Module: {}", args.python_module);
     println!("Connection Info:");
-    println!("  Host: {}", host);
-    println!("  User: {}", user);
-    println!("  Database: {:?}", database);
+    println!("  Host: {host}");
+    println!("  User: {user}");
+    println!("  Database: {database:?}");
 
     // Create and configure the state machine
     let mut state_machine = StateMachine::new();
@@ -83,7 +83,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             print_success("Python handlers demo completed!");
         }
         Err(e) => {
-            eprintln!("\n✗ State machine failed: {}", e);
+            eprintln!("\n✗ State machine failed: {e}");
             print_error_and_exit("State machine execution failed", &e);
         }
     }
