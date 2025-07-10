@@ -1,4 +1,4 @@
-# TiDB Connection Test Tool - Tests
+# TiDB Test Rig - Tests
 
 This directory contains test programs demonstrating how to use the TiDB connection test tool with a common CLI library and robust logging.
 
