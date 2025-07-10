@@ -1,7 +1,7 @@
-use connect::{CommonArgs, print_test_header, print_success, print_error_and_exit};
-use connect::state_machine::{StateMachine, State};
-use connect::import_job_handlers::{CheckingImportJobsHandler, ShowingImportJobDetailsHandler};
-use connect::state_handlers::{NextStateVersionHandler, InitialHandler, ParsingConfigHandler, ConnectingHandler, TestingConnectionHandler, VerifyingDatabaseHandler};
+use test_rig::{CommonArgs, print_test_header, print_success, print_error_and_exit};
+use test_rig::state_machine::{StateMachine, State};
+use test_rig::import_job_handlers::{CheckingImportJobsHandler, ShowingImportJobDetailsHandler};
+use test_rig::state_handlers::{NextStateVersionHandler, InitialHandler, ParsingConfigHandler, ConnectingHandler, TestingConnectionHandler, VerifyingDatabaseHandler};
 use clap::Parser;
 use mysql::*;
 use serde::{Deserialize, Serialize};
@@ -134,7 +134,7 @@ impl Args {
         self.common.init_logging()
     }
     
-    pub fn get_connection_info(&self) -> connect::cli::ConnInfoResult {
+    pub fn get_connection_info(&self) -> test_rig::cli::ConnInfoResult {
         self.common.get_connection_info()
     }
     

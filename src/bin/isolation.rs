@@ -67,11 +67,11 @@
 //! This binary is intended as a robust, extensible foundation for isolation and concurrency testing in TiDB.
 //! Handlers and test logic can be extended to cover more advanced isolation scenarios as needed.
 
-use connect::state_machine::{StateMachine, State, StateContext, StateHandler};
-use connect::{CommonArgs, print_test_header, print_success, print_error_and_exit, register_standard_handlers};
-use connect::state_handlers::NextStateVersionHandler;
-use connect::errors::{StateError, Result};
-use connect::{ConfigExtension, register_config_extension};
+use test_rig::state_machine::{StateMachine, State, StateContext, StateHandler};
+use test_rig::{CommonArgs, print_test_header, print_success, print_error_and_exit, register_standard_handlers};
+use test_rig::state_handlers::NextStateVersionHandler;
+use test_rig::errors::{StateError, Result};
+use test_rig::{ConfigExtension, register_config_extension};
 use mysql::prelude::*;
 use mysql::*;
 use async_trait::async_trait;
@@ -92,7 +92,7 @@ impl ConfigExtension for IsolationConfigExtension {
         )
     }
     
-    fn build_config(&self, args: &clap::ArgMatches, config: &mut connect::config::AppConfig) -> std::result::Result<(), Box<dyn std::error::Error>> {
+    fn build_config(&self, args: &clap::ArgMatches, config: &mut test_rig::config::AppConfig) -> std::result::Result<(), Box<dyn std::error::Error>> {
         if let Some(test_rows) = args.get_one::<String>("test-rows") {
             if let Ok(rows) = test_rows.parse::<u32>() {
                 config.test.rows = rows;
@@ -131,10 +131,10 @@ impl IsolationTestArgs {
         self.common.print_connection_info();
         println!("  Test Rows: {}", self.test_rows);
     }
-    pub fn init_logging(&self) -> connect::errors::Result<()> {
-        self.common.init_logging().map_err(connect::errors::ConnectError::from)
+    pub fn init_logging(&self) -> test_rig::errors::Result<()> {
+        self.common.init_logging().map_err(test_rig::errors::ConnectError::from)
     }
-    pub fn get_connection_info(&self) -> connect::cli::ConnInfoResult {
+    pub fn get_connection_info(&self) -> test_rig::cli::ConnInfoResult {
         self.common.get_connection_info()
     }
     pub fn get_database(&self) -> Option<String> {
@@ -480,7 +480,7 @@ impl StateHandler for VerifyingResultsHandler {
 }
 
 #[tokio::main]
-async fn main() -> connect::errors::Result<()> {
+async fn main() -> test_rig::errors::Result<()> {
     // Register configuration extensions
     register_extensions();
     
@@ -533,7 +533,7 @@ fn register_isolation_handlers(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use connect::config::{AppConfig, TestConfig, ConfigBuilder};
+    use test_rig::config::{AppConfig, TestConfig, ConfigBuilder};
     use tempfile::NamedTempFile;
     use std::io::Write;
     use serial_test::serial;

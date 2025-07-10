@@ -72,7 +72,7 @@
 //! cargo run --bin config_gen -- --format toml --host prod-tidb:4000 --username appuser --database production --log-level warn
 //! ```
 
-use connect::{ConfigBuilder, apply_extensions_to_command, apply_extensions_to_config, print_extensions_help};
+use test_rig::{ConfigBuilder, apply_extensions_to_command, apply_extensions_to_config, print_extensions_help};
 use clap::Command;
 use std::path::PathBuf;
 
@@ -173,7 +173,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use connect::config::{AppConfig, ConfigBuilder};
+    use test_rig::config::{AppConfig, ConfigBuilder};
     use tempfile::NamedTempFile;
     use std::fs;
     use serial_test::serial;

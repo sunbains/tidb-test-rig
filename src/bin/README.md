@@ -100,7 +100,7 @@ The project provides shared utilities in `src/lib_utils.rs` that eliminate code 
 ### TestSetup
 For tests using the legacy `parse_args()` approach:
 ```rust
-use connect::{TestSetup, print_test_header, print_success};
+use test_rig::{TestSetup, print_test_header, print_success};
 
 #[tokio::main]
 async fn main() {
@@ -116,7 +116,7 @@ async fn main() {
 ### CommonArgsSetup
 For tests using the new `CommonArgs::parse()` approach:
 ```rust
-use connect::{CommonArgsSetup, print_test_header, print_success};
+use test_rig::{CommonArgsSetup, print_test_header, print_success};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

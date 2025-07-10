@@ -1,4 +1,4 @@
-use connect::{CommonArgs, print_test_header, print_success, print_error_and_exit, TestSetup};
+use test_rig::{CommonArgs, print_test_header, print_success, print_error_and_exit, TestSetup};
 use tracing::info;
 use clap::Parser;
 

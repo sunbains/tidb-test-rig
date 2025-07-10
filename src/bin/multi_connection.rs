@@ -92,8 +92,8 @@
 //! Requires the `multi_connection` and `import_jobs` features to be enabled.
 //! Uses the shared state machine framework from the main library.
 
-use connect::{MultiConnectionStateMachine, ConnectionCoordinator, ConnectionInfo, GlobalConfig};
-use connect::{CommonArgs, print_test_header, print_success};
+use test_rig::{MultiConnectionStateMachine, ConnectionCoordinator, ConnectionInfo, GlobalConfig};
+use test_rig::{CommonArgs, print_test_header, print_success};
 use clap::Parser;
 
 #[derive(Parser, Debug)]
@@ -115,7 +115,7 @@ impl Args {
     pub fn init_logging(&self) -> Result<(), Box<dyn std::error::Error>> {
         self.common.init_logging()
     }
-    pub fn get_connection_info(&self) -> connect::cli::ConnInfoResult {
+    pub fn get_connection_info(&self) -> test_rig::cli::ConnInfoResult {
         self.common.get_connection_info()
     }
 }

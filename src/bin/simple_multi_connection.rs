@@ -67,14 +67,14 @@
 //! This binary is intended as a simple, clear example. For more advanced coordination, shared state,
 //! or import job monitoring, see the `multi_connection.rs` binary.
 
-use connect::state_machine::{StateMachine, State};
-use connect::errors::StateError;
-use connect::state_handlers::{InitialHandler, ParsingConfigHandler, ConnectingHandler, TestingConnectionHandler, VerifyingDatabaseHandler, GettingVersionHandler};
-use connect::JobMonitor;
+use test_rig::state_machine::{StateMachine, State};
+use test_rig::errors::StateError;
+use test_rig::state_handlers::{InitialHandler, ParsingConfigHandler, ConnectingHandler, TestingConnectionHandler, VerifyingDatabaseHandler, GettingVersionHandler};
+use test_rig::JobMonitor;
 use std::sync::{Arc, Mutex};
 use tokio::task::JoinHandle;
 use std::collections::HashMap;
-use connect::{CommonArgs, print_test_header, print_success};
+use test_rig::{CommonArgs, print_test_header, print_success};
 use clap::Parser;
 
 #[derive(Parser, Debug)]
@@ -96,7 +96,7 @@ impl Args {
     pub fn init_logging(&self) -> Result<(), Box<dyn std::error::Error>> {
         self.common.init_logging()
     }
-    pub fn get_connection_info(&self) -> connect::cli::ConnInfoResult {
+    pub fn get_connection_info(&self) -> test_rig::cli::ConnInfoResult {
         self.common.get_connection_info()
     }
 }

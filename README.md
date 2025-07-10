@@ -339,7 +339,7 @@ Suppose you want to add a `--test-rows` option for the isolation test:
 
 **In `src/bin/isolation.rs`:**
 ```rust
-use connect::{ConfigExtension, register_config_extension};
+use test_rig::{ConfigExtension, register_config_extension};
 use clap::Command;
 
 struct IsolationConfigExtension;
@@ -353,7 +353,7 @@ impl ConfigExtension for IsolationConfigExtension {
                 .default_value("10")
         )
     }
-    fn build_config(&self, args: &clap::ArgMatches, config: &mut connect::config::AppConfig) -> std::result::Result<(), Box<dyn std::error::Error>> {
+    fn build_config(&self, args: &clap::ArgMatches, config: &mut test_rig::config::AppConfig) -> std::result::Result<(), Box<dyn std::error::Error>> {
         if let Some(test_rows) = args.get_one::<String>("test-rows") {
             if let Ok(rows) = test_rows.parse::<u32>() {
                 config.test.rows = rows;
