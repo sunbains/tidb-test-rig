@@ -1,4 +1,4 @@
-use crate::errors::{StateError, StateMachineError};
+use crate::errors::ConnectError;
 use mysql::PooledConn;
 use std::any::Any;
 use std::fmt;
@@ -142,9 +142,9 @@ impl StateContext {
 /// Trait for state handlers
 #[async_trait::async_trait]
 pub trait StateHandler {
-    async fn enter(&self, context: &mut StateContext) -> Result<State, StateError>;
-    async fn execute(&self, context: &mut StateContext) -> Result<State, StateError>;
-    async fn exit(&self, context: &mut StateContext) -> Result<(), StateError>;
+    async fn enter(&self, context: &mut StateContext) -> Result<State, ConnectError>;
+    async fn execute(&self, context: &mut StateContext) -> Result<State, ConnectError>;
+    async fn exit(&self, context: &mut StateContext) -> Result<(), ConnectError>;
 }
 
 /// State machine that manages the flow between states
@@ -185,7 +185,7 @@ impl StateMachine {
         &mut self.context
     }
 
-    pub async fn run(&mut self) -> Result<(), StateError> {
+    pub async fn run(&mut self) -> Result<(), ConnectError> {
         println!("Starting TiDB connection state machine...");
 
         while self.current_state != State::Completed
@@ -204,10 +204,10 @@ impl StateMachine {
                 // Transition to next state
                 self.current_state = next_state;
             } else {
-                return Err(StateMachineError::NoHandlerRegistered {
-                    state: format!("{:?}", self.current_state),
-                }
-                .into());
+                return Err(ConnectError::StateMachine(format!(
+                    "No handler registered for state: {:?}",
+                    self.current_state
+                )));
             }
         }
 
@@ -218,9 +218,9 @@ impl StateMachine {
             }
             State::Error(msg) => {
                 eprintln!("✗ State machine failed: {msg}");
-                Err(StateMachineError::HandlerError(msg.clone()).into())
+                Err(ConnectError::StateMachine(msg.clone()))
             }
-            _ => Err(StateMachineError::HandlerError("Unexpected final state".to_string()).into()),
+            _ => Err(ConnectError::StateMachine("Unexpected final state".to_string())),
         }
     }
 

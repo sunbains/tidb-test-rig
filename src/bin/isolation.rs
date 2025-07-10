@@ -73,11 +73,12 @@ use clap::Parser;
 use mysql::prelude::*;
 use mysql::*;
 use serde::{Deserialize, Serialize};
-use test_rig::errors::{Result, StateError};
+use test_rig::errors::Result;
 use test_rig::state_handlers::NextStateVersionHandler;
 use test_rig::state_machine::{State, StateContext, StateHandler, StateMachine};
 use test_rig::{
     CommonArgs, print_error_and_exit, print_success, print_test_header, register_standard_handlers,
+    ConnectError,
 };
 use test_rig::{ConfigExtension, register_config_extension};
 
@@ -228,8 +229,8 @@ impl StateHandler for CreatingTableHandler {
 
             Ok(State::PopulatingData)
         } else {
-            Err(StateError::from(
-                "No connection available for creating table",
+            Err(ConnectError::StateMachine(
+                "No connection available for creating table".to_string(),
             ))
         }
     }
@@ -284,8 +285,8 @@ impl StateHandler for PopulatingDataHandler {
 
             Ok(State::TestingIsolation)
         } else {
-            Err(StateError::from(
-                "No connection available for populating data",
+            Err(ConnectError::StateMachine(
+                "No connection available for populating data".to_string(),
             ))
         }
     }
@@ -448,8 +449,8 @@ impl StateHandler for TestingIsolationHandler {
 
             Ok(State::VerifyingResults)
         } else {
-            Err(StateError::from(
-                "No connection available for testing isolation",
+            Err(ConnectError::StateMachine(
+                "No connection available for testing isolation".to_string(),
             ))
         }
     }

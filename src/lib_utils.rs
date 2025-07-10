@@ -1,5 +1,5 @@
 use crate::cli::CommonArgs;
-use crate::errors::{Result, StateError};
+use crate::errors::{Result, ConnectError};
 use crate::state_handlers::GettingVersionHandler;
 use crate::state_machine::{State, StateMachine};
 use crate::{
@@ -26,7 +26,7 @@ impl TestSetup {
         let (host, user, password, database) = self
             .args
             .get_connection_info()
-            .map_err(|e| StateError::from(e.to_string()))?;
+            .map_err(|e| ConnectError::StateMachine(e.to_string()))?;
 
         // Create and configure the state machine
         let mut state_machine = StateMachine::new();
@@ -48,7 +48,7 @@ impl TestSetup {
     }
 
     /// Handle connection errors with helpful messages
-    pub fn handle_connection_error(e: &StateError) {
+    pub fn handle_connection_error(e: &ConnectError) {
         eprintln!("✗ Failed to complete connection test: {e}");
 
         // Try to provide more specific error messages

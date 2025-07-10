@@ -1,36 +1,8 @@
 use std::time::{Duration, Instant};
 use std::sync::{Arc, Mutex};
-use crate::errors::ConnectError;
+use crate::errors::{ConnectError, RetryConfig};
 
-/// Retry strategy configuration
-#[derive(Debug, Clone)]
-pub struct RetryConfig {
-    /// Maximum number of retry attempts
-    pub max_attempts: usize,
-    /// Initial delay between retries
-    pub initial_delay: Duration,
-    /// Maximum delay between retries
-    pub max_delay: Duration,
-    /// Backoff multiplier (exponential backoff)
-    pub backoff_multiplier: f64,
-    /// Jitter factor (0.0 = no jitter, 1.0 = full jitter)
-    pub jitter_factor: f64,
-    /// Timeout for the entire retry operation
-    pub timeout: Duration,
-}
-
-impl Default for RetryConfig {
-    fn default() -> Self {
-        Self {
-            max_attempts: 3,
-            initial_delay: Duration::from_millis(100),
-            max_delay: Duration::from_secs(30),
-            backoff_multiplier: 2.0,
-            jitter_factor: 0.1,
-            timeout: Duration::from_secs(60),
-        }
-    }
-}
+// RetryConfig is now defined in errors.rs
 
 /// Circuit breaker state
 #[derive(Debug, Clone, PartialEq, Copy)]
@@ -194,9 +166,8 @@ where
     F: Fn() -> Result<T, E>,
     E: Into<ConnectError>,
 {
-    let start_time = Instant::now();
     let mut attempt = 0;
-    let mut delay = config.initial_delay;
+    let mut delay = config.base_delay;
 
     loop {
         attempt += 1;
@@ -204,34 +175,18 @@ where
         match operation() {
             Ok(result) => return Ok(result),
             Err(error) => {
-                if attempt >= config.max_attempts {
-                    return Err(error.into());
-                }
+                        if attempt >= config.max_retries {
+            return Err(error.into());
+        }
 
-                if start_time.elapsed() >= config.timeout {
-                    return Err(ConnectError::Timeout(format!(
-                        "Retry timeout after {} attempts",
-                        attempt
-                    )));
-                }
+        // Simple exponential backoff without jitter for now
+        tokio::time::sleep(delay).await;
 
-                // Add jitter to prevent thundering herd
-                let jitter = if config.jitter_factor > 0.0 {
-                    let jitter_amount = delay.as_millis() as f64 * config.jitter_factor;
-                    let jitter_ms = (rand::random::<f64>() * jitter_amount) as u64;
-                    Duration::from_millis(jitter_ms)
-                } else {
-                    Duration::ZERO
-                };
-
-                let total_delay = delay + jitter;
-                tokio::time::sleep(total_delay).await;
-
-                // Exponential backoff
-                delay = Duration::from_millis(
-                    (delay.as_millis() as f64 * config.backoff_multiplier) as u64
-                );
-                delay = delay.min(config.max_delay);
+        // Exponential backoff
+        delay = Duration::from_millis(
+            (delay.as_millis() as f64 * config.backoff_multiplier) as u64
+        );
+        delay = delay.min(config.max_delay);
             }
         }
     }
@@ -316,12 +271,10 @@ mod tests {
     #[tokio::test]
     async fn test_retry_with_backoff() {
         let config = RetryConfig {
-            max_attempts: 3,
-            initial_delay: Duration::from_millis(10),
+            max_retries: 3,
+            base_delay: Duration::from_millis(10),
             max_delay: Duration::from_millis(100),
             backoff_multiplier: 2.0,
-            jitter_factor: 0.0,
-            timeout: Duration::from_secs(1),
         };
 
         let counter = AtomicUsize::new(0);

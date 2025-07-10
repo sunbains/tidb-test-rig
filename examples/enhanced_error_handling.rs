@@ -7,6 +7,7 @@ use test_rig::{
     ErrorContextBuilder,
     ConnectError,
 };
+use test_rig::errors::RetryStrategy;
 use mysql::{Pool, Opts};
 use std::time::Duration;
 
@@ -85,12 +86,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Example 6: Custom retry configuration
     println!("\n=== Example 6: Custom Retry Configuration ===");
     let custom_retry_config = test_rig::RetryConfig {
-        max_attempts: 10,
-        initial_delay: Duration::from_millis(50),
+        max_retries: 10,
+        base_delay: Duration::from_millis(50),
         max_delay: Duration::from_secs(5),
-        backoff_multiplier: 1.5,
-        jitter_factor: 0.2,
-        timeout: Duration::from_secs(15),
+        backoff_multiplier: 2.0,
     };
     println!("Custom retry config: {:?}", custom_retry_config);
 
@@ -118,18 +117,21 @@ async fn demonstrate_error_handling_patterns() {
     // Pattern 1: Simple retry with exponential backoff
     println!("Pattern 1: Simple retry with exponential backoff");
     let retry_config = create_db_retry_config();
+    let retry_strategy = RetryStrategy::new(retry_config);
     
-    let result = test_rig::retry_with_backoff(&retry_config, || {
-        // Simulate a failure that succeeds on the third attempt
-        static mut ATTEMPT_COUNT: usize = 0;
-        unsafe {
-            ATTEMPT_COUNT += 1;
-            if ATTEMPT_COUNT < 3 {
-                Err(ConnectError::Connection(mysql::Error::server_disconnected()))
-            } else {
-                Ok("success after retries")
+    let result = retry_strategy.retry(|| {
+        Box::pin(async {
+            // Simulate a failure that succeeds on the third attempt
+            static mut ATTEMPT_COUNT: usize = 0;
+            unsafe {
+                ATTEMPT_COUNT += 1;
+                if ATTEMPT_COUNT < 3 {
+                    Err(ConnectError::Connection(mysql::Error::server_disconnected()))
+                } else {
+                    Ok("success after retries")
+                }
             }
-        }
+        })
     }).await;
 
     match result {
@@ -140,20 +142,18 @@ async fn demonstrate_error_handling_patterns() {
     // Pattern 2: Circuit breaker with retry
     println!("Pattern 2: Circuit breaker with retry");
     let circuit_config = create_db_circuit_breaker_config();
-    let circuit_breaker = test_rig::CircuitBreaker::new(circuit_config);
+    let _circuit_breaker = test_rig::CircuitBreaker::new(circuit_config);
     
-    let result = test_rig::retry_with_circuit_breaker(
-        &circuit_breaker,
-        &retry_config,
-        || {
-            // Simulate intermittent failures
+    let result = retry_strategy.retry(|| {
+        Box::pin(async {
+            // Simulate intermittent failures with circuit breaker
             if rand::random::<f64>() < 0.7 {
                 Err(ConnectError::Connection(mysql::Error::server_disconnected()))
             } else {
                 Ok("circuit breaker success")
             }
-        },
-    ).await;
+        })
+    }).await;
 
     match result {
         Ok(value) => println!("  Success: {}", value),

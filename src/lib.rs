@@ -23,7 +23,7 @@ pub use config_extensions::{
 pub use connection_manager::{ConnectionCoordinator, ConnectionInfo, GlobalConfig, SharedState};
 pub use errors::{
     CliError, ConnectError, ConnectionError, ImportJobError, IsolationTestError, Result,
-    StateError, StateMachineError,
+    StateError,
 };
 pub use import_job_handlers::{CheckingImportJobsHandler, ShowingImportJobDetailsHandler};
 pub use import_job_monitor::{ImportJob as JobMonitorImportJob, JobMonitor};
@@ -43,7 +43,6 @@ pub use state_handlers::{
 
 // Re-export retry types for convenience
 pub use retry::{
-    RetryConfig,
     CircuitBreaker,
     CircuitBreakerConfig,
     CircuitState,
@@ -51,6 +50,7 @@ pub use retry::{
     retry_with_circuit_breaker,
     ErrorContext as RetryErrorContext,
 };
+pub use errors::RetryConfig;
 
 // Re-export error utility types
 pub use error_utils::{

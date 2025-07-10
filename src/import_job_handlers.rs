@@ -1,8 +1,9 @@
 #![allow(non_snake_case)]
 
-use crate::errors::{Result, StateError};
+use crate::errors::Result;
 use crate::import_job_monitor;
 use crate::state_machine::{State, StateContext, StateHandler};
+use crate::errors::ConnectError;
 use async_trait::async_trait;
 use chrono::Utc;
 use mysql::prelude::*;
@@ -67,8 +68,8 @@ impl StateHandler for CheckingImportJobsHandler {
                 Ok(State::ShowingImportJobDetails)
             }
         } else {
-            return Err(StateError::from(
-                "No connection available for checking import jobs",
+            return Err(ConnectError::StateMachine(
+                "No connection available for checking import jobs".to_string(),
             ));
         }
     }
@@ -121,7 +122,7 @@ impl StateHandler for ShowingImportJobDetailsHandler {
                 import_context.active_import_jobs.clone(),
             )
         } else {
-            return Err(StateError::from("Import job context not found"));
+            return Err(ConnectError::StateMachine("Import job context not found".to_string()));
         };
 
         if let Some(ref mut conn) = context.connection {
@@ -169,8 +170,8 @@ impl StateHandler for ShowingImportJobDetailsHandler {
 
             println!("\n✓ Import job monitoring completed after {monitor_duration} seconds");
         } else {
-            return Err(StateError::from(
-                "No connection available for showing import job details",
+            return Err(ConnectError::StateMachine(
+                "No connection available for showing import job details".to_string(),
             ));
         }
         Ok(State::Completed)

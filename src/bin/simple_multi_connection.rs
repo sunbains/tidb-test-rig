@@ -79,6 +79,7 @@ use test_rig::state_handlers::{
 use test_rig::state_machine::{State, StateMachine};
 use test_rig::{CommonArgs, print_success, print_test_header};
 use tokio::task::JoinHandle;
+use test_rig::errors::ConnectError;
 
 #[derive(Parser, Debug)]
 #[command(name = "simple-multi-connection")]
@@ -196,7 +197,7 @@ impl SimpleMultiConnectionCoordinator {
             self.connections.len()
         );
 
-        let mut handles: Vec<JoinHandle<Result<(), StateError>>> = Vec::new();
+        let mut handles: Vec<JoinHandle<Result<(), ConnectError>>> = Vec::new();
 
         for connection in &self.connections {
             let shared_state = Arc::clone(&self.shared_state);

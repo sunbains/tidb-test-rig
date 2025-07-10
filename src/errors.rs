@@ -1,5 +1,8 @@
 use thiserror::Error;
 use std::time::Duration;
+use std::pin::Pin;
+use std::future::Future;
+use crate::state_machine::State;
 
 /// Main error type for the TiDB connection and testing framework
 #[derive(Error, Debug)]
@@ -62,6 +65,140 @@ pub enum ConnectError {
     Unknown(String),
 }
 
+/// Enhanced state machine error with specific variants
+#[derive(Error, Debug)]
+pub enum StateError {
+    #[error("Connection timeout after {timeout:?}")]
+    ConnectionTimeout { timeout: Duration },
+    
+    #[error("Authentication failed: {reason}")]
+    AuthenticationFailure { reason: String },
+    
+    #[error("SQL execution failed - Query: {query}, Error: {error}")]
+    SqlExecutionError { query: String, error: String },
+    
+    #[error("State transition failed from {from:?} to {to:?}: {reason}")]
+    StateTransitionError { from: State, to: State, reason: String },
+    
+    #[error("Configuration error: {0}")]
+    ConfigError(#[from] ConfigError),
+    
+    #[error("Network error: {0}")]
+    NetworkError(#[from] std::io::Error),
+
+    #[error("State machine context error: {0}")]
+    ContextError(String),
+
+    #[error("Handler execution failed: {0}")]
+    HandlerError(String),
+
+    #[error("State machine timeout after {duration:?}")]
+    Timeout { duration: Duration },
+
+    #[error("State machine deadlock detected")]
+    Deadlock,
+
+    #[error("State machine initialization failed: {reason}")]
+    InitializationFailed { reason: String },
+}
+
+/// Configuration-specific error type
+#[derive(Error, Debug)]
+pub enum ConfigError {
+    #[error("Invalid configuration: {message}")]
+    Invalid { message: String },
+    
+    #[error("Missing required configuration: {field}")]
+    Missing { field: String },
+    
+    #[error("Configuration file not found: {path}")]
+    FileNotFound { path: String },
+    
+    #[error("Configuration parse error: {0}")]
+    ParseError(#[from] serde_json::Error),
+}
+
+/// Retry configuration
+#[derive(Debug, Clone)]
+pub struct RetryConfig {
+    pub max_retries: usize,
+    pub base_delay: Duration,
+    pub max_delay: Duration,
+    pub backoff_multiplier: f64,
+}
+
+impl Default for RetryConfig {
+    fn default() -> Self {
+        Self {
+            max_retries: 3,
+            base_delay: Duration::from_millis(100),
+            max_delay: Duration::from_secs(30),
+            backoff_multiplier: 2.0,
+        }
+    }
+}
+
+/// Retry mechanism with exponential backoff
+pub struct RetryStrategy {
+    config: RetryConfig,
+}
+
+impl RetryStrategy {
+    pub fn new(config: RetryConfig) -> Self {
+        Self { config }
+    }
+
+    pub fn with_default_config() -> Self {
+        Self::new(RetryConfig::default())
+    }
+
+    pub async fn retry<F, T, E>(&self, mut operation: F) -> std::result::Result<T, E>
+    where
+        F: FnMut() -> Pin<Box<dyn Future<Output = std::result::Result<T, E>> + Send>>,
+        E: std::error::Error,
+    {
+        let mut delay = self.config.base_delay;
+        
+        for attempt in 0..self.config.max_retries {
+            match operation().await {
+                Ok(result) => return Ok(result),
+                Err(e) if attempt == self.config.max_retries - 1 => return Err(e),
+                Err(_) => {
+                    tokio::time::sleep(delay).await;
+                    delay = Duration::from_millis(
+                        (delay.as_millis() as f64 * self.config.backoff_multiplier) as u64
+                    ).min(self.config.max_delay);
+                }
+            }
+        }
+        unreachable!()
+    }
+
+    /// Retry with custom error transformation
+    pub async fn retry_with_transform<F, T, E, E2>(&self, mut operation: F, transform: impl Fn(E) -> E2) -> std::result::Result<T, E2>
+    where
+        F: FnMut() -> Pin<Box<dyn Future<Output = std::result::Result<T, E>> + Send>>,
+        E: std::error::Error,
+        E2: std::error::Error,
+    {
+        let mut delay = self.config.base_delay;
+        
+        for attempt in 0..self.config.max_retries {
+            match operation().await {
+                Ok(result) => return Ok(result),
+                Err(e) if attempt == self.config.max_retries - 1 => return Err(transform(e).into()),
+                Err(_) => {
+                    tokio::time::sleep(delay).await;
+                    delay = Duration::from_millis(
+                        (delay.as_millis() as f64 * self.config.backoff_multiplier) as u64
+                    ).min(self.config.max_delay);
+                }
+            }
+        }
+        unreachable!()
+    }
+}
+
 /// Specific error types for different components
 #[derive(Error, Debug)]
 pub enum ConnectionError {
@@ -101,30 +238,6 @@ pub enum ConnectionError {
 
     #[error("Connection validation failed: {reason}")]
     ValidationFailed { reason: String },
-}
-
-#[derive(Error, Debug)]
-pub enum StateMachineError {
-    #[error("No handler registered for state: {state}")]
-    NoHandlerRegistered { state: String },
-
-    #[error("Invalid state transition from {from} to {to}")]
-    InvalidTransition { from: String, to: String },
-
-    #[error("State machine context error: {0}")]
-    ContextError(String),
-
-    #[error("Handler execution failed: {0}")]
-    HandlerError(String),
-
-    #[error("State machine timeout after {duration:?}")]
-    Timeout { duration: Duration },
-
-    #[error("State machine deadlock detected")]
-    Deadlock,
-
-    #[error("State machine initialization failed: {reason}")]
-    InitializationFailed { reason: String },
 }
 
 #[derive(Error, Debug)]
@@ -302,7 +415,6 @@ impl ErrorContext {
 }
 
 // Type aliases for backward compatibility
-pub type StateError = ConnectError;
 pub type Result<T> = std::result::Result<T, ConnectError>;
 
 // Conversion implementations
@@ -368,8 +480,8 @@ impl From<ConnectionError> for ConnectError {
     }
 }
 
-impl From<StateMachineError> for ConnectError {
-    fn from(err: StateMachineError) -> Self {
+impl From<StateError> for ConnectError {
+    fn from(err: StateError) -> Self {
         ConnectError::StateMachine(err.to_string())
     }
 }

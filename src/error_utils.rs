@@ -1,5 +1,6 @@
 use crate::errors::{ConnectError, ErrorContext, EnhancedError};
-use crate::retry::{RetryConfig, CircuitBreaker, CircuitBreakerConfig, retry_with_circuit_breaker};
+use crate::retry::{CircuitBreaker, CircuitBreakerConfig, retry_with_circuit_breaker};
+use crate::errors::RetryConfig;
 use mysql::{Pool, PooledConn};
 use std::time::Duration;
 
@@ -128,12 +129,10 @@ impl ResilientConnectionManager {
 /// Helper function to create a retry configuration for database operations
 pub fn create_db_retry_config() -> RetryConfig {
     RetryConfig {
-        max_attempts: 5,
-        initial_delay: Duration::from_millis(100),
+        max_retries: 5,
+        base_delay: Duration::from_millis(100),
         max_delay: Duration::from_secs(10),
         backoff_multiplier: 2.0,
-        jitter_factor: 0.1,
-        timeout: Duration::from_secs(30),
     }
 }
 
