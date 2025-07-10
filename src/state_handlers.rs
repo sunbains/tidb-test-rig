@@ -1,4 +1,4 @@
-use crate::state_machine::{State, StateContext, StateHandler};
+use crate::state_machine::{State, StateContext, StateHandler, StateError};
 use crate::connection::{parse_connection_string, create_connection_pool};
 use mysql::prelude::*;
 use mysql::*;
@@ -234,6 +234,61 @@ impl StateHandler for GettingVersionHandler {
     }
 
     async fn exit(&self, _context: &mut StateContext) -> Result<(), crate::state_machine::StateError> {
+        Ok(())
+    }
+} 
+
+/// Generic version handler that transitions to a configurable next state
+pub struct NextStateVersionHandler {
+    pub next_state: State,
+}
+
+impl NextStateVersionHandler {
+    pub fn new(next_state: State) -> Self {
+        Self { next_state }
+    }
+}
+
+#[async_trait]
+impl StateHandler for NextStateVersionHandler {
+    async fn enter(&self, _context: &mut StateContext) -> Result<State, StateError> {
+        println!("Getting server version...");
+        Ok(State::GettingVersion)
+    }
+
+    async fn execute(&self, context: &mut StateContext) -> Result<State, StateError> {
+        if let Some(ref mut conn) = context.connection {
+            let query = "SELECT VERSION() as version";
+            let result: Result<Vec<Row>, Error> = conn.exec(query, ());
+            match result {
+                Ok(rows) => {
+                    if let Some(row) = rows.first() {
+                        if let Some(version) = row.get::<String, _>("version") {
+                            context.server_version = Some(version.clone());
+                            println!("✓ Server version: {version}");
+                            Ok(self.next_state.clone())
+                        } else {
+                            context.set_error("Could not extract version from result".to_string());
+                            Err("Could not extract version from result".into())
+                        }
+                    } else {
+                        context.set_error("No version information returned".to_string());
+                        Err("No version information returned".into())
+                    }
+                }
+                Err(e) => {
+                    context.set_error(format!("Failed to get server version: {e}"));
+                    Err(format!("Failed to get server version: {e}").into())
+                }
+            }
+        } else {
+            let error_msg = "No connection available for getting version";
+            context.set_error(error_msg.to_string());
+            Err(error_msg.into())
+        }
+    }
+
+    async fn exit(&self, _context: &mut StateContext) -> Result<(), StateError> {
         Ok(())
     }
 } 
