@@ -123,6 +123,10 @@ struct Args {
     /// Import job config file path (JSON or TOML)
     #[arg(long)]
     import_config: Option<String>,
+    
+    /// Duration to monitor import jobs in seconds (default: 300)
+    #[arg(short = 't', long, default_value = "300")]
+    monitor_duration: u64,
 }
 
 impl Args {
@@ -145,8 +149,8 @@ impl Args {
         // Apply environment overrides
         config.apply_environment_overrides();
         
-        // Override with CLI arguments (CLI default is 60, ImportJobConfig default is 300)
-        config.monitor_duration = self.common.monitor_duration;
+        // Override with CLI arguments if provided
+        config.monitor_duration = self.monitor_duration;
         
         // Validate the configuration
         config.validate()?;
@@ -329,7 +333,7 @@ mod tests {
             "-t", "90"  // monitor_duration
         ]);
         
-        assert_eq!(args.common.monitor_duration, 90);
+        assert_eq!(args.monitor_duration, 90);
     }
 
     #[test]
@@ -360,7 +364,7 @@ mod tests {
         let args = Args::parse_from(["test-bin"]);
         let config = args.get_import_config().unwrap();
         
-        assert_eq!(config.monitor_duration, 60); // From CLI default (overrides ImportJobConfig default of 300)
+        assert_eq!(config.monitor_duration, 300); // From CLI default
         assert_eq!(config.update_interval, 5);   // From ImportJobConfig default
         assert!(config.show_details);            // From ImportJobConfig default
     }

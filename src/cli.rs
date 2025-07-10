@@ -26,10 +26,6 @@ pub struct CommonArgs {
     #[arg(short = 'd', long)]
     pub database: Option<String>,
     
-    /// Duration to monitor import jobs in seconds (default: 60)
-    #[arg(short = 't', long, default_value = "60")]
-    pub monitor_duration: u64,
-    
     /// Skip password prompt (for automated testing)
     #[arg(long)]
     pub no_password_prompt: bool,
@@ -88,7 +84,6 @@ impl CommonArgs {
         if let Some(ref database) = self.database {
             merged_config.database.database = Some(database.clone());
         }
-        // monitor_duration moved to job_monitor.rs
         if self.log_level != "info" {
             merged_config.logging.level = self.log_level.clone();
         }
@@ -172,7 +167,6 @@ impl CommonArgs {
         println!("  Host: {}", self.host);
         println!("  User: {}", self.user);
         println!("  Database: {}", self.database.as_deref().unwrap_or("(not specified)"));
-        println!("  Monitor Duration: {}s", self.monitor_duration);
         
         // Also print config file info if specified
         if let Some(ref config_path) = self.config {

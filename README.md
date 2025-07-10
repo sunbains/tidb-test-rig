@@ -203,7 +203,8 @@ All binaries support these common options:
 ### Test-Specific Options
 
 #### Job Monitor Options
-- `-t, --monitor-duration <SECONDS>`: Import job monitoring duration
+- `-t, --monitor-duration <SECONDS>`: Import job monitoring duration (default: 300)
+- `--import-config <FILE>`: Import job config file path (JSON or TOML)
 - `--update-interval <SECONDS>`: Status update interval
 - `--show-details`: Show detailed job information
 

@@ -14,8 +14,3 @@ console = true
 rows = 10
 timeout_secs = 60
 verbose = false
-
-[import_jobs]
-monitor_duration = 300
-update_interval = 5
-show_details = true
