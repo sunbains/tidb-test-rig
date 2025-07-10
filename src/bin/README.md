@@ -1,6 +1,6 @@
-# TiDB Test Rig - Tests
+# TiDB Test Rig - Binary Tests
 
-This directory contains test programs demonstrating how to use the TiDB connection test tool with a common CLI library and robust logging.
+This directory contains binary test programs demonstrating how to use the TiDB connection test tool with a common CLI library and robust logging.
 
 ## Common Setup and Utilities
 
@@ -19,25 +19,25 @@ All tests use shared utilities that provide:
 
 ```bash
 # Basic usage with interactive password prompt
-cargo run --example basic_test -- -H localhost:4000 -u root -d test
+cargo run --bin basic -- -H localhost:4000 -u root -d test
 
 # Using environment variables
 export TIDB_HOST=localhost:4000
 export TIDB_USER=root
 export TIDB_PASSWORD=mypassword
-cargo run --example basic_test
+cargo run --bin basic
 
 # Using command line password (less secure)
-cargo run --example basic_test -- -H localhost:4000 -u root --password mypassword
+cargo run --bin basic -- -H localhost:4000 -u root --password mypassword
 
 # Skip password prompt (for automated testing)
-cargo run --example basic_test -- -H localhost:4000 -u root --no-password-prompt
+cargo run --bin basic -- -H localhost:4000 -u root --no-password-prompt
 
 # Enable debug logging to console
-cargo run --example basic_test -- --log-level debug
+cargo run --bin basic -- --log-level debug
 
 # Log to a file
-cargo run --example basic_test -- --log-file --log-file-path logs/mylog.log
+cargo run --bin basic -- --log-file --log-file-path logs/mylog.log
 ```
 
 ### Available Arguments
@@ -90,7 +90,7 @@ log_state_transition!(from, to);
 ### Test: Logging to File
 
 ```bash
-cargo run --example basic_test -- --log-level debug --log-file --log-file-path logs/mylog.log
+cargo run --bin basic -- --log-level debug --log-file --log-file-path logs/mylog.log
 ```
 
 ## Shared Test Utilities
@@ -136,9 +136,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 - `print_error_and_exit(message, error)`: Print error and exit
 - `create_state_machine_with_handlers(...)`: Create state machine with standard handlers
 
-## Available Tests
+## Available Binary Tests
 
-### 1. Basic Test (`basic_test.rs`)
+### 1. Basic Test (`basic.rs`)
 A comprehensive test showing how to connect to TiDB and perform basic operations.
 
 **Features:**
@@ -148,7 +148,7 @@ A comprehensive test showing how to connect to TiDB and perform basic operations
 - Includes import job monitoring capabilities
 - Minimal test for getting started
 
-### 2. Isolation Test (`isolation_test.rs`)
+### 2. Isolation Test (`isolation.rs`)
 A comprehensive test testing TiDB's repeatable read isolation.
 
 **Features:**
@@ -165,7 +165,7 @@ A basic test showing how to create and manage multiple TiDB connections with the
 - Demonstrates basic connection coordination
 - Shows how to handle connection states and errors
 
-### 4. Advanced Multi-Connection Test (`multi_connection_test.rs`)
+### 4. Advanced Multi-Connection Test (`multi_connection.rs`)
 A comprehensive test showing advanced multi-connection scenarios with import job monitoring.
 
 **Features:**
@@ -174,7 +174,7 @@ A comprehensive test showing advanced multi-connection scenarios with import job
 - Advanced error handling and recovery
 - Coordination between multiple state machines
 
-### 5. Logging Test (`logging_test.rs`)
+### 5. Logging Test (`logging.rs`)
 A demonstration of the logging facility, including log levels, file output, performance metrics, and error context.
 
 **Features:**
@@ -183,53 +183,82 @@ A demonstration of the logging facility, including log levels, file output, perf
 - Logs performance and memory usage metrics
 - Integrates with the state machine and shared utilities
 
+### 6. CLI Test (`cli.rs`)
+A test demonstrating advanced CLI argument handling and validation.
+
+**Features:**
+- Advanced argument parsing and validation
+- Custom argument structures
+- Integration with the state machine
+
+### 7. Job Monitor Test (`job_monitor.rs`)
+A specialized test for monitoring TiDB import jobs.
+
+**Features:**
+- Monitors active import jobs
+- Shows job progress and status updates
+- Uses custom state machine flow with job monitoring states
+- Demonstrates the generic `NextStateVersionHandler` pattern
+
 ## Building and Running Tests
 
 ### Using Cargo Directly
 
 ```bash
-# Build all tests
-cargo build --examples
+# Build all binaries
+cargo build --bins
 
 # Run basic test
-cargo run --example basic_test -- -H localhost:4000 -u root -d test
+cargo run --bin basic -- -H localhost:4000 -u root -d test
 
 # Run isolation test
-cargo run --example isolation_test -- -H localhost:4000 -u root -d test
+cargo run --bin isolation -- -H localhost:4000 -u root -d test
 
 # Run simple multi-connection test
-cargo run --example simple_multi_connection
+cargo run --bin simple_multi_connection
 
 # Run advanced multi-connection test
-cargo run --example multi_connection_test
+cargo run --bin multi_connection
 
 # Run logging test
-cargo run --example logging_test -- --log-level debug --log-file --log-file-path logs/mylog.log
+cargo run --bin logging -- --log-level debug --log-file --log-file-path logs/mylog.log
 
-# Check if tests compile
-cargo check --examples
+# Run CLI test
+cargo run --bin cli --features="isolation_test" -- [args]
+
+# Run job monitor test
+cargo run --bin job_monitor --features="import_jobs" -- -H localhost:4000 -u root -d test --monitor-duration 60
+
+# Check if binaries compile
+cargo check --bins
 ```
 
 ### Using Make
 
 ```bash
 # Build all tests
-make tests
+make build-db-tests
 
 # Run basic test
-make run-basic
+make run-basic-db-tests
 
 # Run isolation test
-make run-isolation-test
+make run-isolation-db-tests
 
 # Run simple multi-connection test
-make run-simple-multi-connection
+make run-simple
 
 # Run advanced multi-connection test
 make run-advanced
 
 # Run logging test
-make run-logging-test
+make run-logging-db-tests
+
+# Run CLI test
+make run-cli-db-tests
+
+# Run job monitor test
+make run-job-monitor-db-tests
 
 # Check compilation
 make check
@@ -300,6 +329,25 @@ Connection Info:
 ✅ Isolation test completed successfully!
 ```
 
+### Job Monitor Test
+```
+TiDB Import Job Monitoring Test
+===============================
+✓ Configuration parsed: localhost:4000
+✓ Connection established successfully
+✓ Connection test passed
+✓ Database 'test' verified
+✓ Server version: 8.0.11-TiDB-v9.0.0-beta.2
+Checking for active import jobs...
+✓ Found 1 active import job(s)
+Monitoring 1 active import job(s) for 60 seconds...
+
+--- Import Job Status Update (55s remaining) ---
+Job_ID: 1 | Phase: global-sorting | Start_Time: 2025-07-09 19:14:20 | Source_File_Size: 1.152TiB | Imported_Rows: 0 | Time elapsed: 09:16:26
+
+✅ Job monitoring test completed successfully!
+```
+
 ### Logging Test
 ```
 TiDB Logging Test
@@ -333,15 +381,15 @@ Check the logs for detailed information.
 To run tests with debug output:
 
 ```bash
-RUST_LOG=debug cargo run --example basic_test
+RUST_LOG=debug cargo run --bin basic
 ```
 
 ## Contributing
 
-When adding new tests:
+When adding new binary tests:
 
-1. Follow the naming convention: `descriptive_name_test.rs`
-2. Add the test to `Cargo.toml` in the `[[example]]` section
+1. Follow the naming convention: `descriptive_name.rs`
+2. Add the test to `Cargo.toml` in the `[[bin]]` section
 3. Update this README with documentation
 4. Include proper error handling and logging
 5. Test the test thoroughly before committing
@@ -354,4 +402,5 @@ The tests demonstrate the following architectural patterns:
 - **Coordinator Pattern**: Multiple connections are coordinated through a central coordinator
 - **Message Passing**: Asynchronous communication between components
 - **Shared State Management**: Thread-safe shared state with proper synchronization
-- **Error Handling**: Comprehensive error handling with graceful degradation 
+- **Error Handling**: Comprehensive error handling with graceful degradation
+- **Generic Handlers**: Reusable state handlers like `NextStateVersionHandler` for flexible state transitions 

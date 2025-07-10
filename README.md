@@ -14,26 +14,26 @@ This tool is designed to test and monitor TiDB database connections with advance
 
 ## Library Structure
 
-This project is now a **reusable Rust library** for TiDB connection and import job testing. The main CLI application previously in `src/main.rs` has been moved to `db_tests/basic_db_tests.rs`.
+This project is now a **reusable Rust library** for TiDB connection and import job testing. The main CLI application and all test binaries are located in `src/bin/`.
 
 - **Library usage:** Import the `connect` crate in your own Rust projects and use the state machine, handlers, and coordination logic directly.
-- **CLI usage:** Run the main CLI as a db_test:
+- **CLI usage:** Run any of the binary tests:
   ```bash
-  cargo test --test basic_db_tests -- -- -H localhost:4000 -u root -d test
+  cargo run --bin basic -- -H localhost:4000 -u root -d test
   ```
   or
   ```bash
   make run-basic-db-tests
   ```
 
-All other db_tests (multi-connection, isolation, CLI, etc.) are also available in the `db_tests/` directory and use the library API.
+All test binaries (multi-connection, isolation, CLI, job monitoring, etc.) are available in the `src/bin/` directory and use the library API.
 
 ### Modular CLI Architecture
 
-The project uses a modular CLI argument structure where each db_test defines its own argument struct while sharing common arguments:
+The project uses a modular CLI argument structure where each binary defines its own argument struct while sharing common arguments:
 
 - **CommonArgs**: Contains truly common arguments (host, user, database, monitor-duration)
-- **DbTest-specific Args**: Each db_test defines its own `Args` struct with `#[command(flatten)]` for `CommonArgs` plus db_test-specific arguments
+- **Binary-specific Args**: Each binary defines its own `Args` struct with `#[command(flatten)]` for `CommonArgs` plus binary-specific arguments
 - **Shared Utilities**: Common setup and error handling utilities in `lib_utils.rs`
 
 ---
@@ -55,6 +55,7 @@ The project uses a modular CLI argument structure where each db_test defines its
 - 📝 **Structured Logging**: Comprehensive logging with different verbosity levels
 - 🛡️ **Error Recovery**: Graceful error handling and recovery mechanisms
 - 🔧 **Extensible Architecture**: Easy to add new states and handlers
+- 🔄 **Generic Handlers**: Reusable state handlers like `NextStateVersionHandler` for flexible state transitions
 
 ## Architecture
 
@@ -63,8 +64,7 @@ The tool uses a state machine pattern for managing complex workflows:
 
 ```
 Initial → ParsingConfig → Connecting → TestingConnection → 
-VerifyingDatabase → GettingVersion → CheckingImportJobs → 
-ShowingImportJobDetails → Completed
+VerifyingDatabase → GettingVersion → [Custom States] → Completed
 ```
 
 Each state has dedicated handlers that implement:
@@ -113,53 +113,53 @@ cd connect
 # Build the project
 cargo build --release
 
-# Run tests
-cargo test
+# Build all binaries
+cargo build --bins
 ```
 
 ## Usage
 
 ### Basic Usage
 ```bash
-# Run with default settings
-cargo run -- -u your_username
+# Run basic connection test
+cargo run --bin basic -- -u your_username
 
 # Specify custom host and database
-cargo run -- -H your-tidb-host:4000 -u your_username -d your_database
+cargo run --bin basic -- -H your-tidb-host:4000 -u your_username -d your_database
 
 # Monitor import jobs for 120 seconds
-cargo run -- -u your_username -t 120
+cargo run --bin job_monitor --features="import_jobs" -- -u your_username -t 120
 ```
 
 ### Command Line Options
 
-Each db_test has its own CLI arguments. Here are the common options shared across db_tests:
+Each binary has its own CLI arguments. Here are the common options shared across binaries:
 
 ```bash
 Common Options:
-  -H, --host <HOST>                    Hostname and port [default: tidb.qyruvz1u6xtd.clusters.dev.tidb-cloud.com:4000]
+  -H, --host <HOST>                    Hostname and port [default: localhost:4000]
   -u, --user <USER>                    Username for database authentication
   -d, --database <DATABASE>            Database name (optional)
   -t, --monitor-duration <DURATION>    Duration to monitor import jobs in seconds [default: 60]
   -h, --help                           Print help
 
-DbTest-specific options vary by db_test. Run any db_test with --help to see its specific options:
-  cargo test --test basic_db_tests -- -- --help
-  cargo test --test isolation_db_tests -- -- --help
-  cargo test --test cli_db_tests -- -- --help
+Binary-specific options vary by binary. Run any binary with --help to see its specific options:
+  cargo run --bin basic -- --help
+  cargo run --bin isolation -- --help
+  cargo run --bin cli -- --help
 ```
 
 ### Test Workflows
 
 #### 1. Basic Connection Test
 ```bash
-cargo run -- -u admin
+cargo run --bin basic -- -u admin
 # Prompts for password, then tests connection and shows TiDB version
 ```
 
 #### 2. Import Job Monitoring
 ```bash
-cargo run -- -u admin -t 300
+cargo run --bin job_monitor --features="import_jobs" -- -u admin -t 300
 # Monitors import jobs for 5 minutes with real-time updates
 ```
 
@@ -167,60 +167,66 @@ cargo run -- -u admin -t 300
 ```bash
 # Test multiple databases in sequence
 for db in db1 db2 db3; do
-    cargo run -- -u admin -d $db
+    cargo run --bin basic -- -u admin -d $db
 done
 ```
 
-## DB Tests
+## Binary Tests
 
-The project includes comprehensive db_tests demonstrating various use cases:
+The project includes comprehensive binary tests demonstrating various use cases:
 
-### Basic DB Test (Main CLI)
+### Basic Test
 ```bash
-cargo test --test basic_db_tests -- -- -H localhost:4000 -u root -d test
+cargo run --bin basic -- -H localhost:4000 -u root -d test
 ```
-This is the main CLI entry point for single-connection and import job monitoring workflows.
+This is the main entry point for single-connection and basic testing workflows.
 
-### CLI DB Test
+### CLI Test
 ```bash
-cargo test --test cli_db_tests -- -- -H localhost:4000 -u root -d test
+cargo run --bin cli --features="isolation_test" -- -H localhost:4000 -u root -d test
 ```
 Demonstrates CLI argument parsing and basic connection testing with modular argument structure.
 
-### Isolation DB Test
+### Isolation Test
 ```bash
-cargo test --test isolation_db_tests -- -- -H localhost:4000 -u root -d test --test-rows 20
+cargo run --bin isolation --features="isolation_test" -- -H localhost:4000 -u root -d test --test-rows 20
 ```
 Tests transaction isolation with configurable test data.
 
-### Logging DB Test
+### Logging Test
 ```bash
-cargo test --test logging_db_tests -- -- -H localhost:4000 -u root -d test
+cargo run --bin logging -- -H localhost:4000 -u root -d test
 ```
 Demonstrates structured logging with different verbosity levels.
 
-### Simple Multi-Connection DB Test
+### Simple Multi-Connection Test
 ```bash
-cargo test --test simple_multi_connection --
+cargo run --bin simple_multi_connection --features="multi_connection"
 ```
 Demonstrates basic multi-connection management with state machine coordination.
 
-### Advanced Multi-Connection DB Test
+### Advanced Multi-Connection Test
 ```bash
-cargo test --test multi_connection_db_tests --
+cargo run --bin multi_connection --features="multi_connection,import_jobs"
 ```
 Shows advanced scenarios with import job monitoring across multiple connections.
 
-### Building Tests
+### Job Monitor Test
 ```bash
-# Build all db_test binaries
-cargo test --no-run
+cargo run --bin job_monitor --features="import_jobs" -- -H localhost:4000 -u root -d test --monitor-duration 60
+```
+Specialized test for monitoring TiDB import jobs with custom state machine flow.
 
-# Check db_test compilation for all db_test binaries
-cargo check --tests
+### Building Binaries
+```bash
+# Build all binary executables
+cargo build --bins
+
+# Check binary compilation
+cargo check --bins
 
 # Using Make
-make db_tests
+make build-db-tests
 make run-simple
 make run-advanced
 ```
@@ -233,19 +239,18 @@ The project includes a comprehensive Makefile for common development tasks:
 # Build the main application
 make build
 
-# Run db_tests
-make db_tests
+# Build all binaries
+make build-db-tests
 
 # Clean build artifacts
 make clean
 
-# Build all db_tests
-make db_tests
-
-# Run specific db_tests
+# Run specific binaries
+make run-basic-db-tests
 make run-isolation-db-tests
 make run-cli-db-tests
 make run-logging-db-tests
+make run-job-monitor-db-tests
 
 # Code quality
 make format
@@ -258,28 +263,30 @@ make help
 
 #### Makefile Targets
 
-| Target | Description | DB Test |
+| Target | Description | Binary |
 |--------|-------------|---------|
-| `run-simple-connection` | Basic connection db_tests | `make run-simple-connection` |
-| `run-isolation-db-tests` | Transaction isolation db_tests | `make run-isolation-db-tests` |
-| `run-cli-db-tests` | CLI db_tests with modular arguments | `make run-cli-db-tests` |
-| `run-logging-db-tests` | Logging demonstration | `make run-logging-db-tests` |
-| `run-simple` | Simple multi-connection db_tests | `make run-simple` |
-| `run-advanced` | Advanced multi-connection db_tests | `make run-advanced` |
+| `run-basic-db-tests` | Basic connection test | `cargo run --bin basic` |
+| `run-simple-connection` | Simple connection test | `cargo run --bin simple_connection` |
+| `run-isolation-db-tests` | Transaction isolation test | `cargo run --bin isolation` |
+| `run-cli-db-tests` | CLI test with modular arguments | `cargo run --bin cli` |
+| `run-logging-db-tests` | Logging demonstration | `cargo run --bin logging` |
+| `run-job-monitor-db-tests` | Job monitoring test | `cargo run --bin job_monitor` |
+| `run-simple` | Simple multi-connection test | `cargo run --bin simple_multi_connection` |
+| `run-advanced` | Advanced multi-connection test | `cargo run --bin multi_connection` |
 
-**Note:** Each db_test has its own CLI arguments. Use `--help` with any db_test to see its specific options.
+**Note:** Each binary has its own CLI arguments. Use `--help` with any binary to see its specific options.
 
-See [db_tests/README.md](db_tests/README.md) for detailed db_test documentation.
+See [src/bin/README.md](src/bin/README.md) for detailed binary documentation.
 
 ## Configuration
 
 ### Environment Variables
 ```bash
 # Enable debug logging
-RUST_LOG=debug cargo run -- -u admin
+RUST_LOG=debug cargo run --bin basic -- -u admin
 
 # Set custom log level
-RUST_LOG=info cargo run -- -u admin
+RUST_LOG=info cargo run --bin basic -- -u admin
 ```
 
 ### Connection Parameters
@@ -302,64 +309,65 @@ src/
 ├── multi_connection_state_machine.rs  # Multi-connection state machines
 ├── cli.rs                  # Common CLI argument handling
 ├── lib_utils.rs            # Shared utilities for tests
-└── logging.rs              # Logging infrastructure
-
-db_tests/
-├── simple_connection_test.rs     # Basic connection test
-├── isolation_test.rs             # Transaction isolation testing
-├── logging_test.rs               # Logging demonstration
-├── cli_test.rs                   # CLI test
-├── simple_multi_connection.rs    # Basic multi-connection test
-├── multi_connection_test.rs      # Advanced multi-connection test
-└── README.md                     # Test documentation
+├── logging.rs              # Logging infrastructure
+└── bin/                    # Binary executables
+    ├── basic.rs            # Basic connection test
+    ├── isolation.rs        # Transaction isolation testing
+    ├── logging.rs          # Logging demonstration
+    ├── cli.rs              # CLI test
+    ├── simple_connection.rs # Simple connection test
+    ├── simple_multi_connection.rs # Basic multi-connection test
+    ├── multi_connection.rs # Advanced multi-connection test
+    ├── job_monitor.rs      # Job monitoring test
+    └── README.md           # Binary documentation
 
 docs/
-└── ARCHITECTURE.md              # Detailed architecture documentation
+└── ARCHITECTURE.md         # Detailed architecture documentation
 ```
 
 ### Import Structure
 
 #### Common Imports (from lib.rs)
 ```rust
-// All tests can import common functionality
+// All binaries can import common functionality
 use connect::{InitialHandler, ParsingConfigHandler, ConnectingHandler, 
-              TestingConnectionHandler, VerifyingDatabaseHandler, GettingVersionHandler};
+              TestingConnectionHandler, VerifyingDatabaseHandler, NextStateVersionHandler};
 use connect::{CommonArgs, TestSetup, CommonArgsSetup};
 use connect::lib_utils::{print_test_header, print_success, print_error_and_exit};
 ```
 
-#### Test-Specific Imports
+#### Binary-Specific Imports
 ```rust
-// Test-specific imports
+// Binary-specific imports
 use connect::state_machine::{StateMachine, State, StateContext, StateHandler, StateError};
 use clap::Parser;
 
-// Each test defines its own Args struct
+// Each binary defines its own Args struct
 #[derive(Parser)]
 #[command(flatten)]
 struct Args {
     #[command(flatten)]
     common: CommonArgs,
-    // Test-specific arguments here
+    // Binary-specific arguments here
 }
 ```
 
-### Adding New Tests
+### Adding New Binaries
 
-#### Test Structure
-Each test follows a consistent pattern:
+#### Binary Structure
+Each binary follows a consistent pattern:
 
 1. **Define Args struct** with `#[command(flatten)]` for `CommonArgs`
 2. **Use shared utilities** from `lib_utils.rs` for setup and error handling
-3. **Implement test-specific logic** using the state machine
+3. **Implement binary-specific logic** using the state machine
 
 ```rust
 #[derive(Parser)]
-#[command(about = "Test description")]
+#[command(about = "Binary description")]
 struct Args {
     #[command(flatten)]
     common: CommonArgs,
-    // Test-specific arguments
+    // Binary-specific arguments
 }
 
 #[tokio::main]
@@ -367,15 +375,15 @@ async fn main() {
     let args = Args::parse();
     let setup = TestSetup::new(&args.common);
     
-    // Test-specific logic here
+    // Binary-specific logic here
 }
 ```
 
 #### Adding New States
 1. For common states: Define in `state_machine.rs` and export in `lib.rs`
-2. For test-specific states: Use existing states in `State` enum or add new ones
+2. For binary-specific states: Use existing states in `State` enum or add new ones
 3. Implement the handler in the appropriate module
-4. Register the handler in the test
+4. Register the handler in the binary
 5. Update state transitions as needed
 
 ### Adding New Features
@@ -383,7 +391,7 @@ async fn main() {
 2. Implement async traits for handlers
 3. Add proper error handling
 4. Update documentation
-5. Add tests
+5. Add binaries
 
 ### Testing
 ```bash
@@ -433,16 +441,15 @@ telnet your-tidb-host 4000
 ```bash
 # Error: No connection available
 # Solution: Check connection parameters and network connectivity
-
 ```
 
 ### Debug Mode
 ```bash
 # Enable debug logging
-RUST_LOG=debug cargo run -- -u admin
+RUST_LOG=debug cargo run --bin basic -- -u admin
 
 # Run with verbose output
-cargo run -- -u admin --verbose
+cargo run --bin basic -- -u admin --verbose
 ```
 
 ### Performance Tuning
@@ -487,12 +494,11 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
-
 ## Support
 
 For issues and questions:
 - Check the troubleshooting section
 - Review the architecture documentation
 - Open an issue on the repository
-- Check test implementations
+- Check binary implementations
 
