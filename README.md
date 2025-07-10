@@ -30,10 +30,10 @@ All other tests (multi-connection, isolation, CLI, etc.) are also available in t
 
 ### Modular CLI Architecture
 
-The project uses a modular CLI argument structure where each example defines its own argument struct while sharing common arguments:
+The project uses a modular CLI argument structure where each test defines its own argument struct while sharing common arguments:
 
 - **CommonArgs**: Contains truly common arguments (host, user, database, monitor-duration)
-- **Example-specific Args**: Each example defines its own `Args` struct with `#[command(flatten)]` for `CommonArgs` plus test-specific arguments
+- **Test-specific Args**: Each test defines its own `Args` struct with `#[command(flatten)]` for `CommonArgs` plus test-specific arguments
 - **Shared Utilities**: Common setup and error handling utilities in `lib_utils.rs`
 
 ---
@@ -143,13 +143,13 @@ Common Options:
   -t, --monitor-duration <DURATION>    Duration to monitor import jobs in seconds [default: 60]
   -h, --help                           Print help
 
-Example-specific options vary by test. Run any test with --help to see its specific options:
+Test-specific options vary by test. Run any test with --help to see its specific options:
   cargo run --example basic_test -- --help
   cargo run --example isolation_test -- --help
   cargo run --example cli_test -- --help
 ```
 
-### Example Workflows
+### Test Workflows
 
 #### 1. Basic Connection Test
 ```bash
@@ -259,12 +259,12 @@ make help
 
 #### Makefile Targets
 
-| Target | Description | Example |
+| Target | Description | Test |
 |--------|-------------|---------|
 | `run-simple-connection` | Basic connection test | `make run-simple-connection` |
 | `run-isolation-test` | Transaction isolation testing | `make run-isolation-test` |
-| `run-cli-example` | CLI test with modular arguments | `make run-cli-example` |
-| `run-logging-example` | Logging demonstration | `make run-logging-example` |
+| `run-cli-test` | CLI test with modular arguments | `make run-cli-test` |
+| `run-logging-test` | Logging demonstration | `make run-logging-test` |
 | `run-simple` | Simple multi-connection test | `make run-simple` |
 | `run-advanced` | Advanced multi-connection test | `make run-advanced` |
 

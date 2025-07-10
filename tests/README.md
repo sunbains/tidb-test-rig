@@ -68,7 +68,7 @@ The project uses the [`tracing`](https://docs.rs/tracing) ecosystem for structur
 - **Performance and memory usage metrics**
 - **Error context for troubleshooting**
 
-### Example Logging Usage
+### Test Logging Usage
 
 ```rust
 use tracing::{info, debug, warn, error};
@@ -87,7 +87,7 @@ log_query!(query);
 log_state_transition!(from, to);
 ```
 
-### Example: Logging to File
+### Test: Logging to File
 
 ```bash
 cargo run --example basic_test -- --log-level debug --log-file --log-file-path logs/mylog.log
@@ -100,11 +100,11 @@ The project provides shared utilities in `src/lib_utils.rs` that eliminate code 
 ### TestSetup
 For tests using the legacy `parse_args()` approach:
 ```rust
-use connect::{TestSetup, print_example_header, print_success};
+use connect::{TestSetup, print_test_header, print_success};
 
 #[tokio::main]
 async fn main() {
-    print_example_header("My Test");
+    print_test_header("My Test");
     
     let mut setup = TestSetup::new()?;
     setup.run_with_job_monitoring().await?;
@@ -116,11 +116,11 @@ async fn main() {
 ### CommonArgsSetup
 For tests using the new `CommonArgs::parse()` approach:
 ```rust
-use connect::{CommonArgsSetup, print_example_header, print_success};
+use connect::{CommonArgsSetup, print_test_header, print_success};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    print_example_header("My Test");
+    print_test_header("My Test");
     
     let mut setup = CommonArgsSetup::new()?;
     setup.run_with_error_handling().await?;
@@ -131,7 +131,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 ```
 
 ### Helper Functions
-- `print_example_header(title)`: Print a formatted test header
+- `print_test_header(title)`: Print a formatted test header
 - `print_success(message)`: Print a success message
 - `print_error_and_exit(message, error)`: Print error and exit
 - `create_state_machine_with_handlers(...)`: Create state machine with standard handlers
@@ -214,7 +214,7 @@ cargo check --examples
 
 ```bash
 # Build all tests
-make examples
+make tests
 
 # Run basic test
 make run-basic
@@ -229,7 +229,7 @@ make run-simple-multi-connection
 make run-advanced
 
 # Run logging test
-make run-logging-example
+make run-logging-test
 
 # Check compilation
 make check
@@ -302,20 +302,20 @@ Connection Info:
 
 ### Logging Test
 ```
-TiDB Logging Example
+TiDB Logging Test
 ====================
 Connection Info:
   Host: localhost:4000
   User: root
   Database: test
   Monitor Duration: 60s
-[INFO] Starting TiDB logging example
+[INFO] Starting TiDB logging test
 [DEBUG] Connection parameters: host=localhost:4000, user=root, database=Some("test")
 [INFO] Starting operation: database_connection
 [INFO] Completed operation: database_connection
 [INFO] Performance metric: operation=database_connection, duration_ms=100
 ...
-✅ Logging example completed successfully!
+✅ Logging test completed successfully!
 Check the logs for detailed information.
 ```
 
