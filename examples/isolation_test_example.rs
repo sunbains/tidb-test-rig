@@ -1,11 +1,37 @@
 use connect::state_machine::{StateMachine, State, StateContext, StateHandler, StateError};
-use connect::{CommonArgsSetup, print_example_header, print_success, print_error_and_exit};
+use connect::{CommonArgs, print_example_header, print_success, print_error_and_exit};
 use mysql::prelude::*;
 use mysql::*;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use connect::cli::CommonArgs;
 use clap::Parser;
+
+#[derive(Parser, Debug)]
+#[command(name = "isolation-test-example")]
+#[command(about = "TiDB isolation test example with test-specific arguments")]
+pub struct IsolationTestArgs {
+    #[command(flatten)]
+    pub common: CommonArgs,
+    /// Number of test rows to create for isolation testing
+    #[arg(long, default_value = "10")]
+    pub test_rows: u32,
+}
+
+impl IsolationTestArgs {
+    pub fn print_connection_info(&self) {
+        self.common.print_connection_info();
+        println!("  Test Rows: {}", self.test_rows);
+    }
+    pub fn init_logging(&self) -> Result<(), Box<dyn std::error::Error>> {
+        self.common.init_logging()
+    }
+    pub fn get_connection_info(&self) -> connect::cli::ConnInfoResult {
+        self.common.get_connection_info()
+    }
+    pub fn get_database(&self) -> Option<String> {
+        self.common.get_database()
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct TestRow {
@@ -348,21 +374,13 @@ impl StateHandler for VerifyingResultsHandler {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     print_example_header("TiDB Repeatable Read Isolation Test");
     
-    // Parse command line arguments
-    let args = CommonArgs::parse();
+    // Parse command line arguments using the specific args type
+    let args = IsolationTestArgs::parse();
     
-    // Print connection info
+    args.init_logging()?;
     args.print_connection_info();
-    
-    // Get connection info
     let (host, user, password, database) = args.get_connection_info()?;
-    let database = database.unwrap_or_else(|| "test".to_string());
-    
-    // Create and configure the state machine
-    let mut state_machine = StateMachine::new();
-    
-    // Register standard handlers using the shared utility
-    connect::TestSetup::register_standard_handlers(&mut state_machine, host, user, password, Some(database));
+    let database = args.get_database().unwrap_or_else(|| "test".to_string());
     
     // Register isolation test handlers
     state_machine.register_handler(State::CreatingTable, Box::new(CreatingTableHandler));

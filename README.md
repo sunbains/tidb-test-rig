@@ -26,7 +26,15 @@ This project is now a **reusable Rust library** for TiDB connection and import j
   make run-basic
   ```
 
-All other examples (multi-connection, isolation, macro CLI, etc.) are also available in the `examples/` directory and use the library API.
+All other examples (multi-connection, isolation, CLI, etc.) are also available in the `examples/` directory and use the library API.
+
+### Modular CLI Architecture
+
+The project uses a modular CLI argument structure where each example defines its own argument struct while sharing common arguments:
+
+- **CommonArgs**: Contains truly common arguments (host, user, database, monitor-duration)
+- **Example-specific Args**: Each example defines its own `Args` struct with `#[command(flatten)]` for `CommonArgs` plus test-specific arguments
+- **Shared Utilities**: Common setup and error handling utilities in `lib_utils.rs`
 
 ---
 
@@ -124,15 +132,21 @@ cargo run -- -u your_username -t 120
 ```
 
 ### Command Line Options
-```bash
-tidb-client [OPTIONS]
 
-Options:
+Each example has its own CLI arguments. Here are the common options shared across examples:
+
+```bash
+Common Options:
   -H, --host <HOST>                    Hostname and port [default: tidb.qyruvz1u6xtd.clusters.dev.tidb-cloud.com:4000]
   -u, --user <USER>                    Username for database authentication
   -d, --database <DATABASE>            Database name (optional)
   -t, --monitor-duration <DURATION>    Duration to monitor import jobs in seconds [default: 60]
   -h, --help                           Print help
+
+Example-specific options vary by example. Run any example with --help to see its specific options:
+  cargo run --example basic_example -- --help
+  cargo run --example isolation_test_example -- --help
+  cargo run --example cli_example -- --help
 ```
 
 ### Example Workflows
@@ -166,6 +180,24 @@ The project includes comprehensive examples demonstrating various use cases:
 cargo run --example basic_example -- -H localhost:4000 -u root -d test
 ```
 This is the main CLI entry point for single-connection and import job monitoring workflows.
+
+### CLI Example
+```bash
+cargo run --example cli_example -- -H localhost:4000 -u root -d test
+```
+Demonstrates CLI argument parsing and basic connection testing with modular argument structure.
+
+### Isolation Test Example
+```bash
+cargo run --example isolation_test_example -- -H localhost:4000 -u root -d test --test-rows 20
+```
+Tests transaction isolation with configurable test data.
+
+### Logging Example
+```bash
+cargo run --example logging_example -- -H localhost:4000 -u root -d test
+```
+Demonstrates structured logging with different verbosity levels.
 
 ### Simple Multi-Connection Example
 ```bash
@@ -213,7 +245,7 @@ make examples
 # Run specific examples
 make run-simple-connection
 make run-isolation-test
-make run-macro-cli ARGS="-- -H localhost:4000 -u root -d test --test-rows 20"
+make run-cli-example
 make run-logging-example
 
 # Code quality
@@ -231,12 +263,12 @@ make help
 |--------|-------------|---------|
 | `run-simple-connection` | Basic connection test | `make run-simple-connection` |
 | `run-isolation-test` | Transaction isolation testing | `make run-isolation-test` |
-| `run-macro-cli` | Macro-based CLI example | `make run-macro-cli ARGS="-- -H localhost:4000 -u root -d test --test-rows 20"` |
+| `run-cli-example` | CLI example with modular arguments | `make run-cli-example` |
 | `run-logging-example` | Logging demonstration | `make run-logging-example` |
 | `run-simple` | Simple multi-connection example | `make run-simple` |
 | `run-advanced` | Advanced multi-connection example | `make run-advanced` |
 
-**Note:** The `run-macro-cli` target requires the `isolation_test` feature and accepts custom arguments via the `ARGS` variable.
+**Note:** Each example has its own CLI arguments. Use `--help` with any example to see its specific options.
 
 See [examples/README.md](examples/README.md) for detailed example documentation.
 
@@ -262,7 +294,6 @@ RUST_LOG=info cargo run -- -u admin
 ### Project Structure
 ```
 src/
-├── main.rs                 # CLI entry point
 ├── lib.rs                  # Library exports (consolidated imports)
 ├── connection.rs           # Connection management
 ├── state_machine.rs        # State machine core
@@ -271,7 +302,7 @@ src/
 ├── connection_manager.rs   # Multi-connection coordination
 ├── multi_connection_state_machine.rs  # Multi-connection state machines
 ├── cli.rs                  # Common CLI argument handling
-├── cli_macros.rs           # CLI macro generation
+├── lib_utils.rs            # Shared utilities for examples
 └── logging.rs              # Logging infrastructure
 
 examples/
@@ -294,43 +325,58 @@ docs/
 // All examples can import common functionality
 use connect::{InitialHandler, ParsingConfigHandler, ConnectingHandler, 
               TestingConnectionHandler, VerifyingDatabaseHandler, GettingVersionHandler};
-use connect::{parse_args, log_performance_metric, ErrorContext};
+use connect::{CommonArgs, TestSetup, CommonArgsSetup};
+use connect::lib_utils::{print_example_header, print_success, print_error_and_exit};
 ```
 
 #### Example-Specific Imports
 ```rust
 // Example-specific imports
 use connect::state_machine::{StateMachine, State, StateContext, StateHandler, StateError};
-// Additional imports as needed for specific examples
+use clap::Parser;
+
+// Each example defines its own Args struct
+#[derive(Parser)]
+#[command(flatten)]
+struct Args {
+    #[command(flatten)]
+    common: CommonArgs,
+    // Example-specific arguments here
+}
 ```
 
-### Adding New States
+### Adding New Examples
 
-#### Common States (in lib.rs)
-Common states used across multiple examples are defined in `src/state_machine.rs` and exported through `src/lib.rs`:
+#### Example Structure
+Each example follows a consistent pattern:
 
-```rust
-// Common states available in all examples
-use connect::{InitialHandler, ParsingConfigHandler, ConnectingHandler, 
-              TestingConnectionHandler, VerifyingDatabaseHandler, GettingVersionHandler};
-```
-
-#### Example-Specific States
-Example-specific states are defined in the example files themselves:
+1. **Define Args struct** with `#[command(flatten)]` for `CommonArgs`
+2. **Use shared utilities** from `lib_utils.rs` for setup and error handling
+3. **Implement example-specific logic** using the state machine
 
 ```rust
-// Example-specific states defined locally
-use connect::state_machine::{StateMachine, State, StateContext, StateHandler, StateError};
+#[derive(Parser)]
+#[command(about = "Example description")]
+struct Args {
+    #[command(flatten)]
+    common: CommonArgs,
+    // Example-specific arguments
+}
 
-// Define example-specific states in the global State enum
-// These are already available: CreatingTable, PopulatingData, TestingIsolation, VerifyingResults
+#[tokio::main]
+async fn main() {
+    let args = Args::parse();
+    let setup = TestSetup::new(&args.common);
+    
+    // Example-specific logic here
+}
 ```
 
 #### Adding New States
 1. For common states: Define in `state_machine.rs` and export in `lib.rs`
 2. For example-specific states: Use existing states in `State` enum or add new ones
 3. Implement the handler in the appropriate module
-4. Register the handler in the example or main.rs
+4. Register the handler in the example
 5. Update state transitions as needed
 
 ### Adding New Features

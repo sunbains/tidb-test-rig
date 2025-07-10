@@ -4,6 +4,32 @@ use connect::JobMonitor;
 use std::sync::{Arc, Mutex};
 use tokio::task::JoinHandle;
 use std::collections::HashMap;
+use connect::{CommonArgs, print_example_header, print_success, print_error_and_exit};
+use clap::Parser;
+
+#[derive(Parser, Debug)]
+#[command(name = "simple-multi-connection")]
+#[command(about = "Simple multi-connection example with connection count argument")]
+pub struct Args {
+    #[command(flatten)]
+    pub common: CommonArgs,
+    /// Number of connections to create for multi-connection tests
+    #[arg(long, default_value = "2")]
+    pub connection_count: u32,
+}
+
+impl Args {
+    pub fn print_connection_info(&self) {
+        self.common.print_connection_info();
+        println!("  Connection Count: {}", self.connection_count);
+    }
+    pub fn init_logging(&self) -> Result<(), Box<dyn std::error::Error>> {
+        self.common.init_logging()
+    }
+    pub fn get_connection_info(&self) -> connect::cli::ConnInfoResult {
+        self.common.get_connection_info()
+    }
+}
 
 /// Simple shared state for coordination
 #[derive(Debug, Clone)]
@@ -212,8 +238,10 @@ impl SimpleMultiConnectionCoordinator {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("Simple Multi-Connection TiDB Testing");
-    println!("====================================");
+    print_example_header("Simple Multi-Connection TiDB Testing");
+    let args = Args::parse();
+    args.init_logging()?;
+    args.print_connection_info();
 
     let mut coordinator = SimpleMultiConnectionCoordinator::new();
 
@@ -254,6 +282,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Print results
     coordinator.print_results();
 
-    println!("\n✓ Multi-connection testing completed!");
+    print_success("Multi-connection testing completed!");
     Ok(())
 } 

@@ -1,9 +1,37 @@
 use connect::{MultiConnectionStateMachine, ConnectionCoordinator, ConnectionInfo, GlobalConfig};
+use connect::{CommonArgs, print_example_header, print_success, print_error_and_exit};
+use clap::Parser;
+
+#[derive(Parser, Debug)]
+#[command(name = "multi-connection-example")]
+#[command(about = "Advanced multi-connection example with connection count argument")]
+pub struct Args {
+    #[command(flatten)]
+    pub common: CommonArgs,
+    /// Number of connections to create for multi-connection tests
+    #[arg(long, default_value = "2")]
+    pub connection_count: u32,
+}
+
+impl Args {
+    pub fn print_connection_info(&self) {
+        self.common.print_connection_info();
+        println!("  Connection Count: {}", self.connection_count);
+    }
+    pub fn init_logging(&self) -> Result<(), Box<dyn std::error::Error>> {
+        self.common.init_logging()
+    }
+    pub fn get_connection_info(&self) -> connect::cli::ConnInfoResult {
+        self.common.get_connection_info()
+    }
+}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("Multi-Connection TiDB Testing Example");
-    println!("=====================================");
+    print_example_header("Advanced Multi-Connection TiDB Testing");
+    let args = Args::parse();
+    args.init_logging()?;
+    args.print_connection_info();
 
     // Create global configuration
     let config = GlobalConfig {
@@ -84,6 +112,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    println!("\n✓ Multi-connection testing completed!");
+    print_success("Advanced multi-connection testing completed!");
     Ok(())
 } 
