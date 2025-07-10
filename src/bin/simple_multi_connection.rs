@@ -67,15 +67,18 @@
 //! This binary is intended as a simple, clear example. For more advanced coordination, shared state,
 //! or import job monitoring, see the `multi_connection.rs` binary.
 
-use test_rig::state_machine::{StateMachine, State};
-use test_rig::errors::StateError;
-use test_rig::state_handlers::{InitialHandler, ParsingConfigHandler, ConnectingHandler, TestingConnectionHandler, VerifyingDatabaseHandler, GettingVersionHandler};
-use test_rig::JobMonitor;
-use std::sync::{Arc, Mutex};
-use tokio::task::JoinHandle;
-use std::collections::HashMap;
-use test_rig::{CommonArgs, print_test_header, print_success};
 use clap::Parser;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+use test_rig::JobMonitor;
+use test_rig::errors::StateError;
+use test_rig::state_handlers::{
+    ConnectingHandler, GettingVersionHandler, InitialHandler, ParsingConfigHandler,
+    TestingConnectionHandler, VerifyingDatabaseHandler,
+};
+use test_rig::state_machine::{State, StateMachine};
+use test_rig::{CommonArgs, print_success, print_test_header};
+use tokio::task::JoinHandle;
 
 #[derive(Parser, Debug)]
 #[command(name = "simple-multi-connection")]
@@ -168,13 +171,16 @@ impl SimpleMultiConnectionCoordinator {
     pub fn add_connection(&mut self, config: ConnectionConfig) {
         // Initialize connection result
         if let Ok(mut state) = self.shared_state.lock() {
-            state.connection_results.insert(config.id.clone(), ConnectionResult {
-                connection_id: config.id.clone(),
-                host: config.host.clone(),
-                status: ConnectionStatus::NotStarted,
-                error: None,
-                version: None,
-            });
+            state.connection_results.insert(
+                config.id.clone(),
+                ConnectionResult {
+                    connection_id: config.id.clone(),
+                    host: config.host.clone(),
+                    status: ConnectionStatus::NotStarted,
+                    error: None,
+                    version: None,
+                },
+            );
         }
         self.connections.push(config);
     }
@@ -185,10 +191,13 @@ impl SimpleMultiConnectionCoordinator {
 
     /// Run all connections concurrently
     pub async fn run_all_connections(&self) -> Result<(), StateError> {
-        println!("Starting {} connections concurrently...", self.connections.len());
-        
+        println!(
+            "Starting {} connections concurrently...",
+            self.connections.len()
+        );
+
         let mut handles: Vec<JoinHandle<Result<(), StateError>>> = Vec::new();
-        
+
         for connection in &self.connections {
             let shared_state = Arc::clone(&self.shared_state);
             let connection_id = connection.id.clone();
@@ -196,34 +205,34 @@ impl SimpleMultiConnectionCoordinator {
             let username = connection.username.clone();
             let password = connection.password.clone();
             let database = connection.database.clone();
-            
+
             let handle = tokio::spawn(async move {
                 // Create state machine for this connection
                 let mut state_machine = StateMachine::new();
-                
+
                 // Register handlers
                 state_machine.register_handler(State::Initial, Box::new(InitialHandler));
                 state_machine.register_handler(
                     State::ParsingConfig,
                     Box::new(ParsingConfigHandler::new(
-                        host,
-                        username,
-                        password,
-                        database
-                    ))
+                        host, username, password, database,
+                    )),
                 );
                 state_machine.register_handler(State::Connecting, Box::new(ConnectingHandler));
-                state_machine.register_handler(State::TestingConnection, Box::new(TestingConnectionHandler));
-                state_machine.register_handler(State::VerifyingDatabase, Box::new(VerifyingDatabaseHandler));
-                state_machine.register_handler(State::GettingVersion, Box::new(GettingVersionHandler));
-                
+                state_machine
+                    .register_handler(State::TestingConnection, Box::new(TestingConnectionHandler));
+                state_machine
+                    .register_handler(State::VerifyingDatabase, Box::new(VerifyingDatabaseHandler));
+                state_machine
+                    .register_handler(State::GettingVersion, Box::new(GettingVersionHandler));
+
                 // Update status to connecting
                 if let Ok(mut state) = shared_state.lock() {
                     if let Some(result) = state.connection_results.get_mut(&connection_id) {
                         result.status = ConnectionStatus::Connecting;
                     }
                 }
-                
+
                 // Run the state machine
                 match state_machine.run().await {
                     Ok(_) => {
@@ -235,26 +244,36 @@ impl SimpleMultiConnectionCoordinator {
                             state.global_status = "All connections completed".to_string();
                         }
                         println!("✓ Connection {} completed successfully", connection_id);
-                        
+
                         // Run job monitoring for this connection
-                        println!("Starting job monitoring for connection {}...", connection_id);
+                        println!(
+                            "Starting job monitoring for connection {}...",
+                            connection_id
+                        );
                         let mut job_monitor = JobMonitor::new(30); // 30 seconds monitoring
-                        
+
                         // Transfer the connection to the job monitor
                         if let Some(conn) = state_machine.get_context_mut().connection.take() {
                             job_monitor.get_context_mut().connection = Some(conn);
-                            job_monitor.get_context_mut().host = state_machine.get_context().host.clone();
+                            job_monitor.get_context_mut().host =
+                                state_machine.get_context().host.clone();
                             job_monitor.get_context_mut().port = state_machine.get_context().port;
-                            job_monitor.get_context_mut().username = state_machine.get_context().username.clone();
-                            job_monitor.get_context_mut().password = state_machine.get_context().password.clone();
-                            job_monitor.get_context_mut().database = state_machine.get_context().database.clone();
-                            
+                            job_monitor.get_context_mut().username =
+                                state_machine.get_context().username.clone();
+                            job_monitor.get_context_mut().password =
+                                state_machine.get_context().password.clone();
+                            job_monitor.get_context_mut().database =
+                                state_machine.get_context().database.clone();
+
                             // Run the job monitor
                             if let Err(e) = job_monitor.run().await {
-                                eprintln!("✗ Job monitoring failed for connection {}: {}", connection_id, e);
+                                eprintln!(
+                                    "✗ Job monitoring failed for connection {}: {}",
+                                    connection_id, e
+                                );
                             }
                         }
-                        
+
                         Ok(())
                     }
                     Err(e) => {
@@ -270,19 +289,19 @@ impl SimpleMultiConnectionCoordinator {
                     }
                 }
             });
-            
+
             handles.push(handle);
         }
-        
+
         // Wait for all connections to complete
         for handle in handles {
             match handle.await {
-                Ok(Ok(_)) => {},
+                Ok(Ok(_)) => {}
                 Ok(Err(e)) => eprintln!("Connection task failed: {}", e),
                 Err(e) => eprintln!("Task join failed: {}", e),
             }
         }
-        
+
         Ok(())
     }
 
@@ -292,7 +311,7 @@ impl SimpleMultiConnectionCoordinator {
             println!("\n=== Final Results ===");
             println!("Global Status: {}", state.global_status);
             println!("\nConnection Results:");
-            
+
             for (conn_id, result) in &state.connection_results {
                 println!("  {}: {:?} - {}", conn_id, result.status, result.host);
                 if let Some(error) = &result.error {
@@ -354,7 +373,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     print_success("Multi-connection testing completed!");
     Ok(())
-} 
+}
 
 #[cfg(test)]
 mod tests {
@@ -363,10 +382,13 @@ mod tests {
     #[test]
     fn test_args_parsing() {
         let args = Args::parse_from([
-            "test-bin", 
-            "--connection-count", "5",
-            "-H", "localhost:4000",
-            "-u", "testuser"
+            "test-bin",
+            "--connection-count",
+            "5",
+            "-H",
+            "localhost:4000",
+            "-u",
+            "testuser",
         ]);
         assert_eq!(args.connection_count, 5);
         assert_eq!(args.common.host, "localhost:4000");
@@ -409,7 +431,7 @@ mod tests {
     fn test_coordinator_creation() {
         let coordinator = SimpleMultiConnectionCoordinator::new();
         assert_eq!(coordinator.connections.len(), 0);
-        
+
         // Test that shared state is accessible
         let shared_state = coordinator.get_shared_state();
         if let Ok(state) = shared_state.lock() {
@@ -420,9 +442,18 @@ mod tests {
 
     #[test]
     fn test_connection_status_enum() {
-        assert!(matches!(ConnectionStatus::NotStarted, ConnectionStatus::NotStarted));
-        assert!(matches!(ConnectionStatus::Connecting, ConnectionStatus::Connecting));
-        assert!(matches!(ConnectionStatus::Completed, ConnectionStatus::Completed));
+        assert!(matches!(
+            ConnectionStatus::NotStarted,
+            ConnectionStatus::NotStarted
+        ));
+        assert!(matches!(
+            ConnectionStatus::Connecting,
+            ConnectionStatus::Connecting
+        ));
+        assert!(matches!(
+            ConnectionStatus::Completed,
+            ConnectionStatus::Completed
+        ));
         assert!(matches!(ConnectionStatus::Failed, ConnectionStatus::Failed));
     }
-} 
+}

@@ -1,11 +1,11 @@
-use crate::state_machine::{StateMachine, State};
-use crate::{
-    InitialHandler, ParsingConfigHandler, ConnectingHandler, 
-    TestingConnectionHandler, VerifyingDatabaseHandler,
-};
-use crate::state_handlers::GettingVersionHandler;
 use crate::cli::CommonArgs;
-use crate::errors::{StateError, Result};
+use crate::errors::{Result, StateError};
+use crate::state_handlers::GettingVersionHandler;
+use crate::state_machine::{State, StateMachine};
+use crate::{
+    ConnectingHandler, InitialHandler, ParsingConfigHandler, TestingConnectionHandler,
+    VerifyingDatabaseHandler,
+};
 use clap::Parser;
 use std::process;
 
@@ -17,23 +17,23 @@ pub struct TestSetup {
 impl TestSetup {
     /// Create a new test setup with CommonArgs
     pub fn new(args: &CommonArgs) -> Self {
-        Self {
-            args: args.clone(),
-        }
+        Self { args: args.clone() }
     }
-    
+
     /// Run the basic connection workflow
     pub async fn run_basic_workflow(&self) -> Result<()> {
         // Get connection info
-        let (host, user, password, database) = self.args.get_connection_info()
+        let (host, user, password, database) = self
+            .args
+            .get_connection_info()
             .map_err(|e| StateError::from(e.to_string()))?;
-        
+
         // Create and configure the state machine
         let mut state_machine = StateMachine::new();
-        
+
         // Register standard state handlers
         register_standard_handlers(&mut state_machine, host, user, password, database);
-        
+
         // Run the state machine
         match state_machine.run().await {
             Ok(_) => {
@@ -46,11 +46,11 @@ impl TestSetup {
             }
         }
     }
-    
+
     /// Handle connection errors with helpful messages
     pub fn handle_connection_error(e: &StateError) {
         eprintln!("✗ Failed to complete connection test: {e}");
-        
+
         // Try to provide more specific error messages
         let error_msg = e.to_string().to_lowercase();
         if error_msg.contains("access denied") || error_msg.contains("authentication") {
@@ -60,7 +60,7 @@ impl TestSetup {
         } else if error_msg.contains("unknown database") {
             eprintln!("  → Database does not exist");
         }
-        
+
         process::exit(1);
     }
 }
@@ -76,12 +76,7 @@ pub fn register_standard_handlers(
     state_machine.register_handler(State::Initial, Box::new(InitialHandler));
     state_machine.register_handler(
         State::ParsingConfig,
-        Box::new(ParsingConfigHandler::new(
-            host,
-            user,
-            password,
-            database
-        ))
+        Box::new(ParsingConfigHandler::new(host, user, password, database)),
     );
     state_machine.register_handler(State::Connecting, Box::new(ConnectingHandler));
     state_machine.register_handler(State::TestingConnection, Box::new(TestingConnectionHandler));
@@ -100,28 +95,28 @@ impl CommonArgsSetup {
     pub fn new() -> std::result::Result<Self, Box<dyn std::error::Error>> {
         // Parse command line arguments
         let args = CommonArgs::parse();
-        
+
         // Initialize logging
         args.init_logging()?;
-        
+
         // Print connection info
         args.print_connection_info();
-        
+
         // Get connection info
         let (host, user, password, database) = args.get_connection_info()?;
-        
+
         // Create and configure the state machine
         let mut state_machine = StateMachine::new();
-        
+
         // Register standard state handlers
         register_standard_handlers(&mut state_machine, host, user, password, database);
-        
+
         Ok(Self {
             args,
             state_machine,
         })
     }
-    
+
     /// Run the state machine with standard error handling
     pub async fn run_with_error_handling(&mut self) -> Result<()> {
         match self.state_machine.run().await {
@@ -164,7 +159,7 @@ pub fn create_state_machine_with_handlers(
     let mut state_machine = crate::state_machine::StateMachine::new();
     register_standard_handlers(&mut state_machine, host, user, password, database);
     state_machine
-} 
+}
 
 #[cfg(test)]
 mod tests {
@@ -177,4 +172,4 @@ mod tests {
     }
 
     // print_error_and_exit cannot be tested as it exits the process
-} 
+}

@@ -1,23 +1,21 @@
+use crate::errors::{ConnectError, Result};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
-use crate::errors::{ConnectError, Result};
 
 /// Main configuration structure for the TiDB connection and testing framework
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AppConfig {
     /// Database connection settings
     #[serde(default)]
     pub database: DatabaseConfig,
-    
+
     /// Logging configuration
     #[serde(default)]
     pub logging: LoggingConfig,
-    
+
     /// Test-specific settings
     #[serde(default)]
     pub test: TestConfig,
-    
     // Import job monitoring settings moved to job_monitor.rs
 }
 
@@ -27,23 +25,23 @@ pub struct DatabaseConfig {
     /// Database host (e.g., "localhost:4000")
     #[serde(default = "default_host")]
     pub host: String,
-    
+
     /// Database username
     #[serde(default = "default_username")]
     pub username: String,
-    
+
     /// Database password (can be overridden by environment variable)
     #[serde(default)]
     pub password: Option<String>,
-    
+
     /// Database name
     #[serde(default)]
     pub database: Option<String>,
-    
+
     /// Connection pool size
     #[serde(default = "default_pool_size")]
     pub pool_size: u32,
-    
+
     /// Connection timeout in seconds
     #[serde(default = "default_timeout")]
     pub timeout_secs: u64,
@@ -55,15 +53,15 @@ pub struct LoggingConfig {
     /// Log level (trace, debug, info, warn, error)
     #[serde(default = "default_log_level")]
     pub level: String,
-    
+
     /// Log format (json, text)
     #[serde(default = "default_log_format")]
     pub format: String,
-    
+
     /// Log file path (optional)
     #[serde(default)]
     pub file: Option<String>,
-    
+
     /// Enable console output
     #[serde(default = "default_console_output")]
     pub console: bool,
@@ -75,18 +73,17 @@ pub struct TestConfig {
     /// Number of test rows for isolation testing
     #[serde(default = "default_test_rows")]
     pub rows: u32,
-    
+
     /// Test timeout in seconds
     #[serde(default = "default_test_timeout")]
     pub timeout_secs: u64,
-    
+
     /// Enable verbose output
     #[serde(default)]
     pub verbose: bool,
 }
 
 // ImportJobConfig moved to job_monitor.rs
-
 
 impl Default for DatabaseConfig {
     fn default() -> Self {
@@ -125,58 +122,85 @@ impl Default for TestConfig {
 // ImportJobConfig default implementation moved to job_monitor.rs
 
 // Default value functions
-fn default_host() -> String { "localhost:4000".to_string() }
-fn default_username() -> String { "root".to_string() }
-fn default_pool_size() -> u32 { 5 }
-fn default_timeout() -> u64 { 30 }
-fn default_log_level() -> String { "info".to_string() }
-fn default_log_format() -> String { "text".to_string() }
-fn default_console_output() -> bool { true }
-fn default_test_rows() -> u32 { 10 }
-fn default_test_timeout() -> u64 { 60 }
+fn default_host() -> String {
+    "localhost:4000".to_string()
+}
+fn default_username() -> String {
+    "root".to_string()
+}
+fn default_pool_size() -> u32 {
+    5
+}
+fn default_timeout() -> u64 {
+    30
+}
+fn default_log_level() -> String {
+    "info".to_string()
+}
+fn default_log_format() -> String {
+    "text".to_string()
+}
+fn default_console_output() -> bool {
+    true
+}
+fn default_test_rows() -> u32 {
+    10
+}
+fn default_test_timeout() -> u64 {
+    60
+}
 // Import job default functions moved to job_monitor.rs
 
 impl AppConfig {
     /// Load configuration from a file
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
         let path = path.as_ref();
-        let extension = path.extension()
+        let extension = path
+            .extension()
             .and_then(|ext| ext.to_str())
             .unwrap_or("json");
-        
+
         let config = match extension {
             "json" => {
-                let content = std::fs::read_to_string(path)
-                    .map_err(|e| ConnectError::Configuration(format!("Failed to read config file: {e}")))?;
-                serde_json::from_str(&content)
-                    .map_err(|e| ConnectError::Configuration(format!("Failed to parse JSON config: {e}")))?
-            },
+                let content = std::fs::read_to_string(path).map_err(|e| {
+                    ConnectError::Configuration(format!("Failed to read config file: {e}"))
+                })?;
+                serde_json::from_str(&content).map_err(|e| {
+                    ConnectError::Configuration(format!("Failed to parse JSON config: {e}"))
+                })?
+            }
             "toml" => {
-                let content = std::fs::read_to_string(path)
-                    .map_err(|e| ConnectError::Configuration(format!("Failed to read config file: {e}")))?;
-                toml::from_str(&content)
-                    .map_err(|e| ConnectError::Configuration(format!("Failed to parse TOML config: {e}")))?
-            },
-            _ => return Err(ConnectError::Configuration(format!("Unsupported config file format: {extension}"))),
+                let content = std::fs::read_to_string(path).map_err(|e| {
+                    ConnectError::Configuration(format!("Failed to read config file: {e}"))
+                })?;
+                toml::from_str(&content).map_err(|e| {
+                    ConnectError::Configuration(format!("Failed to parse TOML config: {e}"))
+                })?
+            }
+            _ => {
+                return Err(ConnectError::Configuration(format!(
+                    "Unsupported config file format: {extension}"
+                )));
+            }
         };
-        
+
         Ok(config)
     }
-    
+
     /// Load configuration with environment variable overrides
     pub fn from_file_with_env<P: AsRef<Path>>(path: P) -> Result<Self> {
         let mut config = Self::from_file(path)?;
         config.apply_environment_overrides();
         Ok(config)
     }
-    
+
     /// Load configuration from environment variables only
     pub fn from_env() -> Result<Self> {
         let mut config = Self::default();
         config.apply_environment_overrides();
         Ok(config)
     }
-    
+
     /// Apply environment variable overrides to the configuration
     pub fn apply_environment_overrides(&mut self) {
         // Database overrides
@@ -192,7 +216,7 @@ impl AppConfig {
         if let Ok(database) = std::env::var("TIDB_DATABASE") {
             self.database.database = Some(database);
         }
-        
+
         // Logging overrides
         if let Ok(level) = std::env::var("TIDB_LOG_LEVEL") {
             self.logging.level = level;
@@ -200,64 +224,79 @@ impl AppConfig {
         if let Ok(format) = std::env::var("TIDB_LOG_FORMAT") {
             self.logging.format = format;
         }
-        
+
         // Test overrides
         if let Ok(rows) = std::env::var("TIDB_TEST_ROWS")
-            && let Ok(rows) = rows.parse() {
-                self.test.rows = rows;
-            }
+            && let Ok(rows) = rows.parse()
+        {
+            self.test.rows = rows;
+        }
         if let Ok(verbose) = std::env::var("TIDB_VERBOSE") {
             self.test.verbose = verbose.to_lowercase() == "true";
         }
-        
+
         // Import job overrides
         // Removed import job overrides
     }
-    
+
     /// Save configuration to a file
     pub fn save_to_file<P: AsRef<Path>>(&self, path: P) -> Result<()> {
         let path = path.as_ref();
-        let extension = path.extension()
+        let extension = path
+            .extension()
             .and_then(|ext| ext.to_str())
             .unwrap_or("json");
-        
+
         let content = match extension {
-            "json" => {
-                serde_json::to_string_pretty(self)
-                    .map_err(|e| ConnectError::Configuration(format!("Failed to serialize config: {e}")))?
-            },
-            "toml" => {
-                toml::to_string_pretty(self)
-                    .map_err(|e| ConnectError::Configuration(format!("Failed to serialize config: {e}")))?
-            },
-            _ => return Err(ConnectError::Configuration(format!("Unsupported config file format: {extension}"))),
+            "json" => serde_json::to_string_pretty(self).map_err(|e| {
+                ConnectError::Configuration(format!("Failed to serialize config: {e}"))
+            })?,
+            "toml" => toml::to_string_pretty(self).map_err(|e| {
+                ConnectError::Configuration(format!("Failed to serialize config: {e}"))
+            })?,
+            _ => {
+                return Err(ConnectError::Configuration(format!(
+                    "Unsupported config file format: {extension}"
+                )));
+            }
         };
-        
-        std::fs::write(path, content)
-            .map_err(|e| ConnectError::Configuration(format!("Failed to write config file: {e}")))?;
-        
+
+        std::fs::write(path, content).map_err(|e| {
+            ConnectError::Configuration(format!("Failed to write config file: {e}"))
+        })?;
+
         Ok(())
     }
-    
+
     /// Get the database password, checking environment variables if not set in config
     pub fn get_password(&self) -> Option<String> {
-        self.database.password.clone()
+        self.database
+            .password
+            .clone()
             .or_else(|| std::env::var("TIDB_PASSWORD").ok())
     }
-    
+
     /// Validate the configuration
     pub fn validate(&self) -> Result<()> {
         if self.database.host.is_empty() {
-            return Err(ConnectError::Configuration("Database host cannot be empty".to_string()));
+            return Err(ConnectError::Configuration(
+                "Database host cannot be empty".to_string(),
+            ));
         }
         if self.database.username.is_empty() {
-            return Err(ConnectError::Configuration("Database username cannot be empty".to_string()));
+            return Err(ConnectError::Configuration(
+                "Database username cannot be empty".to_string(),
+            ));
         }
         if self.database.pool_size == 0 {
-            return Err(ConnectError::Configuration("Database pool size must be greater than 0".to_string()));
+            return Err(ConnectError::Configuration(
+                "Database pool size must be greater than 0".to_string(),
+            ));
         }
         if self.database.timeout_secs == 0 {
-            return Err(ConnectError::Configuration("Database timeout must be greater than 0".to_string()));
+            return Err(ConnectError::Configuration(
+                "Database timeout must be greater than 0".to_string(),
+            ));
         }
         Ok(())
     }
@@ -280,50 +319,50 @@ impl ConfigBuilder {
             config: AppConfig::default(),
         }
     }
-    
+
     pub fn host(mut self, host: impl Into<String>) -> Self {
         self.config.database.host = host.into();
         self
     }
-    
+
     pub fn username(mut self, username: impl Into<String>) -> Self {
         self.config.database.username = username.into();
         self
     }
-    
+
     pub fn password(mut self, password: impl Into<String>) -> Self {
         self.config.database.password = Some(password.into());
         self
     }
-    
+
     pub fn database(mut self, database: impl Into<String>) -> Self {
         self.config.database.database = Some(database.into());
         self
     }
-    
+
     pub fn log_level(mut self, level: impl Into<String>) -> Self {
         self.config.logging.level = level.into();
         self
     }
-    
+
     pub fn test_rows(mut self, rows: u32) -> Self {
         self.config.test.rows = rows;
         self
     }
-    
+
     // Removed monitor_duration
-    
+
     pub fn build(self) -> AppConfig {
         self.config
     }
-} 
+}
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::NamedTempFile;
-    use std::io::Write;
     use serial_test::serial;
+    use std::io::Write;
+    use tempfile::NamedTempFile;
 
     #[test]
     #[serial]
@@ -384,13 +423,19 @@ mod tests {
     fn test_env_override() {
         let prev = std::env::var("TIDB_HOST").ok();
         let unique = "envhost_config_test";
-        unsafe { std::env::set_var("TIDB_HOST", unique); }
+        unsafe {
+            std::env::set_var("TIDB_HOST", unique);
+        }
         let mut config = AppConfig::default();
         config.apply_environment_overrides();
         assert_eq!(config.database.host, unique);
         match prev {
-            Some(val) => unsafe { std::env::set_var("TIDB_HOST", val); },
-            None => unsafe { std::env::remove_var("TIDB_HOST"); },
+            Some(val) => unsafe {
+                std::env::set_var("TIDB_HOST", val);
+            },
+            None => unsafe {
+                std::env::remove_var("TIDB_HOST");
+            },
         }
     }
 
@@ -403,4 +448,4 @@ mod tests {
         let loaded = AppConfig::from_file(file.path()).unwrap();
         assert_eq!(loaded.database.host, "localhost:4000");
     }
-} 
+}

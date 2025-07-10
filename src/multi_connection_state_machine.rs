@@ -1,6 +1,8 @@
-use crate::state_machine::{State, StateContext, StateHandler};
-use crate::connection_manager::{ConnectionCoordinator, ConnectionInfo, CoordinationMessage, ConnectionStatus, ConnectionState};
+use crate::connection_manager::{
+    ConnectionCoordinator, ConnectionInfo, ConnectionState, ConnectionStatus, CoordinationMessage,
+};
 use crate::errors::Result;
+use crate::state_machine::{State, StateContext, StateHandler};
 use async_trait::async_trait;
 use std::sync::Arc;
 use tokio::sync::mpsc;
@@ -32,15 +34,20 @@ impl MultiConnectionStateMachine {
     /// Add a new connection state machine
     pub fn add_connection(&mut self, connection_id: String, connection_info: ConnectionInfo) {
         // Add to coordinator
-        self.coordinator.add_connection(connection_id.clone(), connection_info);
-        
+        self.coordinator
+            .add_connection(connection_id.clone(), connection_info);
+
         // Create state machine for this connection
         let mut state_machine = crate::state_machine::StateMachine::new();
         let coordinator_sender = self.coordinator.get_sender();
-        
+
         // Register handlers for this connection
-        self.register_connection_handlers(&mut state_machine, &connection_id, coordinator_sender.clone());
-        
+        self.register_connection_handlers(
+            &mut state_machine,
+            &connection_id,
+            coordinator_sender.clone(),
+        );
+
         self.state_machines.push(ConnectionStateMachine {
             connection_id,
             state_machine,
@@ -54,24 +61,39 @@ impl MultiConnectionStateMachine {
         _connection_id: &str,
         _coordinator_sender: mpsc::Sender<CoordinationMessage>,
     ) {
-        use crate::state_handlers::{InitialHandler, ParsingConfigHandler, ConnectingHandler, TestingConnectionHandler, VerifyingDatabaseHandler, GettingVersionHandler};
+        use crate::state_handlers::{
+            ConnectingHandler, GettingVersionHandler, InitialHandler, ParsingConfigHandler,
+            TestingConnectionHandler, VerifyingDatabaseHandler,
+        };
 
         state_machine.register_handler(State::Initial, Box::new(InitialHandler));
-        state_machine.register_handler(State::ParsingConfig, Box::new(ParsingConfigHandler::new(
-            "".to_string(), // Will be set from coordinator
-            "".to_string(),
-            "".to_string(),
-            None,
-        )));
+        state_machine.register_handler(
+            State::ParsingConfig,
+            Box::new(ParsingConfigHandler::new(
+                "".to_string(), // Will be set from coordinator
+                "".to_string(),
+                "".to_string(),
+                None,
+            )),
+        );
         state_machine.register_handler(State::Connecting, Box::new(ConnectingHandler));
-        state_machine.register_handler(State::TestingConnection, Box::new(TestingConnectionHandler));
-        state_machine.register_handler(State::VerifyingDatabase, Box::new(VerifyingDatabaseHandler));
+        state_machine
+            .register_handler(State::TestingConnection, Box::new(TestingConnectionHandler));
+        state_machine
+            .register_handler(State::VerifyingDatabase, Box::new(VerifyingDatabaseHandler));
         state_machine.register_handler(State::GettingVersion, Box::new(GettingVersionHandler));
     }
 
     /// Start coordination processing
     pub fn start_coordination(&mut self) {
-        let mut coordinator = ConnectionCoordinator::new(self.coordinator.get_shared_state().lock().unwrap().global_config.clone());
+        let mut coordinator = ConnectionCoordinator::new(
+            self.coordinator
+                .get_shared_state()
+                .lock()
+                .unwrap()
+                .global_config
+                .clone(),
+        );
         let handle = tokio::spawn(async move {
             coordinator.process_messages().await;
         });
@@ -80,20 +102,21 @@ impl MultiConnectionStateMachine {
 
     /// Run all state machines concurrently
     pub async fn run_all(&mut self) -> Result<()> {
-        println!("Starting {} connection state machines...", self.state_machines.len());
-        
+        println!(
+            "Starting {} connection state machines...",
+            self.state_machines.len()
+        );
+
         // Start coordination
         self.start_coordination();
-        
+
         // Run all state machines concurrently
         let mut handles = Vec::new();
         for mut state_machine in self.state_machines.drain(..) {
-            let handle = tokio::spawn(async move {
-                state_machine.state_machine.run().await
-            });
+            let handle = tokio::spawn(async move { state_machine.state_machine.run().await });
             handles.push(handle);
         }
-        
+
         // Wait for all to complete
         for handle in handles {
             match handle.await {
@@ -102,17 +125,19 @@ impl MultiConnectionStateMachine {
                 Err(e) => eprintln!("✗ State machine task failed: {e}"),
             }
         }
-        
+
         // Stop coordination
         if let Some(handle) = self.coordination_handle.take() {
             handle.abort();
         }
-        
+
         Ok(())
     }
 
     /// Get shared state
-    pub fn get_shared_state(&self) -> Arc<std::sync::Mutex<crate::connection_manager::SharedState>> {
+    pub fn get_shared_state(
+        &self,
+    ) -> Arc<std::sync::Mutex<crate::connection_manager::SharedState>> {
         self.coordinator.get_shared_state()
     }
 
@@ -139,8 +164,12 @@ impl ConnectionStateMachine {
             last_activity: chrono::Utc::now(),
             error_message,
         };
-        
-        if let Err(e) = self.coordinator_sender.send(CoordinationMessage::UpdateConnectionStatus(status_update)).await {
+
+        if let Err(e) = self
+            .coordinator_sender
+            .send(CoordinationMessage::UpdateConnectionStatus(status_update))
+            .await
+        {
             eprintln!("Failed to send status update: {e}");
         }
     }
@@ -167,14 +196,18 @@ impl StateHandler for CoordinationHandler {
     async fn execute(&self, _context: &mut StateContext) -> Result<State> {
         // Broadcast that coordination is starting
         let event = crate::connection_manager::CoordinationEvent::AllConnectionsReady;
-        if let Err(e) = self.coordinator_sender.send(CoordinationMessage::BroadcastEvent(event)).await {
+        if let Err(e) = self
+            .coordinator_sender
+            .send(CoordinationMessage::BroadcastEvent(event))
+            .await
+        {
             eprintln!("Failed to send coordination event: {e}");
         }
-        
+
         Ok(State::Completed)
     }
 
     async fn exit(&self, _context: &mut StateContext) -> Result<()> {
         Ok(())
     }
-} 
+}

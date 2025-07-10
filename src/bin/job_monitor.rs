@@ -1,10 +1,13 @@
-use test_rig::{CommonArgs, print_test_header, print_success, print_error_and_exit};
-use test_rig::state_machine::{StateMachine, State};
-use test_rig::import_job_handlers::{CheckingImportJobsHandler, ShowingImportJobDetailsHandler};
-use test_rig::state_handlers::{NextStateVersionHandler, InitialHandler, ParsingConfigHandler, ConnectingHandler, TestingConnectionHandler, VerifyingDatabaseHandler};
 use clap::Parser;
 use mysql::*;
 use serde::{Deserialize, Serialize};
+use test_rig::import_job_handlers::{CheckingImportJobsHandler, ShowingImportJobDetailsHandler};
+use test_rig::state_handlers::{
+    ConnectingHandler, InitialHandler, NextStateVersionHandler, ParsingConfigHandler,
+    TestingConnectionHandler, VerifyingDatabaseHandler,
+};
+use test_rig::state_machine::{State, StateMachine};
+use test_rig::{CommonArgs, print_error_and_exit, print_success, print_test_header};
 
 /// Import job monitoring configuration specific to the job monitor test
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -12,11 +15,11 @@ pub struct ImportJobConfig {
     /// Default monitoring duration in seconds
     #[serde(default = "default_monitor_duration")]
     pub monitor_duration: u64,
-    
+
     /// Update interval in seconds
     #[serde(default = "default_update_interval")]
     pub update_interval: u64,
-    
+
     /// Show detailed job information
     #[serde(default = "default_show_details")]
     pub show_details: bool,
@@ -33,54 +36,63 @@ impl Default for ImportJobConfig {
 }
 
 // Default value functions for ImportJobConfig
-fn default_monitor_duration() -> u64 { 300 }
-fn default_update_interval() -> u64 { 5 }
-fn default_show_details() -> bool { true }
+fn default_monitor_duration() -> u64 {
+    300
+}
+fn default_update_interval() -> u64 {
+    5
+}
+fn default_show_details() -> bool {
+    true
+}
 
 impl ImportJobConfig {
     /// Load configuration from a file
-    pub fn from_file<P: AsRef<std::path::Path>>(path: P) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn from_file<P: AsRef<std::path::Path>>(
+        path: P,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
         let path = path.as_ref();
-        let extension = path.extension()
+        let extension = path
+            .extension()
             .and_then(|ext| ext.to_str())
             .unwrap_or("json");
-        
+
         let config = match extension {
             "json" => {
                 let content = std::fs::read_to_string(path)?;
                 serde_json::from_str(&content)?
-            },
+            }
             "toml" => {
                 let content = std::fs::read_to_string(path)?;
                 toml::from_str(&content)?
-            },
+            }
             _ => return Err(format!("Unsupported config file format: {}", extension).into()),
         };
-        
+
         Ok(config)
     }
-    
+
     /// Save configuration to a file
-    pub fn save_to_file<P: AsRef<std::path::Path>>(&self, path: P) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn save_to_file<P: AsRef<std::path::Path>>(
+        &self,
+        path: P,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let path = path.as_ref();
-        let extension = path.extension()
+        let extension = path
+            .extension()
             .and_then(|ext| ext.to_str())
             .unwrap_or("json");
-        
+
         let content = match extension {
-            "json" => {
-                serde_json::to_string_pretty(self)?
-            },
-            "toml" => {
-                toml::to_string_pretty(self)?
-            },
+            "json" => serde_json::to_string_pretty(self)?,
+            "toml" => toml::to_string_pretty(self)?,
             _ => return Err(format!("Unsupported config file format: {}", extension).into()),
         };
-        
+
         std::fs::write(path, content)?;
         Ok(())
     }
-    
+
     /// Apply environment variable overrides
     pub fn apply_environment_overrides(&mut self) {
         if let Ok(duration) = std::env::var("TIDB_MONITOR_DURATION") {
@@ -97,7 +109,7 @@ impl ImportJobConfig {
             self.show_details = show_details.to_lowercase() == "true";
         }
     }
-    
+
     /// Validate the configuration
     pub fn validate(&self) -> Result<(), Box<dyn std::error::Error>> {
         if self.monitor_duration == 0 {
@@ -119,11 +131,11 @@ impl ImportJobConfig {
 struct Args {
     #[command(flatten)]
     common: CommonArgs,
-    
+
     /// Import job config file path (JSON or TOML)
     #[arg(long)]
     import_config: Option<String>,
-    
+
     /// Duration to monitor import jobs in seconds (default: 300)
     #[arg(short = 't', long, default_value = "300")]
     monitor_duration: u64,
@@ -133,11 +145,11 @@ impl Args {
     pub fn init_logging(&self) -> Result<(), Box<dyn std::error::Error>> {
         self.common.init_logging()
     }
-    
+
     pub fn get_connection_info(&self) -> test_rig::cli::ConnInfoResult {
         self.common.get_connection_info()
     }
-    
+
     /// Load import job configuration, merging CLI args and config file
     pub fn get_import_config(&self) -> Result<ImportJobConfig, Box<dyn std::error::Error>> {
         let mut config = if let Some(ref config_path) = self.import_config {
@@ -145,16 +157,16 @@ impl Args {
         } else {
             ImportJobConfig::default()
         };
-        
+
         // Apply environment overrides
         config.apply_environment_overrides();
-        
+
         // Override with CLI arguments if provided
         config.monitor_duration = self.monitor_duration;
-        
+
         // Validate the configuration
         config.validate()?;
-        
+
         Ok(config)
     }
 }
@@ -162,27 +174,38 @@ impl Args {
 #[tokio::main]
 async fn main() {
     print_test_header("TiDB Import Job Monitoring Test");
-    
+
     let args = Args::parse();
     args.init_logging().expect("Failed to initialize logging");
-    
+
     // Get connection info
-    let (host, user, password, database) = args.get_connection_info().expect("Failed to get connection info");
-    
+    let (host, user, password, database) = args
+        .get_connection_info()
+        .expect("Failed to get connection info");
+
     // Get import job configuration
-    let import_config = args.get_import_config().expect("Failed to load import job configuration");
-    
+    let import_config = args
+        .get_import_config()
+        .expect("Failed to load import job configuration");
+
     println!("Import Job Configuration:");
     println!("  Monitor Duration: {}s", import_config.monitor_duration);
     println!("  Update Interval: {}s", import_config.update_interval);
     println!("  Show Details: {}", import_config.show_details);
-    
+
     // Create and configure the state machine
     let mut state_machine = StateMachine::new();
-    
+
     // Register handlers manually to include generic version handler
-    register_job_monitor_handlers(&mut state_machine, host, user, password, database, import_config.monitor_duration);
-    
+    register_job_monitor_handlers(
+        &mut state_machine,
+        host,
+        user,
+        password,
+        database,
+        import_config.monitor_duration,
+    );
+
     // Run the state machine
     match state_machine.run().await {
         Ok(_) => {
@@ -207,37 +230,46 @@ fn register_job_monitor_handlers(
     state_machine.register_handler(State::Initial, Box::new(InitialHandler));
     state_machine.register_handler(
         State::ParsingConfig,
-        Box::new(ParsingConfigHandler::new(host, user, password, database))
+        Box::new(ParsingConfigHandler::new(host, user, password, database)),
     );
     state_machine.register_handler(State::Connecting, Box::new(ConnectingHandler));
     state_machine.register_handler(State::TestingConnection, Box::new(TestingConnectionHandler));
     state_machine.register_handler(State::VerifyingDatabase, Box::new(VerifyingDatabaseHandler));
-    
+
     // Register generic version handler that transitions to job monitoring
-    state_machine.register_handler(State::GettingVersion, Box::new(NextStateVersionHandler::new(State::CheckingImportJobs)));
-    
-    // Register job monitoring handlers
-    state_machine.register_handler(State::CheckingImportJobs, Box::new(CheckingImportJobsHandler));
     state_machine.register_handler(
-        State::ShowingImportJobDetails, 
-        Box::new(ShowingImportJobDetailsHandler::new(monitor_duration))
+        State::GettingVersion,
+        Box::new(NextStateVersionHandler::new(State::CheckingImportJobs)),
     );
-} 
+
+    // Register job monitoring handlers
+    state_machine.register_handler(
+        State::CheckingImportJobs,
+        Box::new(CheckingImportJobsHandler),
+    );
+    state_machine.register_handler(
+        State::ShowingImportJobDetails,
+        Box::new(ShowingImportJobDetailsHandler::new(monitor_duration)),
+    );
+}
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::NamedTempFile;
-    use std::io::Write;
     use serial_test::serial;
+    use std::io::Write;
+    use tempfile::NamedTempFile;
 
     #[test]
     fn test_args_parsing() {
         let args = Args::parse_from([
-            "test-bin", 
-            "-H", "localhost:4000",
-            "-u", "testuser",
-            "--password", "testpass"
+            "test-bin",
+            "-H",
+            "localhost:4000",
+            "-u",
+            "testuser",
+            "--password",
+            "testpass",
         ]);
         assert_eq!(args.common.host, "localhost:4000");
         assert_eq!(args.common.user, "testuser");
@@ -256,15 +288,19 @@ mod tests {
     fn test_connection_info_validation() {
         let args = Args::parse_from([
             "test-bin",
-            "-H", "testhost:4000",
-            "-u", "testuser",
-            "--password", "testpass",
-            "-d", "testdb"
+            "-H",
+            "testhost:4000",
+            "-u",
+            "testuser",
+            "--password",
+            "testpass",
+            "-d",
+            "testdb",
         ]);
-        
+
         let result = args.get_connection_info();
         assert!(result.is_ok());
-        
+
         let (host, user, password, database) = result.unwrap();
         assert_eq!(host, "testhost:4000");
         assert_eq!(user, "testuser");
@@ -285,7 +321,7 @@ mod tests {
         let _version_handler = NextStateVersionHandler::new(State::CheckingImportJobs);
         let _checking_handler = CheckingImportJobsHandler;
         let _details_handler = ShowingImportJobDetailsHandler::new(30);
-        
+
         // This test ensures the handlers can be instantiated
         assert!(true);
     }
@@ -299,11 +335,11 @@ mod tests {
             update_interval: 10,
             show_details: true,
         };
-        
+
         assert_eq!(import_config.monitor_duration, 120);
         assert_eq!(import_config.update_interval, 10);
         assert!(import_config.show_details);
-        
+
         // Test validation
         assert!(import_config.validate().is_ok());
     }
@@ -318,7 +354,7 @@ mod tests {
         }"#;
         let mut file = NamedTempFile::new().unwrap();
         file.write_all(json.as_bytes()).unwrap();
-        
+
         let config = ImportJobConfig::from_file(file.path()).unwrap();
         assert_eq!(config.monitor_duration, 300);
         assert_eq!(config.update_interval, 15);
@@ -329,10 +365,9 @@ mod tests {
     fn test_monitor_duration_validation() {
         // Test that monitor duration from CLI args works correctly
         let args = Args::parse_from([
-            "test-bin",
-            "-t", "90"  // monitor_duration
+            "test-bin", "-t", "90", // monitor_duration
         ]);
-        
+
         assert_eq!(args.monitor_duration, 90);
     }
 
@@ -346,27 +381,29 @@ mod tests {
         }"#;
         let mut file = NamedTempFile::new().unwrap();
         file.write_all(json.as_bytes()).unwrap();
-        
+
         let args = Args::parse_from([
             "test-bin",
-            "--import-config", file.path().to_str().unwrap(),
-            "-t", "150"  // Override monitor_duration
+            "--import-config",
+            file.path().to_str().unwrap(),
+            "-t",
+            "150", // Override monitor_duration
         ]);
-        
+
         let config = args.get_import_config().unwrap();
         assert_eq!(config.monitor_duration, 150); // CLI override takes precedence
-        assert_eq!(config.update_interval, 10);   // From config file
-        assert!(config.show_details);             // From config file
+        assert_eq!(config.update_interval, 10); // From config file
+        assert!(config.show_details); // From config file
     }
 
     #[test]
     fn test_get_import_config_defaults() {
         let args = Args::parse_from(["test-bin"]);
         let config = args.get_import_config().unwrap();
-        
+
         assert_eq!(config.monitor_duration, 300); // From CLI default
-        assert_eq!(config.update_interval, 5);   // From ImportJobConfig default
-        assert!(config.show_details);            // From ImportJobConfig default
+        assert_eq!(config.update_interval, 5); // From ImportJobConfig default
+        assert!(config.show_details); // From ImportJobConfig default
     }
 
     #[test]
@@ -379,7 +416,7 @@ mod tests {
             show_details: true,
         };
         assert!(valid_config.validate().is_ok());
-        
+
         // Test invalid config - update_interval > monitor_duration
         let invalid_config = ImportJobConfig {
             monitor_duration: 10,
@@ -387,7 +424,7 @@ mod tests {
             show_details: true,
         };
         assert!(invalid_config.validate().is_err());
-        
+
         // Test invalid config - zero monitor_duration
         let invalid_config2 = ImportJobConfig {
             monitor_duration: 0,
@@ -396,4 +433,4 @@ mod tests {
         };
         assert!(invalid_config2.validate().is_err());
     }
-} 
+}

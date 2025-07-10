@@ -57,10 +57,7 @@ pub enum ConnectionError {
     },
 
     #[error("Authentication failed for user {user}: {message}")]
-    AuthFailed {
-        user: String,
-        message: String,
-    },
+    AuthFailed { user: String, message: String },
 
     #[error("Database {database} does not exist or access denied")]
     DatabaseNotFound { database: String },
@@ -96,10 +93,7 @@ pub enum ImportJobError {
     JobNotFound { job_id: String },
 
     #[error("Failed to monitor import job {job_id}: {message}")]
-    MonitorFailed {
-        job_id: String,
-        message: String,
-    },
+    MonitorFailed { job_id: String, message: String },
 
     #[error("Import job monitoring timeout after {duration_secs} seconds")]
     MonitorTimeout { duration_secs: u64 },
@@ -108,10 +102,7 @@ pub enum ImportJobError {
 #[derive(Error, Debug)]
 pub enum IsolationTestError {
     #[error("Failed to create test table {table}: {message}")]
-    TableCreationFailed {
-        table: String,
-        message: String,
-    },
+    TableCreationFailed { table: String, message: String },
 
     #[error("Failed to populate test data: {0}")]
     DataPopulationFailed(String),
@@ -120,10 +111,7 @@ pub enum IsolationTestError {
     TestFailed(String),
 
     #[error("Failed to clean up test table {table}: {message}")]
-    CleanupFailed {
-        table: String,
-        message: String,
-    },
+    CleanupFailed { table: String, message: String },
 }
 
 #[derive(Error, Debug)]
@@ -226,7 +214,9 @@ mod tests {
 
     #[test]
     fn test_result_alias() {
-        fn returns_result() -> Result<u32> { Ok(42) }
+        fn returns_result() -> Result<u32> {
+            Ok(42)
+        }
         assert_eq!(returns_result().unwrap(), 42);
     }
-} 
+}

@@ -1,26 +1,40 @@
 pub mod cli;
-pub mod connection;
-pub mod state_machine;
-pub mod state_handlers;
-pub mod import_job_handlers;
-pub mod import_job_monitor;
-pub mod connection_manager;
-pub mod multi_connection_state_machine;
-pub mod logging;
-pub mod lib_utils;
-pub mod errors;
 pub mod config;
 pub mod config_extensions;
+pub mod connection;
+pub mod connection_manager;
+pub mod errors;
+pub mod import_job_handlers;
+pub mod import_job_monitor;
+pub mod lib_utils;
+pub mod logging;
+pub mod multi_connection_state_machine;
+pub mod state_handlers;
+pub mod state_machine;
 
-pub use cli::{CommonArgs, parse_args, get_connection_info};
-pub use logging::{LogConfig, init_logging, init_default_logging, init_logging_from_env, ErrorContext, log_performance_metric, log_memory_usage};
-pub use state_handlers::{InitialHandler, ParsingConfigHandler, ConnectingHandler, TestingConnectionHandler, VerifyingDatabaseHandler};
+pub use cli::{CommonArgs, get_connection_info, parse_args};
+pub use config::{AppConfig, ConfigBuilder, DatabaseConfig, LoggingConfig, TestConfig};
+pub use config_extensions::{
+    ConfigExtension, apply_extensions_to_command, apply_extensions_to_config,
+    print_extensions_help, register_config_extension,
+};
+pub use connection_manager::{ConnectionCoordinator, ConnectionInfo, GlobalConfig, SharedState};
+pub use errors::{
+    CliError, ConnectError, ConnectionError, ImportJobError, IsolationTestError, Result,
+    StateError, StateMachineError,
+};
 pub use import_job_handlers::{CheckingImportJobsHandler, ShowingImportJobDetailsHandler};
-pub use import_job_monitor::{JobMonitor, ImportJob as JobMonitorImportJob};
-pub use connection_manager::{ConnectionCoordinator, ConnectionInfo, SharedState, GlobalConfig};
-pub use multi_connection_state_machine::{MultiConnectionStateMachine, CoordinationHandler};
-pub use lib_utils::{TestSetup, CommonArgsSetup, print_test_header, print_success, print_error_and_exit};
+pub use import_job_monitor::{ImportJob as JobMonitorImportJob, JobMonitor};
 pub use lib_utils::register_standard_handlers;
-pub use errors::{ConnectError, ConnectionError, StateMachineError, ImportJobError, IsolationTestError, CliError, StateError, Result};
-pub use config::{AppConfig, DatabaseConfig, LoggingConfig, TestConfig, ConfigBuilder};
-pub use config_extensions::{ConfigExtension, register_config_extension, apply_extensions_to_command, apply_extensions_to_config, print_extensions_help}; 
+pub use lib_utils::{
+    CommonArgsSetup, TestSetup, print_error_and_exit, print_success, print_test_header,
+};
+pub use logging::{
+    ErrorContext, LogConfig, init_default_logging, init_logging, init_logging_from_env,
+    log_memory_usage, log_performance_metric,
+};
+pub use multi_connection_state_machine::{CoordinationHandler, MultiConnectionStateMachine};
+pub use state_handlers::{
+    ConnectingHandler, InitialHandler, ParsingConfigHandler, TestingConnectionHandler,
+    VerifyingDatabaseHandler,
+};

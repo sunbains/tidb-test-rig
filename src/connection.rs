@@ -1,6 +1,6 @@
-use mysql::prelude::*;
-use mysql::{Pool, PooledConn, OptsBuilder};
 use crate::errors::{ConnectionError, Result};
+use mysql::prelude::*;
+use mysql::{OptsBuilder, Pool, PooledConn};
 
 /// Parse host and port from a string in format "hostname:port"
 pub fn parse_host_port(host_port: &str) -> Result<(String, u16)> {
@@ -10,17 +10,19 @@ pub fn parse_host_port(host_port: &str) -> Result<(String, u16)> {
             host: host_port.to_string(),
             port: 0,
             message: "Host must be in format hostname:port".to_string(),
-        }.into());
+        }
+        .into());
     }
-    
+
     let host = parts[0].to_string();
-    let port = parts[1].parse::<u16>()
+    let port = parts[1]
+        .parse::<u16>()
         .map_err(|_| ConnectionError::ConnectFailed {
             host: host.clone(),
             port: 0,
             message: "Invalid port number".to_string(),
         })?;
-    
+
     Ok((host, port))
 }
 
@@ -36,37 +38,46 @@ pub fn parse_user_pass(user_pass: &str) -> Result<(String, String)> {
         return Err(ConnectionError::AuthFailed {
             user: user_pass.to_string(),
             message: "User must be in format username:password".to_string(),
-        }.into());
+        }
+        .into());
     }
-    
+
     Ok((parts[0].to_string(), parts[1].to_string()))
 }
 
 /// Create a connection pool to TiDB using the provided parameters
-pub fn create_connection_pool(host: &str, port: u16, user: &str, password: &str, database: Option<&str>) 
-    -> Result<Pool> {
-    
+pub fn create_connection_pool(
+    host: &str,
+    port: u16,
+    user: &str,
+    password: &str,
+    database: Option<&str>,
+) -> Result<Pool> {
     let mut builder = OptsBuilder::new()
         .ip_or_hostname(Some(host))
         .tcp_port(port)
         .user(Some(user))
         .pass(Some(password));
-    
+
     if let Some(db) = database {
         builder = builder.db_name(Some(db));
     }
-    
+
     let pool = Pool::new(builder)?;
     Ok(pool)
 }
 
 /// Create a connection to TiDB using the provided parameters
-pub fn create_connection(host: &str, port: u16, user: &str, password: &str, database: Option<&str>) 
-    -> Result<PooledConn> {
-    
+pub fn create_connection(
+    host: &str,
+    port: u16,
+    user: &str,
+    password: &str,
+    database: Option<&str>,
+) -> Result<PooledConn> {
     let pool = create_connection_pool(host, port, user, password, database)?;
     let conn = pool.get_conn()?;
-    
+
     Ok(conn)
 }
 
@@ -87,4 +98,4 @@ pub fn test_connection(conn: &mut PooledConn) -> Result<()> {
 pub fn get_server_version(conn: &mut PooledConn) -> Result<Option<String>> {
     let version: Option<String> = conn.query_first("SELECT VERSION()")?;
     Ok(version)
-} 
+}

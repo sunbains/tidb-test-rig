@@ -1,6 +1,6 @@
-use tracing::Level;
-use std::path::PathBuf;
 use std::fs;
+use std::path::PathBuf;
+use tracing::Level;
 
 /// Logging configuration
 #[derive(Debug, Clone)]
@@ -105,7 +105,9 @@ impl LogConfig {
 /// Initialize the logging system
 pub fn init_logging(config: LogConfig) -> Result<(), Box<dyn std::error::Error>> {
     // Create logs directory if it doesn't exist
-    if config.file && let Some(parent) = config.file_path.parent() {
+    if config.file
+        && let Some(parent) = config.file_path.parent()
+    {
         fs::create_dir_all(parent)?;
     }
 
@@ -130,8 +132,6 @@ pub fn init_logging(config: LogConfig) -> Result<(), Box<dyn std::error::Error>>
     Ok(())
 }
 
-
-
 /// Initialize logging with default configuration
 pub fn init_default_logging() -> Result<(), Box<dyn std::error::Error>> {
     init_logging(LogConfig::default())
@@ -143,13 +143,15 @@ pub fn init_logging_from_env() -> Result<(), Box<dyn std::error::Error>> {
 
     // Set log level from environment
     if let Ok(level_str) = std::env::var("RUST_LOG")
-        && let Ok(level) = level_str.parse::<Level>() {
+        && let Ok(level) = level_str.parse::<Level>()
+    {
         config = config.with_level(level);
     }
 
     // Set file logging from environment
     if let Ok(file_enabled) = std::env::var("TIDB_LOG_FILE")
-        && file_enabled.to_lowercase() == "true" {
+        && file_enabled.to_lowercase() == "true"
+    {
         config = config.with_file(true);
     }
 
@@ -251,4 +253,4 @@ pub fn log_memory_usage(component: &str, bytes: usize) {
         bytes = bytes,
         "Memory usage"
     );
-} 
+}

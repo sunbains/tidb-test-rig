@@ -1,8 +1,11 @@
-use test_rig::{CommonArgs, print_test_header, print_success, print_error_and_exit};
-use test_rig::state_machine::{StateMachine, State};
-use test_rig::{InitialHandler, ParsingConfigHandler, ConnectingHandler, TestingConnectionHandler, VerifyingDatabaseHandler};
-use test_rig::state_handlers::GettingVersionHandler;
 use clap::Parser;
+use test_rig::state_handlers::GettingVersionHandler;
+use test_rig::state_machine::{State, StateMachine};
+use test_rig::{CommonArgs, print_error_and_exit, print_success, print_test_header};
+use test_rig::{
+    ConnectingHandler, InitialHandler, ParsingConfigHandler, TestingConnectionHandler,
+    VerifyingDatabaseHandler,
+};
 
 #[derive(Parser, Debug)]
 #[command(name = "basic-test")]
@@ -30,13 +33,15 @@ async fn main() {
     let args = Args::parse();
     args.init_logging().expect("Failed to initialize logging");
     args.print_connection_info();
-    let (host, user, password, database) = args.get_connection_info().expect("Failed to get connection info");
+    let (host, user, password, database) = args
+        .get_connection_info()
+        .expect("Failed to get connection info");
 
     let mut state_machine = StateMachine::new();
     state_machine.register_handler(State::Initial, Box::new(InitialHandler));
     state_machine.register_handler(
         State::ParsingConfig,
-        Box::new(ParsingConfigHandler::new(host, user, password, database))
+        Box::new(ParsingConfigHandler::new(host, user, password, database)),
     );
     state_machine.register_handler(State::Connecting, Box::new(ConnectingHandler));
     state_machine.register_handler(State::TestingConnection, Box::new(TestingConnectionHandler));
@@ -47,4 +52,4 @@ async fn main() {
         Ok(_) => print_success("Basic connection test completed successfully!"),
         Err(e) => print_error_and_exit("Basic connection test failed", &e),
     }
-} 
+}

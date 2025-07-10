@@ -1,13 +1,13 @@
 #![allow(non_snake_case)]
 
+use crate::errors::{Result, StateError};
+use crate::import_job_monitor;
 use crate::state_machine::{State, StateContext, StateHandler};
-use crate::errors::{StateError, Result};
-use mysql::prelude::*;
+use async_trait::async_trait;
 use chrono::Utc;
+use mysql::prelude::*;
 use std::time::Duration;
 use tokio::time::sleep;
-use async_trait::async_trait;
-use crate::import_job_monitor;
 
 /// Context specific to import job handlers
 #[derive(Clone)]
@@ -42,7 +42,7 @@ impl StateHandler for CheckingImportJobsHandler {
             // Execute SHOW IMPORT JOBS
             let query = "SHOW IMPORT JOBS";
             let results: Vec<import_job_monitor::ImportJob> = conn.exec(query, ())?;
-            
+
             // Extract job IDs where End_Time is NULL
             let mut active_jobs = Vec::new();
             for job in results {
@@ -50,12 +50,14 @@ impl StateHandler for CheckingImportJobsHandler {
                     active_jobs.push(job.Job_ID.to_string());
                 }
             }
-            
+
             // Update the import job context
-            if let Some(import_context) = context.get_handler_context_mut::<ImportJobContext>(&State::CheckingImportJobs) {
+            if let Some(import_context) =
+                context.get_handler_context_mut::<ImportJobContext>(&State::CheckingImportJobs)
+            {
                 import_context.active_import_jobs = active_jobs.clone();
             }
-            
+
             // Check if we have active jobs
             if active_jobs.is_empty() {
                 println!("✓ No active import jobs found");
@@ -65,13 +67,18 @@ impl StateHandler for CheckingImportJobsHandler {
                 Ok(State::ShowingImportJobDetails)
             }
         } else {
-            return Err(StateError::from("No connection available for checking import jobs"));
+            return Err(StateError::from(
+                "No connection available for checking import jobs",
+            ));
         }
     }
 
     async fn exit(&self, context: &mut StateContext) -> Result<()> {
         // Move the context to the next state
-        context.move_handler_context::<ImportJobContext>(&State::CheckingImportJobs, State::ShowingImportJobDetails);
+        context.move_handler_context::<ImportJobContext>(
+            &State::CheckingImportJobs,
+            State::ShowingImportJobDetails,
+        );
         Ok(())
     }
 }
@@ -91,18 +98,28 @@ impl ShowingImportJobDetailsHandler {
 impl StateHandler for ShowingImportJobDetailsHandler {
     async fn enter(&self, context: &mut StateContext) -> Result<State> {
         // Update the monitor duration in the context
-        if let Some(import_context) = context.get_handler_context_mut::<ImportJobContext>(&State::ShowingImportJobDetails) {
+        if let Some(import_context) =
+            context.get_handler_context_mut::<ImportJobContext>(&State::ShowingImportJobDetails)
+        {
             import_context.monitor_duration = self.monitor_duration;
-            println!("Monitoring {} active import job(s) for {} seconds...", 
-                    import_context.active_import_jobs.len(), import_context.monitor_duration);
+            println!(
+                "Monitoring {} active import job(s) for {} seconds...",
+                import_context.active_import_jobs.len(),
+                import_context.monitor_duration
+            );
         }
         Ok(State::ShowingImportJobDetails)
     }
 
     async fn execute(&self, context: &mut StateContext) -> Result<State> {
         // Extract context data first to avoid borrowing conflicts
-        let (monitor_duration, active_jobs) = if let Some(import_context) = context.get_handler_context::<ImportJobContext>(&State::ShowingImportJobDetails) {
-            (import_context.monitor_duration, import_context.active_import_jobs.clone())
+        let (monitor_duration, active_jobs) = if let Some(import_context) =
+            context.get_handler_context::<ImportJobContext>(&State::ShowingImportJobDetails)
+        {
+            (
+                import_context.monitor_duration,
+                import_context.active_import_jobs.clone(),
+            )
         } else {
             return Err(StateError::from("Import job context not found"));
         };
@@ -110,11 +127,13 @@ impl StateHandler for ShowingImportJobDetailsHandler {
         if let Some(ref mut conn) = context.connection {
             let start_time = std::time::Instant::now();
             let duration = Duration::from_secs(monitor_duration);
-            
+
             while start_time.elapsed() < duration {
-                println!("\n--- Import Job Status Update ({}s remaining) ---", 
-                        (duration - start_time.elapsed()).as_secs());
-                
+                println!(
+                    "\n--- Import Job Status Update ({}s remaining) ---",
+                    (duration - start_time.elapsed()).as_secs()
+                );
+
                 for job_id in &active_jobs {
                     let query = format!("SHOW IMPORT JOB {job_id}");
                     let results: Vec<import_job_monitor::ImportJob> = conn.exec(&query, ())?;
@@ -131,22 +150,28 @@ impl StateHandler for ShowingImportJobDetailsHandler {
                                 "Job_ID: {} | Phase: {} | Start_Time: {} | Source_File_Size: {} | Imported_Rows: {} | Time elapsed: {:02}:{:02}:{:02}",
                                 job.Job_ID,
                                 job.Phase,
-                                job.Start_Time.map(|t| t.to_string()).unwrap_or_else(|| "N/A".to_string()),
+                                job.Start_Time
+                                    .map(|t| t.to_string())
+                                    .unwrap_or_else(|| "N/A".to_string()),
                                 job.Source_File_Size,
                                 job.Imported_Rows.unwrap_or(0),
-                                elapsed_h, elapsed_m, elapsed_s
+                                elapsed_h,
+                                elapsed_m,
+                                elapsed_s
                             );
                         }
                     }
                 }
-                
+
                 // Sleep for 5 seconds before next update
                 sleep(Duration::from_secs(5)).await;
             }
-            
+
             println!("\n✓ Import job monitoring completed after {monitor_duration} seconds");
         } else {
-            return Err(StateError::from("No connection available for showing import job details"));
+            return Err(StateError::from(
+                "No connection available for showing import job details",
+            ));
         }
         Ok(State::Completed)
     }
@@ -156,4 +181,4 @@ impl StateHandler for ShowingImportJobDetailsHandler {
         context.remove_handler_context(&State::ShowingImportJobDetails);
         Ok(())
     }
-} 
+}

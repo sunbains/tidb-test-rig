@@ -1,7 +1,7 @@
-use std::fmt;
+use crate::errors::{StateError, StateMachineError};
 use mysql::PooledConn;
 use std::any::Any;
-use crate::errors::{StateError, StateMachineError};
+use std::fmt;
 
 /// Represents the different states in the TiDB connection process
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -93,13 +93,18 @@ impl StateContext {
 
     /// Retrieve handler-specific context
     pub fn get_handler_context<T: Any + Send + Sync>(&self, state: &State) -> Option<&T> {
-        self.handler_contexts.get(state)
+        self.handler_contexts
+            .get(state)
             .and_then(|boxed| boxed.downcast_ref::<T>())
     }
 
     /// Retrieve mutable handler-specific context
-    pub fn get_handler_context_mut<T: Any + Send + Sync>(&mut self, state: &State) -> Option<&mut T> {
-        self.handler_contexts.get_mut(state)
+    pub fn get_handler_context_mut<T: Any + Send + Sync>(
+        &mut self,
+        state: &State,
+    ) -> Option<&mut T> {
+        self.handler_contexts
+            .get_mut(state)
             .and_then(|boxed| boxed.downcast_mut::<T>())
     }
 
@@ -109,12 +114,17 @@ impl StateContext {
     }
 
     /// Move handler context from one state to another
-    pub fn move_handler_context<T: Any + Send + Sync + Clone>(&mut self, from_state: &State, to_state: State) -> Option<T> {
+    pub fn move_handler_context<T: Any + Send + Sync + Clone>(
+        &mut self,
+        from_state: &State,
+        to_state: State,
+    ) -> Option<T> {
         if let Some(boxed) = self.handler_contexts.remove(from_state) {
             match boxed.downcast::<T>() {
                 Ok(context) => {
                     let context = *context;
-                    self.handler_contexts.insert(to_state, Box::new(context.clone()));
+                    self.handler_contexts
+                        .insert(to_state, Box::new(context.clone()));
                     Some(context)
                 }
                 Err(boxed) => {
@@ -177,24 +187,27 @@ impl StateMachine {
 
     pub async fn run(&mut self) -> Result<(), StateError> {
         println!("Starting TiDB connection state machine...");
-        
-        while self.current_state != State::Completed && self.current_state != State::Error("".to_string()) {
+
+        while self.current_state != State::Completed
+            && self.current_state != State::Error("".to_string())
+        {
             if let Some(handler) = self.handlers.get(&self.current_state) {
                 // Enter state
                 let _next_state = handler.enter(&mut self.context).await?;
-                
+
                 // Execute state logic
                 let next_state = handler.execute(&mut self.context).await?;
-                
+
                 // Exit current state
                 handler.exit(&mut self.context).await?;
-                
+
                 // Transition to next state
                 self.current_state = next_state;
             } else {
                 return Err(StateMachineError::NoHandlerRegistered {
-                    state: format!("{:?}", self.current_state)
-                }.into());
+                    state: format!("{:?}", self.current_state),
+                }
+                .into());
             }
         }
 
@@ -214,4 +227,4 @@ impl StateMachine {
     pub fn get_current_state(&self) -> &State {
         &self.current_state
     }
-} 
+}

@@ -1,10 +1,10 @@
-use crate::state_machine::{State, StateContext, StateHandler};
-use crate::connection::{parse_connection_string, create_connection_pool};
+use crate::connection::{create_connection_pool, parse_connection_string};
 use crate::errors::Result;
+use crate::state_machine::{State, StateContext, StateHandler};
+use async_trait::async_trait;
 use mysql::prelude::*;
 use mysql::*;
-use async_trait::async_trait;
-use tracing::{info, debug, error};
+use tracing::{debug, error, info};
 
 /// Handler for the initial state
 pub struct InitialHandler;
@@ -55,14 +55,14 @@ impl StateHandler for ParsingConfigHandler {
     async fn execute(&self, context: &mut StateContext) -> Result<State> {
         // Parse host and port from connection string
         let (host, port) = parse_connection_string(&self.host)?;
-        
+
         // Store configuration in context
         context.host = host;
         context.port = port;
         context.username = self.username.clone();
         context.password = self.password.clone();
         context.database = self.database.clone();
-        
+
         info!("Configuration parsed: {}:{}", context.host, context.port);
         println!("✓ Configuration parsed: {}:{}", context.host, context.port);
         Ok(State::Connecting)
@@ -84,8 +84,11 @@ impl StateHandler for ConnectingHandler {
     }
 
     async fn execute(&self, context: &mut StateContext) -> Result<State> {
-        info!("Attempting connection to {}:{} as user {}", context.host, context.port, context.username);
-        
+        info!(
+            "Attempting connection to {}:{} as user {}",
+            context.host, context.port, context.username
+        );
+
         // Create connection pool
         let pool = create_connection_pool(
             &context.host,
@@ -94,12 +97,15 @@ impl StateHandler for ConnectingHandler {
             &context.password,
             context.database.as_deref(),
         )?;
-        
+
         // Get a connection from the pool
         let conn = pool.get_conn()?;
         context.connection = Some(conn);
-        
-        info!("Connection established successfully to {}:{}", context.host, context.port);
+
+        info!(
+            "Connection established successfully to {}:{}",
+            context.host, context.port
+        );
         println!("✓ Connection established successfully");
         Ok(State::TestingConnection)
     }
@@ -205,7 +211,7 @@ impl StateHandler for GettingVersionHandler {
         if let Some(ref mut conn) = context.connection {
             let query = "SELECT VERSION() as version";
             let result: std::result::Result<Vec<Row>, Error> = conn.exec(query, ());
-            
+
             match result {
                 Ok(rows) => {
                     if let Some(row) = rows.first() {
@@ -237,7 +243,7 @@ impl StateHandler for GettingVersionHandler {
     async fn exit(&self, _context: &mut StateContext) -> Result<()> {
         Ok(())
     }
-} 
+}
 
 /// Generic version handler that transitions to a configurable next state
 pub struct NextStateVersionHandler {
@@ -292,4 +298,4 @@ impl StateHandler for NextStateVersionHandler {
     async fn exit(&self, _context: &mut StateContext) -> Result<()> {
         Ok(())
     }
-} 
+}

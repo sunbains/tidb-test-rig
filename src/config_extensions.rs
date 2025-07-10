@@ -1,19 +1,23 @@
+use crate::config::AppConfig;
 use clap::{ArgMatches, Command};
 use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
-use crate::config::AppConfig;
 
 /// Trait for extending the configuration generator with test-specific options
 pub trait ConfigExtension: Send + Sync {
     /// Add CLI arguments specific to this extension
     fn add_cli_args(&self, app: Command) -> Command;
-    
+
     /// Build configuration from CLI arguments
-    fn build_config(&self, args: &ArgMatches, config: &mut AppConfig) -> Result<(), Box<dyn std::error::Error>>;
-    
+    fn build_config(
+        &self,
+        args: &ArgMatches,
+        config: &mut AppConfig,
+    ) -> Result<(), Box<dyn std::error::Error>>;
+
     /// Get the name of this extension
     fn get_extension_name(&self) -> &'static str;
-    
+
     /// Get help text for this extension
     fn get_help_text(&self) -> &'static str;
 }
@@ -37,22 +41,27 @@ pub fn get_extensions() -> Option<&'static Mutex<HashMap<String, Box<dyn ConfigE
 /// Apply all registered extensions to a CLI command
 pub fn apply_extensions_to_command(mut app: Command) -> Command {
     if let Some(extensions) = get_extensions()
-        && let Ok(extensions) = extensions.lock() {
-            for extension in extensions.values() {
-                app = extension.add_cli_args(app);
-            }
+        && let Ok(extensions) = extensions.lock()
+    {
+        for extension in extensions.values() {
+            app = extension.add_cli_args(app);
         }
+    }
     app
 }
 
 /// Apply all registered extensions to build configuration
-pub fn apply_extensions_to_config(args: &ArgMatches, config: &mut AppConfig) -> Result<(), Box<dyn std::error::Error>> {
+pub fn apply_extensions_to_config(
+    args: &ArgMatches,
+    config: &mut AppConfig,
+) -> Result<(), Box<dyn std::error::Error>> {
     if let Some(extensions) = get_extensions()
-        && let Ok(extensions) = extensions.lock() {
-            for extension in extensions.values() {
-                extension.build_config(args, config)?;
-            }
+        && let Ok(extensions) = extensions.lock()
+    {
+        for extension in extensions.values() {
+            extension.build_config(args, config)?;
         }
+    }
     Ok(())
 }
 
@@ -60,10 +69,15 @@ pub fn apply_extensions_to_config(args: &ArgMatches, config: &mut AppConfig) -> 
 pub fn print_extensions_help() {
     if let Some(extensions) = get_extensions()
         && let Ok(extensions) = extensions.lock()
-            && !extensions.is_empty() {
-                println!("\nTest-Specific Configuration Options:");
-                for extension in extensions.values() {
-                    println!("  {}: {}", extension.get_extension_name(), extension.get_help_text());
-                }
-            }
-} 
+        && !extensions.is_empty()
+    {
+        println!("\nTest-Specific Configuration Options:");
+        for extension in extensions.values() {
+            println!(
+                "  {}: {}",
+                extension.get_extension_name(),
+                extension.get_help_text()
+            );
+        }
+    }
+}

@@ -1,9 +1,9 @@
+use crate::import_job_monitor;
 use mysql::PooledConn;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
-use serde::{Serialize, Deserialize};
-use crate::import_job_monitor;
 
 /// Shared state that can be accessed by multiple state machines
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -44,10 +44,21 @@ pub enum ConnectionState {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum CoordinationEvent {
-    ConnectionEstablished { connection_id: String },
-    ConnectionFailed { connection_id: String, error: String },
-    ImportJobStarted { job_id: String, connection_id: String },
-    ImportJobCompleted { job_id: String, connection_id: String },
+    ConnectionEstablished {
+        connection_id: String,
+    },
+    ConnectionFailed {
+        connection_id: String,
+        error: String,
+    },
+    ImportJobStarted {
+        job_id: String,
+        connection_id: String,
+    },
+    ImportJobCompleted {
+        job_id: String,
+        connection_id: String,
+    },
     AllConnectionsReady,
     TestCompleted,
 }
@@ -103,20 +114,23 @@ impl ConnectionCoordinator {
         let host = info.host.clone();
         let port = info.port;
         let username = info.username.clone();
-        
+
         self.connections.insert(connection_id.clone(), info);
-        
+
         // Initialize connection status
         if let Ok(mut state) = self.shared_state.lock() {
-            state.connection_status.insert(connection_id.clone(), ConnectionStatus {
-                connection_id,
-                host,
-                port,
-                username,
-                status: ConnectionState::Disconnected,
-                last_activity: chrono::Utc::now(),
-                error_message: None,
-            });
+            state.connection_status.insert(
+                connection_id.clone(),
+                ConnectionStatus {
+                    connection_id,
+                    host,
+                    port,
+                    username,
+                    status: ConnectionState::Disconnected,
+                    last_activity: chrono::Utc::now(),
+                    error_message: None,
+                },
+            );
         }
     }
 
@@ -141,7 +155,9 @@ impl ConnectionCoordinator {
             match message {
                 CoordinationMessage::UpdateConnectionStatus(status) => {
                     if let Ok(mut state) = self.shared_state.lock() {
-                        state.connection_status.insert(status.connection_id.clone(), status);
+                        state
+                            .connection_status
+                            .insert(status.connection_id.clone(), status);
                     }
                 }
                 CoordinationMessage::AddImportJob(job) => {
@@ -151,9 +167,10 @@ impl ConnectionCoordinator {
                 }
                 CoordinationMessage::UpdateImportJob(job_id, updated_job) => {
                     if let Ok(mut state) = self.shared_state.lock()
-                        && let Some(job) = state.import_jobs.iter_mut().find(|j| j.job_id == job_id) {
-                            *job = updated_job;
-                        }
+                        && let Some(job) = state.import_jobs.iter_mut().find(|j| j.job_id == job_id)
+                    {
+                        *job = updated_job;
+                    }
                 }
                 CoordinationMessage::BroadcastEvent(event) => {
                     if let Ok(mut state) = self.shared_state.lock() {
@@ -169,7 +186,12 @@ impl ConnectionCoordinator {
     pub fn all_connections_ready(&self) -> bool {
         if let Ok(state) = self.shared_state.lock() {
             state.connection_status.values().all(|status| {
-                matches!(status.status, ConnectionState::Connected | ConnectionState::Testing | ConnectionState::Monitoring)
+                matches!(
+                    status.status,
+                    ConnectionState::Connected
+                        | ConnectionState::Testing
+                        | ConnectionState::Monitoring
+                )
             })
         } else {
             false
@@ -179,7 +201,9 @@ impl ConnectionCoordinator {
     /// Get all active import jobs across all connections
     pub fn get_active_import_jobs(&self) -> Vec<import_job_monitor::ImportJobInfo> {
         if let Ok(state) = self.shared_state.lock() {
-            state.import_jobs.iter()
+            state
+                .import_jobs
+                .iter()
                 .filter(|job| job.end_time.is_none())
                 .cloned()
                 .collect()
@@ -202,4 +226,4 @@ impl Default for SharedState {
             coordination_events: Vec::new(),
         }
     }
-} 
+}
