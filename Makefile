@@ -39,7 +39,7 @@ help:
 	@echo "  run-basic-verbose-test - Run basic db_tests with verbose output"
 	@echo "  run-simple             - Run simple multi-connection db_tests"
 	@echo "  run-advanced           - Run advanced multi-connection db_tests"
-	@echo "  run-simple-connection  - Run simple connection db_tests"
+
 	@echo "  run-isolation-test - Run isolation db_tests"
 	@echo "  run-cli-test       - Run CLI db_tests"
 	@echo "  run-logging-test   - Run logging db_tests"
@@ -80,8 +80,7 @@ run-basic-debug-test:
 run-basic-verbose-test:
 	RUST_LOG=debug cargo run --bin basic -- -H $(TIDB_HOST) -u $(TIDB_USER) -d $(TIDB_DATABASE) $(if $(TIDB_PASSWORD),--password $(TIDB_PASSWORD),--no-password-prompt) --verbose
 
-run-simple-connection:
-	RUST_LOG=$(RUST_LOG) cargo run --bin simple_connection -- -H $(TIDB_HOST) -u $(TIDB_USER) -d $(TIDB_DATABASE) $(if $(TIDB_PASSWORD),--password $(TIDB_PASSWORD),--no-password-prompt)
+
 
 run-isolation-test:
 	RUST_LOG=$(RUST_LOG) cargo run --bin isolation -- -H $(TIDB_HOST) -u $(TIDB_USER) -d $(TIDB_DATABASE) $(if $(TIDB_PASSWORD),--password $(TIDB_PASSWORD),--no-password-prompt)

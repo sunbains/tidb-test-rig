@@ -37,11 +37,6 @@ path = "src/bin/basic.rs"
 required-features = []
 
 [[bin]]
-name = "simple_connection"
-path = "src/bin/simple_connection.rs"
-required-features = []
-
-[[bin]]
 name = "simple_multi_connection"
 path = "src/bin/simple_multi_connection.rs"
 required-features = ["multi_connection"]

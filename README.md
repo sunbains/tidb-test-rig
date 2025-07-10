@@ -156,10 +156,7 @@ cargo run --bin basic
 cargo run --bin basic -- -c config.json
 ```
 
-### Simple Connection Test
-```bash
-cargo run --bin simple_connection
-```
+
 
 ### Multi-Connection Test
 ```bash
@@ -219,7 +216,6 @@ All binaries support these common options:
 src/
 ├── bin/                    # Binary executables with test-specific configs
 │   ├── basic.rs           # Basic connection test
-│   ├── simple_connection.rs
 │   ├── simple_multi_connection.rs
 │   ├── multi_connection.rs
 │   ├── isolation.rs       # Isolation testing with IsolationTestConfig
