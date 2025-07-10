@@ -11,6 +11,8 @@ pub mod logging;
 pub mod multi_connection_state_machine;
 pub mod state_handlers;
 pub mod state_machine;
+pub mod retry;
+pub mod error_utils;
 
 pub use cli::{CommonArgs, get_connection_info, parse_args};
 pub use config::{AppConfig, ConfigBuilder, DatabaseConfig, LoggingConfig, TestConfig};
@@ -37,4 +39,27 @@ pub use multi_connection_state_machine::{CoordinationHandler, MultiConnectionSta
 pub use state_handlers::{
     ConnectingHandler, InitialHandler, ParsingConfigHandler, TestingConnectionHandler,
     VerifyingDatabaseHandler,
+};
+
+// Re-export retry types for convenience
+pub use retry::{
+    RetryConfig,
+    CircuitBreaker,
+    CircuitBreakerConfig,
+    CircuitState,
+    retry_with_backoff,
+    retry_with_circuit_breaker,
+    ErrorContext as RetryErrorContext,
+};
+
+// Re-export error utility types
+pub use error_utils::{
+    ResilientConnectionManager,
+    create_db_retry_config,
+    create_db_circuit_breaker_config,
+    classify_error,
+    get_recovery_strategy,
+    ErrorCategory,
+    RecoveryStrategy,
+    ErrorContextBuilder,
 };

@@ -114,15 +114,23 @@ impl CommonArgs {
     }
 
     pub fn get_host(&self) -> String {
-        env::var("TIDB_HOST").unwrap_or_else(|_| self.host.clone())
+        if self.host != "localhost:4000" {
+            self.host.clone()
+        } else {
+            env::var("TIDB_HOST").unwrap_or_else(|_| self.host.clone())
+        }
     }
 
     pub fn get_user(&self) -> String {
-        env::var("TIDB_USER").unwrap_or_else(|_| self.user.clone())
+        if self.user != "root" {
+            self.user.clone()
+        } else {
+            env::var("TIDB_USER").unwrap_or_else(|_| self.user.clone())
+        }
     }
 
     pub fn get_database(&self) -> Option<String> {
-        env::var("TIDB_DATABASE").ok().or(self.database.clone())
+        self.database.clone().or_else(|| env::var("TIDB_DATABASE").ok())
     }
 
     pub fn get_connection_info(&self) -> ConnInfoResult {

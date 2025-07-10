@@ -1,4 +1,5 @@
 use thiserror::Error;
+use std::time::Duration;
 
 /// Main error type for the TiDB connection and testing framework
 #[derive(Error, Debug)]
@@ -42,6 +43,21 @@ pub enum ConnectError {
     #[error("Timeout error: {0}")]
     Timeout(String),
 
+    #[error("Retry error: {0}")]
+    Retry(String),
+
+    #[error("Circuit breaker error: {0}")]
+    CircuitBreaker(String),
+
+    #[error("Network error: {0}")]
+    Network(String),
+
+    #[error("Protocol error: {0}")]
+    Protocol(String),
+
+    #[error("Resource error: {0}")]
+    Resource(String),
+
     #[error("Unknown error: {0}")]
     Unknown(String),
 }
@@ -67,6 +83,24 @@ pub enum ConnectionError {
 
     #[error("Connection timeout after {timeout_secs} seconds")]
     Timeout { timeout_secs: u64 },
+
+    #[error("Connection lost: {reason}")]
+    ConnectionLost { reason: String },
+
+    #[error("Connection refused by server")]
+    ConnectionRefused,
+
+    #[error("SSL/TLS error: {message}")]
+    SslError { message: String },
+
+    #[error("DNS resolution failed for {host}: {message}")]
+    DnsResolutionFailed { host: String, message: String },
+
+    #[error("Connection pool exhausted (max: {max_connections})")]
+    PoolExhausted { max_connections: usize },
+
+    #[error("Connection validation failed: {reason}")]
+    ValidationFailed { reason: String },
 }
 
 #[derive(Error, Debug)]
@@ -82,6 +116,15 @@ pub enum StateMachineError {
 
     #[error("Handler execution failed: {0}")]
     HandlerError(String),
+
+    #[error("State machine timeout after {duration:?}")]
+    Timeout { duration: Duration },
+
+    #[error("State machine deadlock detected")]
+    Deadlock,
+
+    #[error("State machine initialization failed: {reason}")]
+    InitializationFailed { reason: String },
 }
 
 #[derive(Error, Debug)]
@@ -97,6 +140,21 @@ pub enum ImportJobError {
 
     #[error("Import job monitoring timeout after {duration_secs} seconds")]
     MonitorTimeout { duration_secs: u64 },
+
+    #[error("Import job {job_id} failed: {reason}")]
+    JobFailed { job_id: String, reason: String },
+
+    #[error("Import job {job_id} cancelled")]
+    JobCancelled { job_id: String },
+
+    #[error("Import job {job_id} stuck in state {state}")]
+    JobStuck { job_id: String, state: String },
+
+    #[error("Import job configuration invalid: {reason}")]
+    InvalidConfig { reason: String },
+
+    #[error("Import job quota exceeded")]
+    QuotaExceeded,
 }
 
 #[derive(Error, Debug)]
@@ -112,6 +170,21 @@ pub enum IsolationTestError {
 
     #[error("Failed to clean up test table {table}: {message}")]
     CleanupFailed { table: String, message: String },
+
+    #[error("Isolation level {level} not supported")]
+    UnsupportedIsolationLevel { level: String },
+
+    #[error("Concurrent modification detected: {details}")]
+    ConcurrentModification { details: String },
+
+    #[error("Deadlock detected during isolation test")]
+    Deadlock,
+
+    #[error("Test data corruption detected: {details}")]
+    DataCorruption { details: String },
+
+    #[error("Isolation test timeout after {duration:?}")]
+    Timeout { duration: Duration },
 }
 
 #[derive(Error, Debug)]
@@ -127,6 +200,105 @@ pub enum CliError {
 
     #[error("Password required but not provided")]
     PasswordRequired,
+
+    #[error("Configuration file {file} not found")]
+    ConfigFileNotFound { file: String },
+
+    #[error("Configuration file {file} is invalid: {reason}")]
+    InvalidConfigFile { file: String, reason: String },
+
+    #[error("Environment variable {var} is invalid: {reason}")]
+    InvalidEnvironmentVariable { var: String, reason: String },
+}
+
+/// Enhanced error with additional context
+#[derive(Error, Debug)]
+pub enum EnhancedError {
+    #[error("Database operation failed: {operation} - {error}")]
+    DatabaseOperation {
+        operation: String,
+        error: Box<ConnectError>,
+        context: ErrorContext,
+    },
+
+    #[error("Network operation failed: {operation} - {error}")]
+    NetworkOperation {
+        operation: String,
+        error: Box<ConnectError>,
+        context: ErrorContext,
+    },
+
+    #[error("Retry operation failed after {attempts} attempts: {error}")]
+    RetryFailed {
+        attempts: usize,
+        error: Box<ConnectError>,
+        context: ErrorContext,
+    },
+
+    #[error("Circuit breaker open: {operation} - {error}")]
+    CircuitBreakerOpen {
+        operation: String,
+        error: Box<ConnectError>,
+        context: ErrorContext,
+    },
+}
+
+/// Error context for better debugging
+#[derive(Debug, Clone)]
+pub struct ErrorContext {
+    pub timestamp: std::time::Instant,
+    pub operation: String,
+    pub attempt: usize,
+    pub duration: Duration,
+    pub host: Option<String>,
+    pub database: Option<String>,
+    pub user: Option<String>,
+    pub additional_info: std::collections::HashMap<String, String>,
+}
+
+impl ErrorContext {
+    pub fn new(operation: String) -> Self {
+        Self {
+            timestamp: std::time::Instant::now(),
+            operation,
+            attempt: 0,
+            duration: Duration::ZERO,
+            host: None,
+            database: None,
+            user: None,
+            additional_info: std::collections::HashMap::new(),
+        }
+    }
+
+    pub fn with_attempt(mut self, attempt: usize) -> Self {
+        self.attempt = attempt;
+        self
+    }
+
+    pub fn with_duration(mut self, duration: Duration) -> Self {
+        self.duration = duration;
+        self
+    }
+
+    pub fn with_host(mut self, host: String) -> Self {
+        self.host = Some(host);
+        self
+    }
+
+    pub fn with_database(mut self, database: String) -> Self {
+        self.database = Some(database);
+        self
+    }
+
+    pub fn with_user(mut self, user: String) -> Self {
+        self.user = Some(user);
+        self
+    }
+
+    pub fn with_info(mut self, key: String, value: String) -> Self {
+        self.additional_info.insert(key, value);
+        self
+    }
 }
 
 // Type aliases for backward compatibility
@@ -159,8 +331,40 @@ impl From<&str> for ConnectError {
 }
 
 impl From<ConnectionError> for ConnectError {
-    fn from(_err: ConnectionError) -> Self {
-        ConnectError::Connection(mysql::Error::server_disconnected())
+    fn from(err: ConnectionError) -> Self {
+        match err {
+            ConnectionError::ConnectFailed { host: _, port: _, message: _ } => {
+                ConnectError::Connection(mysql::Error::server_disconnected())
+            }
+            ConnectionError::AuthFailed { user, message } => {
+                ConnectError::Authentication(format!("User {}: {}", user, message))
+            }
+            ConnectionError::DatabaseNotFound { database } => {
+                ConnectError::Database(format!("Database {} not found", database))
+            }
+            ConnectionError::PoolError(e) => ConnectError::Connection(e),
+            ConnectionError::Timeout { timeout_secs } => {
+                ConnectError::Timeout(format!("Connection timeout after {} seconds", timeout_secs))
+            }
+            ConnectionError::ConnectionLost { reason: _ } => {
+                ConnectError::Connection(mysql::Error::server_disconnected())
+            }
+            ConnectionError::ConnectionRefused => {
+                ConnectError::Connection(mysql::Error::server_disconnected())
+            }
+            ConnectionError::SslError { message: _ } => {
+                ConnectError::Connection(mysql::Error::server_disconnected())
+            }
+            ConnectionError::DnsResolutionFailed { host, message } => {
+                ConnectError::Network(format!("DNS resolution failed for {}: {}", host, message))
+            }
+            ConnectionError::PoolExhausted { max_connections } => {
+                ConnectError::Resource(format!("Connection pool exhausted (max: {})", max_connections))
+            }
+            ConnectionError::ValidationFailed { reason } => {
+                ConnectError::Validation(reason)
+            }
+        }
     }
 }
 
@@ -201,15 +405,15 @@ mod tests {
 
     #[test]
     fn test_connect_error_display() {
-        let err = ConnectError::Configuration("bad config".to_string());
-        assert!(format!("{}", err).contains("bad config"));
+        let error = ConnectError::Connection(mysql::Error::server_disconnected());
+        assert!(error.to_string().contains("Connection error"));
     }
 
     #[test]
     fn test_from_io_error() {
-        let io_err = io::Error::new(io::ErrorKind::Other, "io fail");
-        let err: ConnectError = io_err.into();
-        assert!(format!("{}", err).contains("io fail"));
+        let io_error = io::Error::new(io::ErrorKind::ConnectionRefused, "connection refused");
+        let connect_error: ConnectError = io_error.into();
+        assert!(matches!(connect_error, ConnectError::Io(_)));
     }
 
     #[test]
@@ -218,5 +422,24 @@ mod tests {
             Ok(42)
         }
         assert_eq!(returns_result().unwrap(), 42);
+    }
+
+    #[test]
+    fn test_error_context() {
+        let context = ErrorContext::new("test_operation".to_string())
+            .with_attempt(3)
+            .with_duration(Duration::from_secs(5))
+            .with_host("localhost".to_string())
+            .with_database("testdb".to_string())
+            .with_user("testuser".to_string())
+            .with_info("key".to_string(), "value".to_string());
+
+        assert_eq!(context.operation, "test_operation");
+        assert_eq!(context.attempt, 3);
+        assert_eq!(context.duration, Duration::from_secs(5));
+        assert_eq!(context.host, Some("localhost".to_string()));
+        assert_eq!(context.database, Some("testdb".to_string()));
+        assert_eq!(context.user, Some("testuser".to_string()));
+        assert_eq!(context.additional_info.get("key"), Some(&"value".to_string()));
     }
 }

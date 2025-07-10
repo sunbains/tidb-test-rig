@@ -25,6 +25,78 @@ the different connections for sophisticated concurrent/parallel testing.
 - **Job Monitoring**: Monitor TiDB import jobs
 - **Configuration Management**: JSON and TOML configuration files
 - **Command Line Interface**: Flexible CLI options for all tests
+- **Enhanced Error Handling**: Retry strategies, circuit breakers, and error context preservation
+
+## Enhanced Error Handling
+
+The framework includes sophisticated error handling capabilities for production-ready database operations:
+
+### Retry Strategies
+- **Exponential Backoff**: Configurable retry delays with exponential increase
+- **Jitter**: Random delay variation to prevent thundering herd problems
+- **Timeout Control**: Overall operation timeout with per-attempt limits
+- **Configurable Attempts**: Set maximum retry attempts per operation
+
+### Circuit Breaker Pattern
+- **Failure Threshold**: Open circuit after specified number of failures
+- **Recovery Timeout**: Wait period before attempting to close circuit
+- **Half-Open State**: Test service health before fully closing circuit
+- **Success Threshold**: Number of successful calls to close circuit
+
+### Error Context Preservation
+- **Rich Context**: Timestamp, operation name, attempt count, duration
+- **Connection Info**: Host, database, user information
+- **Custom Metadata**: Additional key-value pairs for debugging
+- **Builder Pattern**: Fluent API for building error contexts
+
+### Error Classification
+- **Transient Errors**: Automatically retried (connection failures, timeouts)
+- **Permanent Errors**: Fail fast (authentication, configuration errors)
+- **Recovery Strategies**: Appropriate handling based on error type
+
+### Usage Examples
+
+```rust
+use test_rig::{
+    ResilientConnectionManager,
+    create_db_retry_config,
+    create_db_circuit_breaker_config,
+    classify_error,
+    get_recovery_strategy,
+};
+
+// Create resilient connection manager
+let retry_config = create_db_retry_config();
+let circuit_config = create_db_circuit_breaker_config();
+let manager = ResilientConnectionManager::with_custom_config(
+    pool,
+    circuit_config,
+    retry_config,
+);
+
+// Execute with automatic retry and circuit breaker
+let result = manager.execute_with_resilience("critical_query", || {
+    // Your database operation here
+    perform_database_operation()
+}).await;
+
+// Error classification and recovery
+let error = ConnectError::Connection(mysql::Error::server_disconnected());
+match classify_error(&error) {
+    ErrorCategory::Transient => {
+        // Will be retried automatically
+        println!("Transient error, retrying...");
+    }
+    ErrorCategory::Permanent => {
+        // Fail fast
+        println!("Permanent error, failing immediately");
+    }
+    ErrorCategory::Unknown => {
+        // Retry with limits
+        println!("Unknown error, retrying with limits");
+    }
+}
+```
 
 ## Quick Start
 
@@ -191,6 +263,8 @@ test_rig/
 │   ├── config.rs           # Configuration management
 │   ├── cli.rs              # CLI argument parsing
 │   ├── errors.rs           # Error types and handling
+│   ├── retry.rs            # Retry strategies and circuit breakers
+│   ├── error_utils.rs      # Error handling utilities
 │   ├── state_machine.rs    # Basic state management for tests
 │   ├── state_handlers.rs   # State handlers for different test phases
 │   ├── import_job_handlers.rs # Import job specific handlers
@@ -203,6 +277,8 @@ test_rig/
 │       ├── job_monitor.rs  # Import job monitoring
 │       ├── multi_connection.rs # Multi-connection test
 │       └── simple_multi_connection.rs # Simple multi-connection test
+├── examples/               # Example usage
+│   └── enhanced_error_handling.rs # Enhanced error handling examples
 ├── Cargo.toml              # Main package configuration (workspace)
 └── README.md               # This file
 ```
@@ -249,6 +325,13 @@ cargo fmt
 
 # Lint code
 cargo clippy
+```
+
+### Running Examples
+
+```bash
+# Run enhanced error handling example
+cargo run --example enhanced_error_handling
 ```
 
 ## Configuration Extension System
