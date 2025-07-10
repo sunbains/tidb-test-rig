@@ -3,6 +3,7 @@ use crate::connection::{parse_connection_string, create_connection_pool};
 use mysql::prelude::*;
 use mysql::*;
 use async_trait::async_trait;
+use tracing::{info, debug, error};
 
 /// Handler for the initial state
 pub struct InitialHandler;
@@ -10,6 +11,7 @@ pub struct InitialHandler;
 #[async_trait]
 impl StateHandler for InitialHandler {
     async fn enter(&self, _context: &mut StateContext) -> Result<State, Box<dyn std::error::Error + Send + Sync>> {
+        info!("Starting TiDB connection test...");
         println!("Starting TiDB connection test...");
         Ok(State::Initial)
     }
@@ -60,6 +62,7 @@ impl StateHandler for ParsingConfigHandler {
         context.password = self.password.clone();
         context.database = self.database.clone();
         
+        info!("Configuration parsed: {}:{}", context.host, context.port);
         println!("✓ Configuration parsed: {}:{}", context.host, context.port);
         Ok(State::Connecting)
     }
@@ -80,6 +83,8 @@ impl StateHandler for ConnectingHandler {
     }
 
     async fn execute(&self, context: &mut StateContext) -> Result<State, crate::state_machine::StateError> {
+        info!("Attempting connection to {}:{} as user {}", context.host, context.port, context.username);
+        
         // Create connection pool
         let pool = create_connection_pool(
             &context.host,
@@ -93,6 +98,7 @@ impl StateHandler for ConnectingHandler {
         let conn = pool.get_conn()?;
         context.connection = Some(conn);
         
+        info!("Connection established successfully to {}:{}", context.host, context.port);
         println!("✓ Connection established successfully");
         Ok(State::TestingConnection)
     }
@@ -114,20 +120,24 @@ impl StateHandler for TestingConnectionHandler {
 
     async fn execute(&self, context: &mut StateContext) -> Result<State, crate::state_machine::StateError> {
         if let Some(ref mut conn) = context.connection {
+            debug!("Testing connection with SELECT 1");
             // Simple ping test
             let result: Result<Vec<Row>, Error> = conn.exec("SELECT 1", ());
             match result {
                 Ok(_) => {
+                    info!("Connection test passed");
                     println!("✓ Connection test passed");
                     Ok(State::VerifyingDatabase)
                 }
                 Err(e) => {
+                    error!("Connection test failed: {}", e);
                     context.set_error(format!("Connection test failed: {e}"));
                     Err(format!("Connection test failed: {e}").into())
                 }
             }
         } else {
             let error_msg = "No connection available for testing";
+            error!("{}", error_msg);
             context.set_error(error_msg.to_string());
             Err(error_msg.into())
         }

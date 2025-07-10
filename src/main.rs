@@ -8,6 +8,9 @@ async fn main() {
     // Parse command line arguments
     let args = parse_args().expect("Failed to parse arguments");
     
+    // Initialize logging
+    args.init_logging().expect("Failed to initialize logging");
+    
     // Print connection info
     args.print_connection_info();
     

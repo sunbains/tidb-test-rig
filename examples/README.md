@@ -1,6 +1,6 @@
 # TiDB Connection Test Tool - Examples
 
-This directory contains example programs demonstrating how to use the TiDB connection test tool with a common CLI library.
+This directory contains example programs demonstrating how to use the TiDB connection test tool with a common CLI library and robust logging.
 
 ## Common CLI Library
 
@@ -12,6 +12,7 @@ All examples use a shared command-line interface library that provides:
 - **Parameter Validation**: Automatic validation of connection parameters
 - **Help and Usage**: Built-in help with `--help` flag
 - **Compile-time Options**: Different CLI options based on example type using features and macros
+- **Integrated Logging**: Control log level, file output, and verbosity from the CLI
 
 ### CLI Usage
 
@@ -30,6 +31,12 @@ cargo run --example simple_connection -- -H localhost:4000 -u root --password my
 
 # Skip password prompt (for automated testing)
 cargo run --example simple_connection -- -H localhost:4000 -u root --no-password-prompt
+
+# Enable debug logging to console
+cargo run --example simple_connection -- --log-level debug
+
+# Log to a file
+cargo run --example simple_connection -- --log-file --log-file-path logs/mylog.log
 ```
 
 ### Available Arguments
@@ -40,11 +47,50 @@ cargo run --example simple_connection -- -H localhost:4000 -u root --no-password
 - `-d, --database`: Database name (optional)
 - `--password`: Password from command line (alternative to prompt)
 - `--no-password-prompt`: Skip password prompt (for automated testing)
+- `--log-level`: Log level (`debug`, `info`, `warn`, `error`; default: `info`)
+- `--log-file`: Enable file logging
+- `--log-file-path`: Path to log file (default: logs/tidb_connect.log)
+- `-v, --verbose`: Shortcut for debug logging
 
 **Example-specific Arguments:**
 - `-t, --monitor-duration`: Duration to monitor import jobs in seconds (default: 60) - *multi-connection examples*
 - `--test-rows`: Number of test rows to create for isolation testing (default: 10) - *isolation test examples*
 - `--connection-count`: Number of connections to create for multi-connection tests (default: 2) - *multi-connection examples*
+
+## Logging Facility
+
+The project uses the [`tracing`](https://docs.rs/tracing) ecosystem for structured, high-performance logging.
+
+- **Log to console and/or file**
+- **Control log level at runtime** (`--log-level debug`)
+- **Structured logs for connection, query, state transitions, and errors**
+- **Performance and memory usage metrics**
+- **Error context for troubleshooting**
+
+### Example Logging Usage
+
+```rust
+use tracing::{info, debug, warn, error};
+
+info!("Connected to TiDB");
+debug!("Query executed: {}", query);
+warn!("Slow query detected");
+error!("Failed to connect: {}", err);
+```
+
+You can also use provided macros for common events:
+
+```rust
+log_connection_attempt!(host, user);
+log_query!(query);
+log_state_transition!(from, to);
+```
+
+### Example: Logging to File
+
+```bash
+cargo run --example logging_example -- --log-level debug --log-file --log-file-path logs/mylog.log
+```
 
 ## Available Examples
 
@@ -92,6 +138,15 @@ A demonstration of compile-time CLI configuration using macros.
 - Demonstrates example-specific argument handling
 - Includes test rows configuration for isolation testing
 
+### 6. Logging Example (`logging_example.rs`)
+A demonstration of the logging facility, including log levels, file output, performance metrics, and error context.
+
+**Features:**
+- Shows how to use the logging macros and error context
+- Demonstrates logging to both console and file
+- Logs performance and memory usage metrics
+- Integrates with the state machine and CLI
+
 ## Building and Running Examples
 
 ### Using Cargo Directly
@@ -115,6 +170,9 @@ cargo run --example simple_multi_connection
 # Run advanced multi-connection example
 cargo run --example multi_connection_example
 
+# Run logging example
+cargo run --example logging_example -- --log-level debug --log-file --log-file-path logs/mylog.log
+
 # Check if examples compile
 cargo check --examples
 ```
@@ -136,6 +194,9 @@ make run-simple-multi-connection
 
 # Run advanced multi-connection example
 make run-advanced
+
+# Run logging example
+make run-logging-example
 
 # Check compilation
 make check
@@ -222,6 +283,25 @@ Connection Info:
 🎉 All isolation tests passed! Repeatable Read isolation is working correctly.
 
 ✅ Isolation test completed successfully!
+```
+
+### Logging Example
+```
+TiDB Logging Example
+====================
+Connection Info:
+  Host: localhost:4000
+  User: root
+  Database: test
+  Monitor Duration: 60s
+[INFO] Starting TiDB logging example
+[DEBUG] Connection parameters: host=localhost:4000, user=root, database=Some("test")
+[INFO] Starting operation: database_connection
+[INFO] Completed operation: database_connection
+[INFO] Performance metric: operation=database_connection, duration_ms=100
+...
+✅ Logging example completed successfully!
+Check the logs for detailed information.
 ```
 
 ## Troubleshooting

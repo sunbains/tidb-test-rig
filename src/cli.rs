@@ -30,6 +30,23 @@ pub struct CommonArgs {
     #[arg(long)]
     pub password: Option<String>,
 
+    // Logging options
+    /// Log level (debug, info, warn, error)
+    #[arg(long, default_value = "info")]
+    pub log_level: String,
+
+    /// Enable file logging
+    #[arg(long)]
+    pub log_file: bool,
+
+    /// Log file path
+    #[arg(long)]
+    pub log_file_path: Option<String>,
+
+    /// Enable verbose logging
+    #[arg(short, long)]
+    pub verbose: bool,
+
     // Compile-time conditional options
     #[cfg(feature = "import_jobs")]
     /// Enable import job monitoring
@@ -45,16 +62,6 @@ pub struct CommonArgs {
     /// Number of connections to create for multi-connection tests
     #[arg(long, default_value = "2")]
     pub connection_count: u32,
-
-    #[cfg(feature = "debug")]
-    /// Enable debug logging
-    #[arg(long)]
-    pub debug: bool,
-
-    #[cfg(feature = "verbose")]
-    /// Enable verbose output
-    #[arg(short, long)]
-    pub verbose: bool,
 }
 
 impl CommonArgs {
@@ -133,6 +140,41 @@ impl CommonArgs {
         println!("  User: {}", self.user);
         println!("  Database: {}", self.database.as_deref().unwrap_or("(not specified)"));
         println!("  Monitor Duration: {}s", self.monitor_duration);
+    }
+
+    /// Initialize logging based on CLI arguments
+    pub fn init_logging(&self) -> Result<(), Box<dyn std::error::Error>> {
+        use crate::logging::LogConfig;
+        use tracing::Level;
+        use std::path::PathBuf;
+
+        // Parse log level
+        let level = match self.log_level.to_lowercase().as_str() {
+            "debug" => Level::DEBUG,
+            "info" => Level::INFO,
+            "warn" => Level::WARN,
+            "error" => Level::ERROR,
+            _ => Level::INFO,
+        };
+
+        // Override with verbose flag
+        let level = if self.verbose { Level::DEBUG } else { level };
+
+        let mut config = LogConfig::new()
+            .with_level(level)
+            .with_console(true);
+
+        // Enable file logging if requested
+        if self.log_file {
+            config = config.with_file(true);
+            
+            // Set custom file path if provided
+            if let Some(ref file_path) = self.log_file_path {
+                config = config.with_file_path(PathBuf::from(file_path));
+            }
+        }
+
+        crate::logging::init_logging(config)
     }
 }
 
