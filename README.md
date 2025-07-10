@@ -1,3 +1,7 @@
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![Version](https://img.shields.io/crates/v/sqlparser.svg)](https://crates.io/crates/sqlparser)
+
+
 # TiDB Connection and Testing Framework
 
 A comprehensive Rust framework for testing TiDB connections, monitoring import jobs, and performing isolation tests.
