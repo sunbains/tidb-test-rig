@@ -1,5 +1,6 @@
 use connect::state_machine::{StateMachine, State, StateContext, StateHandler, StateError};
 use connect::{CommonArgs, print_test_header, print_success, print_error_and_exit};
+use connect::state_handlers::NextStateVersionHandler;
 use mysql::prelude::*;
 use mysql::*;
 use async_trait::async_trait;
@@ -379,14 +380,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     args.init_logging()?;
     args.print_connection_info();
-    let (host, user, password, database) = args.get_connection_info()?;
+    let (host, user, password, _database) = args.get_connection_info()?;
     let database = args.get_database().unwrap_or_else(|| "test".to_string());
     
-    // Register isolation test handlers
-    state_machine.register_handler(State::CreatingTable, Box::new(CreatingTableHandler));
-    state_machine.register_handler(State::PopulatingData, Box::new(PopulatingDataHandler));
-    state_machine.register_handler(State::TestingIsolation, Box::new(TestingIsolationHandler));
-    state_machine.register_handler(State::VerifyingResults, Box::new(VerifyingResultsHandler));
+    // Create and configure the state machine
+    let mut state_machine = StateMachine::new();
+    
+    // Register handlers manually to include custom version handler
+    register_isolation_handlers(&mut state_machine, host, user, password, Some(database));
     
     // Initialize isolation test context using the public method
     state_machine.get_context_mut().set_handler_context(State::CreatingTable, IsolationTestContext::new());
@@ -402,4 +403,34 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     
     Ok(())
+}
+
+/// Register all handlers for isolation test
+fn register_isolation_handlers(
+    state_machine: &mut StateMachine,
+    host: String,
+    user: String,
+    password: String,
+    database: Option<String>,
+) {
+    use connect::state_handlers::{InitialHandler, ParsingConfigHandler, ConnectingHandler, TestingConnectionHandler, VerifyingDatabaseHandler};
+    
+    // Register standard connection handlers
+    state_machine.register_handler(State::Initial, Box::new(InitialHandler));
+    state_machine.register_handler(
+        State::ParsingConfig,
+        Box::new(ParsingConfigHandler::new(host, user, password, database))
+    );
+    state_machine.register_handler(State::Connecting, Box::new(ConnectingHandler));
+    state_machine.register_handler(State::TestingConnection, Box::new(TestingConnectionHandler));
+    state_machine.register_handler(State::VerifyingDatabase, Box::new(VerifyingDatabaseHandler));
+    
+    // Register custom version handler that transitions to isolation testing
+    state_machine.register_handler(State::GettingVersion, Box::new(NextStateVersionHandler::new(State::CreatingTable)));
+    
+    // Register isolation test handlers
+    state_machine.register_handler(State::CreatingTable, Box::new(CreatingTableHandler));
+    state_machine.register_handler(State::PopulatingData, Box::new(PopulatingDataHandler));
+    state_machine.register_handler(State::TestingIsolation, Box::new(TestingIsolationHandler));
+    state_machine.register_handler(State::VerifyingResults, Box::new(VerifyingResultsHandler));
 } 
