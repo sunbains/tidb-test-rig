@@ -55,7 +55,7 @@ For scenarios requiring multiple connections:
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
 │   Coordinator   │    │  State Machine  │    │  State Machine  │
-│                 │◄──►│   Connection 1   │    │   Connection 2   │
+│                 │◄──►│   Connection 1  │    │   Connection 2  │
 │  Shared State   │    │                 │    │                 │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
          │                       │                       │
