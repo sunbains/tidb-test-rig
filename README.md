@@ -22,7 +22,6 @@ the different connections for sophisticated concurrent/parallel testing.
 - **Connection Testing**: Test basic database connectivity and simple queries
 - **Multi-Connection Testing**: Test multiple concurrent connections
 - **Isolation Testing**: Test transaction isolation levels
-- **Job Monitoring**: Monitor TiDB import jobs
 - **Configuration Management**: JSON and TOML configuration files
 - **Command Line Interface**: Flexible CLI options for all tests
 - **Enhanced Error Handling**: Retry strategies, circuit breakers, and error context preservation
@@ -219,7 +218,7 @@ Use configuration files with any test:
 # Basic connection test with config file
 cargo run --bin basic -- -c tidb_config.json
 
-# Job monitoring with config file
+# Import Job monitoring with config file
 cargo run --bin job_monitor --features import_jobs -- -c tidb_config.json
 
 # Isolation test with config file
