@@ -3,40 +3,11 @@
 use crate::state_machine::{State, StateContext, StateHandler};
 use mysql::prelude::*;
 use mysql::*;
-use chrono::{NaiveDateTime, Utc};
+use chrono::Utc;
 use std::time::Duration;
 use tokio::time::sleep;
 use async_trait::async_trait;
-
-#[derive(Debug, Clone, FromRow)]
-pub struct ImportJob {
-    #[allow(non_snake_case)]
-    pub Job_ID: i32,
-    #[allow(non_snake_case)]
-    pub Data_Source: String,
-    #[allow(non_snake_case)]
-    pub Target_Table: String,
-    #[allow(non_snake_case)]
-    pub Table_ID: i32,
-    #[allow(non_snake_case)]
-    pub Phase: String,
-    #[allow(non_snake_case)]
-    pub Status: String,
-    #[allow(non_snake_case)]
-    pub Source_File_Size: String,
-    #[allow(non_snake_case)]
-    pub Imported_Rows: i64,
-    #[allow(non_snake_case)]
-    pub Result_Message: String,
-    #[allow(non_snake_case)]
-    pub Create_Time: Option<NaiveDateTime>,
-    #[allow(non_snake_case)]
-    pub Start_Time: Option<NaiveDateTime>,
-    #[allow(non_snake_case)]
-    pub End_Time: Option<NaiveDateTime>,
-    #[allow(non_snake_case)]
-    pub Created_By: String,
-}
+use crate::import_job_monitor;
 
 /// Context specific to import job handlers
 #[derive(Clone)]
@@ -70,7 +41,7 @@ impl StateHandler for CheckingImportJobsHandler {
         if let Some(ref mut conn) = context.connection {
             // Execute SHOW IMPORT JOBS
             let query = "SHOW IMPORT JOBS";
-            let results: Vec<ImportJob> = conn.exec(query, ())?;
+            let results: Vec<import_job_monitor::ImportJob> = conn.exec(query, ())?;
             
             // Extract job IDs where End_Time is NULL
             let mut active_jobs = Vec::new();
@@ -146,7 +117,7 @@ impl StateHandler for ShowingImportJobDetailsHandler {
                 
                 for job_id in &active_jobs {
                     let query = format!("SHOW IMPORT JOB {job_id}");
-                    let results: Vec<ImportJob> = conn.exec(&query, ())?;
+                    let results: Vec<import_job_monitor::ImportJob> = conn.exec(&query, ())?;
                     for job in results {
                         if job.End_Time.is_none() {
                             // Calculate time elapsed using UTC for consistency

@@ -46,6 +46,12 @@ pub struct SimpleMultiConnectionCoordinator {
     connections: Vec<ConnectionConfig>,
 }
 
+impl Default for SimpleMultiConnectionCoordinator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 pub struct ConnectionConfig {
     pub id: String,
     pub host: String,
@@ -242,7 +248,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Run all connections concurrently
     if let Err(e) = coordinator.run_all_connections().await {
         eprintln!("Failed to run connections: {}", e);
-        return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())) as Box<dyn std::error::Error>);
+        return Err(Box::new(std::io::Error::other(e.to_string())) as Box<dyn std::error::Error>);
     }
 
     // Print results

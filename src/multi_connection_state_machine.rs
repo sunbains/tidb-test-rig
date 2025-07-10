@@ -121,7 +121,7 @@ impl MultiConnectionStateMachine {
     }
 
     /// Get all active import jobs across all connections
-    pub fn get_active_import_jobs(&self) -> Vec<crate::job_monitor::ImportJobInfo> {
+    pub fn get_active_import_jobs(&self) -> Vec<crate::import_job_monitor::ImportJobInfo> {
         self.coordinator.get_active_import_jobs()
     }
 }

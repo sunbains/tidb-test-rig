@@ -54,7 +54,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\nStarting concurrent connection testing...");
     if let Err(e) = multi_sm.run_all().await {
         eprintln!("Failed to run multi-connection test: {}", e);
-        return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())) as Box<dyn std::error::Error>);
+        return Err(Box::new(std::io::Error::other(e.to_string())) as Box<dyn std::error::Error>);
     }
 
     // Check results
