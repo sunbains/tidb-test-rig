@@ -2,7 +2,6 @@ use crate::state_machine::{StateMachine, State};
 use crate::{
     InitialHandler, ParsingConfigHandler, ConnectingHandler, 
     TestingConnectionHandler, VerifyingDatabaseHandler, GettingVersionHandler,
-    JobMonitor
 };
 use crate::cli::CommonArgs;
 use clap::Parser;
@@ -31,7 +30,7 @@ impl TestSetup {
         let mut state_machine = StateMachine::new();
         
         // Register standard state handlers
-        Self::register_standard_handlers(&mut state_machine, host, user, password, database);
+        register_standard_handlers(&mut state_machine, host, user, password, database);
         
         // Run the state machine
         match state_machine.run().await {
@@ -45,32 +44,6 @@ impl TestSetup {
             }
         }
     }
-    
-    /// Register the standard set of state handlers
-    pub fn register_standard_handlers(
-        state_machine: &mut StateMachine,
-        host: String,
-        user: String,
-        password: String,
-        database: Option<String>,
-    ) {
-        state_machine.register_handler(State::Initial, Box::new(InitialHandler));
-        state_machine.register_handler(
-            State::ParsingConfig,
-            Box::new(ParsingConfigHandler::new(
-                host,
-                user,
-                password,
-                database
-            ))
-        );
-        state_machine.register_handler(State::Connecting, Box::new(ConnectingHandler));
-        state_machine.register_handler(State::TestingConnection, Box::new(TestingConnectionHandler));
-        state_machine.register_handler(State::VerifyingDatabase, Box::new(VerifyingDatabaseHandler));
-        state_machine.register_handler(State::GettingVersion, Box::new(GettingVersionHandler));
-    }
-    
-
     
     /// Handle connection errors with helpful messages
     pub fn handle_connection_error(e: &crate::state_machine::StateError) {
@@ -88,6 +61,30 @@ impl TestSetup {
         
         process::exit(1);
     }
+}
+
+// Register the standard set of state handlers as a top-level function
+pub fn register_standard_handlers(
+    state_machine: &mut StateMachine,
+    host: String,
+    user: String,
+    password: String,
+    database: Option<String>,
+) {
+    state_machine.register_handler(State::Initial, Box::new(InitialHandler));
+    state_machine.register_handler(
+        State::ParsingConfig,
+        Box::new(ParsingConfigHandler::new(
+            host,
+            user,
+            password,
+            database
+        ))
+    );
+    state_machine.register_handler(State::Connecting, Box::new(ConnectingHandler));
+    state_machine.register_handler(State::TestingConnection, Box::new(TestingConnectionHandler));
+    state_machine.register_handler(State::VerifyingDatabase, Box::new(VerifyingDatabaseHandler));
+    state_machine.register_handler(State::GettingVersion, Box::new(GettingVersionHandler));
 }
 
 /// Common setup for tests using the new CommonArgs approach
@@ -115,7 +112,7 @@ impl CommonArgsSetup {
         let mut state_machine = StateMachine::new();
         
         // Register standard state handlers
-        TestSetup::register_standard_handlers(&mut state_machine, host, user, password, database);
+        register_standard_handlers(&mut state_machine, host, user, password, database);
         
         Ok(Self {
             args,
@@ -128,46 +125,6 @@ impl CommonArgsSetup {
         match self.state_machine.run().await {
             Ok(_) => {
                 println!("Connection test completed successfully!");
-                Ok(())
-            }
-            Err(e) => {
-                TestSetup::handle_connection_error(&e);
-                Err(e)
-            }
-        }
-    }
-    
-    /// Run the state machine and optionally start job monitoring
-    pub async fn run_with_job_monitoring(&mut self) -> Result<(), crate::state_machine::StateError> {
-        match self.state_machine.run().await {
-            Ok(_) => {
-                println!("Connection test completed successfully!");
-                
-                // If monitor duration is specified, run job monitoring
-                if self.args.monitor_duration > 0 {
-                    println!("\nStarting import job monitoring...");
-                    
-                    // Create job monitor with the connection from the main state machine
-                    let mut job_monitor = JobMonitor::new(self.args.monitor_duration);
-                    
-                    // Transfer the connection to the job monitor
-                    if let Some(conn) = self.state_machine.get_context_mut().connection.take() {
-                        job_monitor.get_context_mut().connection = Some(conn);
-                        job_monitor.get_context_mut().host = self.state_machine.get_context().host.clone();
-                        job_monitor.get_context_mut().port = self.state_machine.get_context().port;
-                        job_monitor.get_context_mut().username = self.state_machine.get_context().username.clone();
-                        job_monitor.get_context_mut().password = self.state_machine.get_context().password.clone();
-                        job_monitor.get_context_mut().database = self.state_machine.get_context().database.clone();
-                        
-                        // Run the job monitor
-                        if let Err(e) = job_monitor.run().await {
-                            eprintln!("✗ Job monitoring failed: {e}");
-                        }
-                    } else {
-                        eprintln!("✗ No connection available for job monitoring");
-                    }
-                }
-                
                 Ok(())
             }
             Err(e) => {
@@ -203,6 +160,6 @@ pub fn create_state_machine_with_handlers(
     database: Option<String>,
 ) -> crate::state_machine::StateMachine {
     let mut state_machine = crate::state_machine::StateMachine::new();
-    TestSetup::register_standard_handlers(&mut state_machine, host, user, password, database);
+    register_standard_handlers(&mut state_machine, host, user, password, database);
     state_machine
 } 

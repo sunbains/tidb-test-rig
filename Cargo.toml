@@ -27,37 +27,42 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "time"] }
 tracing-appender = "0.2"
 
-[[test]]
-name = "basic_test"
-path = "tests/basic_test.rs"
+[[bin]]
+name = "basic"
+path = "src/bin/basic.rs"
 required-features = []
 
-[[test]]
+[[bin]]
 name = "simple_connection"
-path = "examples/simple_connection_test.rs"
+path = "src/bin/simple_connection.rs"
 required-features = []
 
-[[test]]
+[[bin]]
 name = "simple_multi_connection"
-path = "examples/simple_multi_connection.rs"
+path = "src/bin/simple_multi_connection.rs"
 required-features = ["multi_connection"]
 
-[[test]]
-name = "multi_connection_test"
-path = "examples/multi_connection_test.rs"
+[[bin]]
+name = "multi_connection"
+path = "src/bin/multi_connection.rs"
 required-features = ["multi_connection", "import_jobs"]
 
-[[test]]
-name = "isolation_test"
-path = "examples/isolation_test.rs"
+[[bin]]
+name = "isolation"
+path = "src/bin/isolation.rs"
 required-features = ["isolation_test"]
 
-[[test]]
-name = "cli_test"
-path = "examples/cli_test.rs"
+[[bin]]
+name = "cli"
+path = "src/bin/cli.rs"
 required-features = ["isolation_test"]
 
-[[test]]
-name = "logging_test"
-path = "examples/logging_test.rs"
+[[bin]]
+name = "logging"
+path = "src/bin/logging.rs"
 required-features = []
+
+[[bin]]
+name = "job_monitor"
+path = "src/bin/job_monitor.rs"
+required-features = ["import_jobs"]

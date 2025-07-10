@@ -14,26 +14,26 @@ This tool is designed to test and monitor TiDB database connections with advance
 
 ## Library Structure
 
-This project is now a **reusable Rust library** for TiDB connection and import job testing. The main CLI application previously in `src/main.rs` has been moved to `tests/basic_test.rs`.
+This project is now a **reusable Rust library** for TiDB connection and import job testing. The main CLI application previously in `src/main.rs` has been moved to `db_tests/basic_db_tests.rs`.
 
 - **Library usage:** Import the `connect` crate in your own Rust projects and use the state machine, handlers, and coordination logic directly.
-- **CLI usage:** Run the main CLI as a test:
+- **CLI usage:** Run the main CLI as a db_test:
   ```bash
-  cargo run --example basic_test -- -H localhost:4000 -u root -d test
+  cargo test --test basic_db_tests -- -- -H localhost:4000 -u root -d test
   ```
   or
   ```bash
-  make run-basic
+  make run-basic-db-tests
   ```
 
-All other tests (multi-connection, isolation, CLI, etc.) are also available in the `tests/` directory and use the library API.
+All other db_tests (multi-connection, isolation, CLI, etc.) are also available in the `db_tests/` directory and use the library API.
 
 ### Modular CLI Architecture
 
-The project uses a modular CLI argument structure where each test defines its own argument struct while sharing common arguments:
+The project uses a modular CLI argument structure where each db_test defines its own argument struct while sharing common arguments:
 
 - **CommonArgs**: Contains truly common arguments (host, user, database, monitor-duration)
-- **Test-specific Args**: Each test defines its own `Args` struct with `#[command(flatten)]` for `CommonArgs` plus test-specific arguments
+- **DbTest-specific Args**: Each db_test defines its own `Args` struct with `#[command(flatten)]` for `CommonArgs` plus db_test-specific arguments
 - **Shared Utilities**: Common setup and error handling utilities in `lib_utils.rs`
 
 ---
@@ -133,7 +133,7 @@ cargo run -- -u your_username -t 120
 
 ### Command Line Options
 
-Each test has its own CLI arguments. Here are the common options shared across tests:
+Each db_test has its own CLI arguments. Here are the common options shared across db_tests:
 
 ```bash
 Common Options:
@@ -143,10 +143,10 @@ Common Options:
   -t, --monitor-duration <DURATION>    Duration to monitor import jobs in seconds [default: 60]
   -h, --help                           Print help
 
-Test-specific options vary by test. Run any test with --help to see its specific options:
-  cargo test --test basic_test -- -- --help
-  cargo test --test isolation_test -- -- --help
-  cargo test --test cli_test -- -- --help
+DbTest-specific options vary by db_test. Run any db_test with --help to see its specific options:
+  cargo test --test basic_db_tests -- -- --help
+  cargo test --test isolation_db_tests -- -- --help
+  cargo test --test cli_db_tests -- -- --help
 ```
 
 ### Test Workflows
@@ -171,56 +171,56 @@ for db in db1 db2 db3; do
 done
 ```
 
-## Tests
+## DB Tests
 
-The project includes comprehensive tests demonstrating various use cases:
+The project includes comprehensive db_tests demonstrating various use cases:
 
-### Basic Test (Main CLI)
+### Basic DB Test (Main CLI)
 ```bash
-cargo test --test basic_test -- -- -H localhost:4000 -u root -d test
+cargo test --test basic_db_tests -- -- -H localhost:4000 -u root -d test
 ```
 This is the main CLI entry point for single-connection and import job monitoring workflows.
 
-### CLI Test
+### CLI DB Test
 ```bash
-cargo test --test cli_test -- -- -H localhost:4000 -u root -d test
+cargo test --test cli_db_tests -- -- -H localhost:4000 -u root -d test
 ```
 Demonstrates CLI argument parsing and basic connection testing with modular argument structure.
 
-### Isolation Test
+### Isolation DB Test
 ```bash
-cargo test --test isolation_test -- -- -H localhost:4000 -u root -d test --test-rows 20
+cargo test --test isolation_db_tests -- -- -H localhost:4000 -u root -d test --test-rows 20
 ```
 Tests transaction isolation with configurable test data.
 
-### Logging Test
+### Logging DB Test
 ```bash
-cargo test --test logging_test -- -- -H localhost:4000 -u root -d test
+cargo test --test logging_db_tests -- -- -H localhost:4000 -u root -d test
 ```
 Demonstrates structured logging with different verbosity levels.
 
-### Simple Multi-Connection Test
+### Simple Multi-Connection DB Test
 ```bash
 cargo test --test simple_multi_connection --
 ```
 Demonstrates basic multi-connection management with state machine coordination.
 
-### Advanced Multi-Connection Test
+### Advanced Multi-Connection DB Test
 ```bash
-cargo test --test multi_connection_test --
+cargo test --test multi_connection_db_tests --
 ```
 Shows advanced scenarios with import job monitoring across multiple connections.
 
 ### Building Tests
 ```bash
-# Build all test binaries
+# Build all db_test binaries
 cargo test --no-run
 
-# Check test compilation for all test binaries
+# Check db_test compilation for all db_test binaries
 cargo check --tests
 
 # Using Make
-make tests
+make db_tests
 make run-simple
 make run-advanced
 ```
@@ -233,20 +233,19 @@ The project includes a comprehensive Makefile for common development tasks:
 # Build the main application
 make build
 
-# Run tests
-make test
+# Run db_tests
+make db_tests
 
 # Clean build artifacts
 make clean
 
-# Build all tests
-make tests
+# Build all db_tests
+make db_tests
 
-# Run specific tests
-make run-simple-connection
-make run-isolation-test
-make run-cli-test
-make run-logging-test
+# Run specific db_tests
+make run-isolation-db-tests
+make run-cli-db-tests
+make run-logging-db-tests
 
 # Code quality
 make format
@@ -259,18 +258,18 @@ make help
 
 #### Makefile Targets
 
-| Target | Description | Test |
+| Target | Description | DB Test |
 |--------|-------------|---------|
-| `run-simple-connection` | Basic connection test | `make run-simple-connection` |
-| `run-isolation-test` | Transaction isolation testing | `make run-isolation-test` |
-| `run-cli-test` | CLI test with modular arguments | `make run-cli-test` |
-| `run-logging-test` | Logging demonstration | `make run-logging-test` |
-| `run-simple` | Simple multi-connection test | `make run-simple` |
-| `run-advanced` | Advanced multi-connection test | `make run-advanced` |
+| `run-simple-connection` | Basic connection db_tests | `make run-simple-connection` |
+| `run-isolation-db-tests` | Transaction isolation db_tests | `make run-isolation-db-tests` |
+| `run-cli-db-tests` | CLI db_tests with modular arguments | `make run-cli-db-tests` |
+| `run-logging-db-tests` | Logging demonstration | `make run-logging-db-tests` |
+| `run-simple` | Simple multi-connection db_tests | `make run-simple` |
+| `run-advanced` | Advanced multi-connection db_tests | `make run-advanced` |
 
-**Note:** Each test has its own CLI arguments. Use `--help` with any test to see its specific options.
+**Note:** Each db_test has its own CLI arguments. Use `--help` with any db_test to see its specific options.
 
-See [tests/README.md](tests/README.md) for detailed test documentation.
+See [db_tests/README.md](db_tests/README.md) for detailed db_test documentation.
 
 ## Configuration
 
@@ -305,7 +304,7 @@ src/
 ├── lib_utils.rs            # Shared utilities for tests
 └── logging.rs              # Logging infrastructure
 
-tests/
+db_tests/
 ├── simple_connection_test.rs     # Basic connection test
 ├── isolation_test.rs             # Transaction isolation testing
 ├── logging_test.rs               # Logging demonstration

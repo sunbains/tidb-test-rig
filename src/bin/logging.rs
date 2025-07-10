@@ -1,8 +1,5 @@
-use connect::{CommonArgs, print_test_header, print_success, print_error_and_exit};
-use connect::state_machine::{StateMachine, State};
-use connect::{InitialHandler, ParsingConfigHandler, ConnectingHandler, TestingConnectionHandler, VerifyingDatabaseHandler, GettingVersionHandler};
-use tracing::{info, debug, warn, error, instrument};
-use std::time::Instant;
+use connect::{CommonArgs, print_test_header, print_success, print_error_and_exit, TestSetup};
+use tracing::info;
 use clap::Parser;
 
 #[derive(Parser)]
@@ -13,11 +10,17 @@ struct Args {
     common: CommonArgs,
 }
 
+impl Args {
+    pub fn init_logging(&self) -> Result<(), Box<dyn std::error::Error>> {
+        self.common.init_logging()
+    }
+}
+
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() {
     print_test_header("TiDB Logging Test");
     let args = Args::parse();
-    args.init_logging()?;
+    args.init_logging().expect("Failed to initialize logging");
     
     info!("Starting TiDB logging test");
     
@@ -31,7 +34,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Ok(_) => {
             info!("Logging test completed successfully");
             print_success("Logging test completed successfully!");
-            Ok(())
         }
         Err(e) => {
             print_error_and_exit("Logging test failed", &*e);
