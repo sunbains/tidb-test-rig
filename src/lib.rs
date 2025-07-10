@@ -10,6 +10,7 @@ pub mod logging;
 
 pub use cli::{CommonArgs, parse_args, get_connection_info};
 pub use logging::{LogConfig, init_logging, init_default_logging, init_logging_from_env, ErrorContext, log_performance_metric, log_memory_usage};
+pub use state_handlers::{InitialHandler, ParsingConfigHandler, ConnectingHandler, TestingConnectionHandler, VerifyingDatabaseHandler, GettingVersionHandler};
 pub use import_job_handlers::{ImportJob, CheckingImportJobsHandler, ShowingImportJobDetailsHandler};
 pub use connection_manager::{ConnectionCoordinator, ConnectionInfo, SharedState, GlobalConfig};
 pub use multi_connection_state_machine::{MultiConnectionStateMachine, CoordinationHandler}; 

@@ -1,5 +1,5 @@
 use connect::state_machine::{StateMachine, State, StateContext, StateHandler, StateError};
-use connect::state_handlers::{InitialHandler, ParsingConfigHandler, ConnectingHandler, TestingConnectionHandler, VerifyingDatabaseHandler, GettingVersionHandler};
+use connect::{InitialHandler, ParsingConfigHandler, ConnectingHandler, TestingConnectionHandler, VerifyingDatabaseHandler, GettingVersionHandler};
 use connect::parse_args;
 use mysql::prelude::*;
 use mysql::*;

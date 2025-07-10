@@ -1,5 +1,5 @@
 use connect::state_machine::{StateMachine, State};
-use connect::state_handlers::{InitialHandler, ParsingConfigHandler, ConnectingHandler, TestingConnectionHandler, VerifyingDatabaseHandler, GettingVersionHandler};
+use connect::{InitialHandler, ParsingConfigHandler, ConnectingHandler, TestingConnectionHandler, VerifyingDatabaseHandler, GettingVersionHandler};
 use connect::{generate_cli_args, generate_cli_impl};
 use clap::Parser;
 

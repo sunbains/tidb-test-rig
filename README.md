@@ -198,15 +198,22 @@ RUST_LOG=info cargo run -- -u admin
 ```
 src/
 ├── main.rs                 # CLI entry point
-├── lib.rs                  # Library exports
+├── lib.rs                  # Library exports (consolidated imports)
 ├── connection.rs           # Connection management
 ├── state_machine.rs        # State machine core
-├── state_handlers.rs       # State handler implementations
+├── state_handlers.rs       # Common state handler implementations
 ├── import_job_handlers.rs  # Import job monitoring
 ├── connection_manager.rs   # Multi-connection coordination
-└── multi_connection_state_machine.rs  # Multi-connection state machines
+├── multi_connection_state_machine.rs  # Multi-connection state machines
+├── cli.rs                  # Common CLI argument handling
+├── cli_macros.rs           # CLI macro generation
+└── logging.rs              # Logging infrastructure
 
 examples/
+├── simple_connection_example.rs  # Basic connection test
+├── isolation_test_example.rs     # Transaction isolation testing
+├── logging_example.rs            # Logging demonstration
+├── macro_cli_example.rs          # Macro-based CLI example
 ├── simple_multi_connection.rs    # Basic multi-connection example
 ├── multi_connection_example.rs   # Advanced multi-connection example
 └── README.md                     # Example documentation
@@ -215,11 +222,51 @@ docs/
 └── ARCHITECTURE.md              # Detailed architecture documentation
 ```
 
+### Import Structure
+
+#### Common Imports (from lib.rs)
+```rust
+// All examples can import common functionality
+use connect::{InitialHandler, ParsingConfigHandler, ConnectingHandler, 
+              TestingConnectionHandler, VerifyingDatabaseHandler, GettingVersionHandler};
+use connect::{parse_args, log_performance_metric, ErrorContext};
+```
+
+#### Example-Specific Imports
+```rust
+// Example-specific imports
+use connect::state_machine::{StateMachine, State, StateContext, StateHandler, StateError};
+// Additional imports as needed for specific examples
+```
+
 ### Adding New States
-1. Define the state in `state_machine.rs`
-2. Implement the handler in `state_handlers.rs`
-3. Register the handler in `main.rs`
-4. Update state transitions as needed
+
+#### Common States (in lib.rs)
+Common states used across multiple examples are defined in `src/state_machine.rs` and exported through `src/lib.rs`:
+
+```rust
+// Common states available in all examples
+use connect::{InitialHandler, ParsingConfigHandler, ConnectingHandler, 
+              TestingConnectionHandler, VerifyingDatabaseHandler, GettingVersionHandler};
+```
+
+#### Example-Specific States
+Example-specific states are defined in the example files themselves:
+
+```rust
+// Example-specific states defined locally
+use connect::state_machine::{StateMachine, State, StateContext, StateHandler, StateError};
+
+// Define example-specific states in the global State enum
+// These are already available: CreatingTable, PopulatingData, TestingIsolation, VerifyingResults
+```
+
+#### Adding New States
+1. For common states: Define in `state_machine.rs` and export in `lib.rs`
+2. For example-specific states: Use existing states in `State` enum or add new ones
+3. Implement the handler in the appropriate module
+4. Register the handler in the example or main.rs
+5. Update state transitions as needed
 
 ### Adding New Features
 1. Create new modules as needed

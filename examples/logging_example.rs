@@ -1,5 +1,5 @@
 use connect::state_machine::{StateMachine, State};
-use connect::state_handlers::{InitialHandler, ParsingConfigHandler, ConnectingHandler, TestingConnectionHandler, VerifyingDatabaseHandler, GettingVersionHandler};
+use connect::{InitialHandler, ParsingConfigHandler, ConnectingHandler, TestingConnectionHandler, VerifyingDatabaseHandler, GettingVersionHandler};
 use connect::{parse_args, log_performance_metric, log_memory_usage, ErrorContext};
 use tracing::{info, debug, warn, error, instrument};
 use std::time::Instant;
