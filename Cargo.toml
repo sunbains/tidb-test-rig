@@ -26,6 +26,7 @@ serde = { version = "1.0", features = ["derive"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "time"] }
 tracing-appender = "0.2"
+thiserror = "1.0"
 
 [[bin]]
 name = "basic"

@@ -1,30 +1,42 @@
 use mysql::prelude::*;
 use mysql::{Pool, PooledConn, OptsBuilder};
+use crate::errors::{ConnectionError, Result};
 
 /// Parse host and port from a string in format "hostname:port"
-pub fn parse_host_port(host_port: &str) -> Result<(String, u16), crate::state_machine::StateError> {
+pub fn parse_host_port(host_port: &str) -> Result<(String, u16)> {
     let parts: Vec<&str> = host_port.split(':').collect();
     if parts.len() != 2 {
-        return Err("Host must be in format hostname:port".into());
+        return Err(ConnectionError::ConnectFailed {
+            host: host_port.to_string(),
+            port: 0,
+            message: "Host must be in format hostname:port".to_string(),
+        }.into());
     }
     
     let host = parts[0].to_string();
     let port = parts[1].parse::<u16>()
-        .map_err(|_| "Invalid port number")?;
+        .map_err(|_| ConnectionError::ConnectFailed {
+            host: host.clone(),
+            port: 0,
+            message: "Invalid port number".to_string(),
+        })?;
     
     Ok((host, port))
 }
 
 /// Parse connection string (alias for parse_host_port for compatibility)
-pub fn parse_connection_string(connection_string: &str) -> Result<(String, u16), crate::state_machine::StateError> {
+pub fn parse_connection_string(connection_string: &str) -> Result<(String, u16)> {
     parse_host_port(connection_string)
 }
 
 /// Parse username and password from a string in format "username:password"
-pub fn parse_user_pass(user_pass: &str) -> Result<(String, String), crate::state_machine::StateError> {
+pub fn parse_user_pass(user_pass: &str) -> Result<(String, String)> {
     let parts: Vec<&str> = user_pass.splitn(2, ':').collect();
     if parts.len() != 2 {
-        return Err("User must be in format username:password".into());
+        return Err(ConnectionError::AuthFailed {
+            user: user_pass.to_string(),
+            message: "User must be in format username:password".to_string(),
+        }.into());
     }
     
     Ok((parts[0].to_string(), parts[1].to_string()))
@@ -32,7 +44,7 @@ pub fn parse_user_pass(user_pass: &str) -> Result<(String, String), crate::state
 
 /// Create a connection pool to TiDB using the provided parameters
 pub fn create_connection_pool(host: &str, port: u16, user: &str, password: &str, database: Option<&str>) 
-    -> Result<Pool, crate::state_machine::StateError> {
+    -> Result<Pool> {
     
     let mut builder = OptsBuilder::new()
         .ip_or_hostname(Some(host))
@@ -50,7 +62,7 @@ pub fn create_connection_pool(host: &str, port: u16, user: &str, password: &str,
 
 /// Create a connection to TiDB using the provided parameters
 pub fn create_connection(host: &str, port: u16, user: &str, password: &str, database: Option<&str>) 
-    -> Result<PooledConn, crate::state_machine::StateError> {
+    -> Result<PooledConn> {
     
     let pool = create_connection_pool(host, port, user, password, database)?;
     let conn = pool.get_conn()?;
@@ -59,20 +71,20 @@ pub fn create_connection(host: &str, port: u16, user: &str, password: &str, data
 }
 
 /// Verify that a database exists
-pub fn verify_database_exists(conn: &mut PooledConn, database: &str) -> Result<bool, crate::state_machine::StateError> {
+pub fn verify_database_exists(conn: &mut PooledConn, database: &str) -> Result<bool> {
     let query = "SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = ?";
     let result: Option<String> = conn.exec_first(query, (database,))?;
     Ok(result.is_some())
 }
 
 /// Test the connection by executing a simple query
-pub fn test_connection(conn: &mut PooledConn) -> Result<(), crate::state_machine::StateError> {
+pub fn test_connection(conn: &mut PooledConn) -> Result<()> {
     let _result: Option<i32> = conn.query_first("SELECT 1")?;
     Ok(())
 }
 
 /// Get the server version
-pub fn get_server_version(conn: &mut PooledConn) -> Result<Option<String>, crate::state_machine::StateError> {
+pub fn get_server_version(conn: &mut PooledConn) -> Result<Option<String>> {
     let version: Option<String> = conn.query_first("SELECT VERSION()")?;
     Ok(version)
 } 

@@ -45,7 +45,7 @@ async fn main() {
             print_success("Job monitoring test completed successfully!");
         }
         Err(e) => {
-            print_error_and_exit("Job monitoring test failed", &*e);
+            print_error_and_exit("Job monitoring test failed", &e);
         }
     }
 }

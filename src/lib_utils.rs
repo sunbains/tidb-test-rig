@@ -1,9 +1,11 @@
 use crate::state_machine::{StateMachine, State};
 use crate::{
     InitialHandler, ParsingConfigHandler, ConnectingHandler, 
-    TestingConnectionHandler, VerifyingDatabaseHandler, GettingVersionHandler,
+    TestingConnectionHandler, VerifyingDatabaseHandler,
 };
+use crate::state_handlers::GettingVersionHandler;
 use crate::cli::CommonArgs;
+use crate::errors::{StateError, Result};
 use clap::Parser;
 use std::process;
 
@@ -21,10 +23,10 @@ impl TestSetup {
     }
     
     /// Run the basic connection workflow
-    pub async fn run_basic_workflow(&self) -> Result<(), crate::state_machine::StateError> {
+    pub async fn run_basic_workflow(&self) -> Result<()> {
         // Get connection info
         let (host, user, password, database) = self.args.get_connection_info()
-            .map_err(|e| crate::state_machine::StateError::from(e.to_string()))?;
+            .map_err(|e| StateError::from(e.to_string()))?;
         
         // Create and configure the state machine
         let mut state_machine = StateMachine::new();
@@ -46,7 +48,7 @@ impl TestSetup {
     }
     
     /// Handle connection errors with helpful messages
-    pub fn handle_connection_error(e: &crate::state_machine::StateError) {
+    pub fn handle_connection_error(e: &StateError) {
         eprintln!("✗ Failed to complete connection test: {e}");
         
         // Try to provide more specific error messages
@@ -95,7 +97,7 @@ pub struct CommonArgsSetup {
 
 impl CommonArgsSetup {
     /// Create a new test setup with CommonArgs
-    pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn new() -> std::result::Result<Self, Box<dyn std::error::Error>> {
         // Parse command line arguments
         let args = CommonArgs::parse();
         
@@ -121,7 +123,7 @@ impl CommonArgsSetup {
     }
     
     /// Run the state machine with standard error handling
-    pub async fn run_with_error_handling(&mut self) -> Result<(), crate::state_machine::StateError> {
+    pub async fn run_with_error_handling(&mut self) -> Result<()> {
         match self.state_machine.run().await {
             Ok(_) => {
                 println!("Connection test completed successfully!");

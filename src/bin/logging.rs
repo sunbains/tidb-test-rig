@@ -36,7 +36,7 @@ async fn main() {
             print_success("Logging test completed successfully!");
         }
         Err(e) => {
-            print_error_and_exit("Logging test failed", &*e);
+            print_error_and_exit("Logging test failed", &e);
         }
     }
 } 

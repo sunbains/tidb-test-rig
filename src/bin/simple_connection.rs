@@ -1,6 +1,7 @@
 use connect::{CommonArgs, print_test_header, print_success, print_error_and_exit};
 use connect::state_machine::{StateMachine, State};
-use connect::{InitialHandler, ParsingConfigHandler, ConnectingHandler, TestingConnectionHandler, VerifyingDatabaseHandler, GettingVersionHandler};
+use connect::{InitialHandler, ParsingConfigHandler, ConnectingHandler, TestingConnectionHandler, VerifyingDatabaseHandler};
+use connect::state_handlers::GettingVersionHandler;
 use clap::Parser;
 
 #[derive(Parser, Debug)]
@@ -44,7 +45,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     match state_machine.run().await {
         Ok(_) => print_success("Simple connection test completed successfully!"),
-        Err(e) => print_error_and_exit("Simple connection test failed", &*e),
+        Err(e) => print_error_and_exit("Simple connection test failed", &e),
     }
     Ok(())
 } 

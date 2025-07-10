@@ -1,6 +1,7 @@
-use connect::state_machine::{StateMachine, State, StateContext, StateHandler, StateError};
+use connect::state_machine::{StateMachine, State, StateContext, StateHandler};
 use connect::{CommonArgs, print_test_header, print_success, print_error_and_exit, register_standard_handlers};
 use connect::state_handlers::NextStateVersionHandler;
+use connect::errors::{StateError, Result};
 use mysql::prelude::*;
 use mysql::*;
 use async_trait::async_trait;
@@ -23,8 +24,8 @@ impl IsolationTestArgs {
         self.common.print_connection_info();
         println!("  Test Rows: {}", self.test_rows);
     }
-    pub fn init_logging(&self) -> Result<(), Box<dyn std::error::Error>> {
-        self.common.init_logging()
+    pub fn init_logging(&self) -> connect::errors::Result<()> {
+        self.common.init_logging().map_err(connect::errors::ConnectError::from)
     }
     pub fn get_connection_info(&self) -> connect::cli::ConnInfoResult {
         self.common.get_connection_info()
@@ -78,12 +79,12 @@ pub struct CreatingTableHandler;
 
 #[async_trait]
 impl StateHandler for CreatingTableHandler {
-    async fn enter(&self, _context: &mut StateContext) -> Result<State, StateError> {
+    async fn enter(&self, _context: &mut StateContext) -> Result<State> {
         println!("Creating test table for isolation testing...");
         Ok(State::CreatingTable)
     }
 
-    async fn execute(&self, context: &mut StateContext) -> Result<State, StateError> {
+    async fn execute(&self, context: &mut StateContext) -> Result<State> {
         // Extract connection first to avoid borrowing conflicts
         let connection = context.connection.take();
         
@@ -111,11 +112,11 @@ impl StateHandler for CreatingTableHandler {
             
             Ok(State::PopulatingData)
         } else {
-            Err("No connection available for creating table".into())
+            Err(StateError::from("No connection available for creating table"))
         }
     }
 
-    async fn exit(&self, context: &mut StateContext) -> Result<(), StateError> {
+    async fn exit(&self, context: &mut StateContext) -> Result<()> {
         context.move_handler_context::<IsolationTestContext>(&State::CreatingTable, State::PopulatingData);
         Ok(())
     }
@@ -126,12 +127,12 @@ pub struct PopulatingDataHandler;
 
 #[async_trait]
 impl StateHandler for PopulatingDataHandler {
-    async fn enter(&self, _context: &mut StateContext) -> Result<State, StateError> {
+    async fn enter(&self, _context: &mut StateContext) -> Result<State> {
         println!("Populating test table with 10 rows...");
         Ok(State::PopulatingData)
     }
 
-    async fn execute(&self, context: &mut StateContext) -> Result<State, StateError> {
+    async fn execute(&self, context: &mut StateContext) -> Result<State> {
         // Extract connection first to avoid borrowing conflicts
         let connection = context.connection.take();
         
@@ -161,11 +162,11 @@ impl StateHandler for PopulatingDataHandler {
             
             Ok(State::TestingIsolation)
         } else {
-            Err("No connection available for populating data".into())
+            Err(StateError::from("No connection available for populating data"))
         }
     }
 
-    async fn exit(&self, context: &mut StateContext) -> Result<(), StateError> {
+    async fn exit(&self, context: &mut StateContext) -> Result<()> {
         context.move_handler_context::<IsolationTestContext>(&State::PopulatingData, State::TestingIsolation);
         Ok(())
     }
@@ -176,12 +177,12 @@ pub struct TestingIsolationHandler;
 
 #[async_trait]
 impl StateHandler for TestingIsolationHandler {
-    async fn enter(&self, _context: &mut StateContext) -> Result<State, StateError> {
+    async fn enter(&self, _context: &mut StateContext) -> Result<State> {
         println!("Testing repeatable read isolation...");
         Ok(State::TestingIsolation)
     }
 
-    async fn execute(&self, context: &mut StateContext) -> Result<State, StateError> {
+    async fn execute(&self, context: &mut StateContext) -> Result<State> {
         // Extract all needed values before any mutable borrows
         let host = context.host.clone();
         let username = context.username.clone();
@@ -292,11 +293,11 @@ impl StateHandler for TestingIsolationHandler {
             
             Ok(State::VerifyingResults)
         } else {
-            Err("No connection available for testing isolation".into())
+            Err(StateError::from("No connection available for testing isolation"))
         }
     }
 
-    async fn exit(&self, context: &mut StateContext) -> Result<(), StateError> {
+    async fn exit(&self, context: &mut StateContext) -> Result<()> {
         context.move_handler_context::<IsolationTestContext>(&State::TestingIsolation, State::VerifyingResults);
         Ok(())
     }
@@ -307,12 +308,12 @@ pub struct VerifyingResultsHandler;
 
 #[async_trait]
 impl StateHandler for VerifyingResultsHandler {
-    async fn enter(&self, _context: &mut StateContext) -> Result<State, StateError> {
+    async fn enter(&self, _context: &mut StateContext) -> Result<State> {
         println!("Verifying test results...");
         Ok(State::VerifyingResults)
     }
 
-    async fn execute(&self, context: &mut StateContext) -> Result<State, StateError> {
+    async fn execute(&self, context: &mut StateContext) -> Result<State> {
         // Extract table name first
         let table_name = {
             let test_context = context.get_handler_context::<IsolationTestContext>(&State::VerifyingResults)
@@ -365,43 +366,36 @@ impl StateHandler for VerifyingResultsHandler {
         Ok(State::Completed)
     }
 
-    async fn exit(&self, context: &mut StateContext) -> Result<(), StateError> {
+    async fn exit(&self, context: &mut StateContext) -> Result<()> {
         context.remove_handler_context(&State::VerifyingResults);
         Ok(())
     }
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> connect::errors::Result<()> {
     print_test_header("TiDB Repeatable Read Isolation Test");
-    
     // Parse command line arguments using the specific args type
     let args = IsolationTestArgs::parse();
-    
     args.init_logging()?;
     args.print_connection_info();
     let (host, user, password, _database) = args.get_connection_info()?;
     let database = args.get_database().unwrap_or_else(|| "test".to_string());
-    
     // Create and configure the state machine
     let mut state_machine = StateMachine::new();
-    
     // Register handlers manually to include custom version handler
     register_isolation_handlers(&mut state_machine, host, user, password, Some(database));
-    
     // Initialize isolation test context using the public method
     state_machine.get_context_mut().set_handler_context(State::CreatingTable, IsolationTestContext::new());
-    
     // Run the state machine
     match state_machine.run().await {
         Ok(_) => {
             print_success("Isolation test completed successfully!");
         }
         Err(e) => {
-            print_error_and_exit("Isolation test failed", &*e);
+            print_error_and_exit("Isolation test failed", &e);
         }
     }
-    
     Ok(())
 }
 

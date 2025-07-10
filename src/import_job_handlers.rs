@@ -1,8 +1,8 @@
 #![allow(non_snake_case)]
 
 use crate::state_machine::{State, StateContext, StateHandler};
+use crate::errors::{StateError, Result};
 use mysql::prelude::*;
-use mysql::*;
 use chrono::Utc;
 use std::time::Duration;
 use tokio::time::sleep;
@@ -30,14 +30,14 @@ pub struct CheckingImportJobsHandler;
 
 #[async_trait]
 impl StateHandler for CheckingImportJobsHandler {
-    async fn enter(&self, context: &mut StateContext) -> Result<State, crate::state_machine::StateError> {
+    async fn enter(&self, context: &mut StateContext) -> Result<State> {
         println!("Checking for active import jobs...");
         // Initialize import job context
         context.set_handler_context(State::CheckingImportJobs, ImportJobContext::new(0));
         Ok(State::CheckingImportJobs)
     }
 
-    async fn execute(&self, context: &mut StateContext) -> Result<State, crate::state_machine::StateError> {
+    async fn execute(&self, context: &mut StateContext) -> Result<State> {
         if let Some(ref mut conn) = context.connection {
             // Execute SHOW IMPORT JOBS
             let query = "SHOW IMPORT JOBS";
@@ -65,11 +65,11 @@ impl StateHandler for CheckingImportJobsHandler {
                 Ok(State::ShowingImportJobDetails)
             }
         } else {
-            return Err("No connection available for checking import jobs".into());
+            return Err(StateError::from("No connection available for checking import jobs"));
         }
     }
 
-    async fn exit(&self, context: &mut StateContext) -> Result<(), crate::state_machine::StateError> {
+    async fn exit(&self, context: &mut StateContext) -> Result<()> {
         // Move the context to the next state
         context.move_handler_context::<ImportJobContext>(&State::CheckingImportJobs, State::ShowingImportJobDetails);
         Ok(())
@@ -89,7 +89,7 @@ impl ShowingImportJobDetailsHandler {
 
 #[async_trait]
 impl StateHandler for ShowingImportJobDetailsHandler {
-    async fn enter(&self, context: &mut StateContext) -> Result<State, crate::state_machine::StateError> {
+    async fn enter(&self, context: &mut StateContext) -> Result<State> {
         // Update the monitor duration in the context
         if let Some(import_context) = context.get_handler_context_mut::<ImportJobContext>(&State::ShowingImportJobDetails) {
             import_context.monitor_duration = self.monitor_duration;
@@ -99,12 +99,12 @@ impl StateHandler for ShowingImportJobDetailsHandler {
         Ok(State::ShowingImportJobDetails)
     }
 
-    async fn execute(&self, context: &mut StateContext) -> Result<State, crate::state_machine::StateError> {
+    async fn execute(&self, context: &mut StateContext) -> Result<State> {
         // Extract context data first to avoid borrowing conflicts
         let (monitor_duration, active_jobs) = if let Some(import_context) = context.get_handler_context::<ImportJobContext>(&State::ShowingImportJobDetails) {
             (import_context.monitor_duration, import_context.active_import_jobs.clone())
         } else {
-            return Err("Import job context not found".into());
+            return Err(StateError::from("Import job context not found"));
         };
 
         if let Some(ref mut conn) = context.connection {
@@ -133,7 +133,7 @@ impl StateHandler for ShowingImportJobDetailsHandler {
                                 job.Phase,
                                 job.Start_Time.map(|t| t.to_string()).unwrap_or_else(|| "N/A".to_string()),
                                 job.Source_File_Size,
-                                job.Imported_Rows,
+                                job.Imported_Rows.unwrap_or(0),
                                 elapsed_h, elapsed_m, elapsed_s
                             );
                         }
@@ -146,12 +146,12 @@ impl StateHandler for ShowingImportJobDetailsHandler {
             
             println!("\n✓ Import job monitoring completed after {monitor_duration} seconds");
         } else {
-            return Err("No connection available for showing import job details".into());
+            return Err(StateError::from("No connection available for showing import job details"));
         }
         Ok(State::Completed)
     }
 
-    async fn exit(&self, context: &mut StateContext) -> Result<(), crate::state_machine::StateError> {
+    async fn exit(&self, context: &mut StateContext) -> Result<()> {
         // Clean up the context
         context.remove_handler_context(&State::ShowingImportJobDetails);
         Ok(())

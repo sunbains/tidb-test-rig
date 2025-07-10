@@ -1,5 +1,6 @@
 use crate::state_machine::{State, StateContext, StateHandler};
 use crate::connection_manager::{ConnectionCoordinator, ConnectionInfo, CoordinationMessage, ConnectionStatus, ConnectionState};
+use crate::errors::Result;
 use async_trait::async_trait;
 use std::sync::Arc;
 use tokio::sync::mpsc;
@@ -78,7 +79,7 @@ impl MultiConnectionStateMachine {
     }
 
     /// Run all state machines concurrently
-    pub async fn run_all(&mut self) -> Result<(), crate::state_machine::StateError> {
+    pub async fn run_all(&mut self) -> Result<()> {
         println!("Starting {} connection state machines...", self.state_machines.len());
         
         // Start coordination
@@ -158,12 +159,12 @@ impl CoordinationHandler {
 
 #[async_trait]
 impl StateHandler for CoordinationHandler {
-    async fn enter(&self, _context: &mut StateContext) -> Result<State, crate::state_machine::StateError> {
+    async fn enter(&self, _context: &mut StateContext) -> Result<State> {
         println!("Starting coordination phase...");
         Ok(State::Initial)
     }
 
-    async fn execute(&self, _context: &mut StateContext) -> Result<State, crate::state_machine::StateError> {
+    async fn execute(&self, _context: &mut StateContext) -> Result<State> {
         // Broadcast that coordination is starting
         let event = crate::connection_manager::CoordinationEvent::AllConnectionsReady;
         if let Err(e) = self.coordinator_sender.send(CoordinationMessage::BroadcastEvent(event)).await {
@@ -173,7 +174,7 @@ impl StateHandler for CoordinationHandler {
         Ok(State::Completed)
     }
 
-    async fn exit(&self, _context: &mut StateContext) -> Result<(), crate::state_machine::StateError> {
+    async fn exit(&self, _context: &mut StateContext) -> Result<()> {
         Ok(())
     }
 } 

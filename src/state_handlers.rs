@@ -1,5 +1,6 @@
-use crate::state_machine::{State, StateContext, StateHandler, StateError};
+use crate::state_machine::{State, StateContext, StateHandler};
 use crate::connection::{parse_connection_string, create_connection_pool};
+use crate::errors::Result;
 use mysql::prelude::*;
 use mysql::*;
 use async_trait::async_trait;
@@ -10,17 +11,17 @@ pub struct InitialHandler;
 
 #[async_trait]
 impl StateHandler for InitialHandler {
-    async fn enter(&self, _context: &mut StateContext) -> Result<State, Box<dyn std::error::Error + Send + Sync>> {
+    async fn enter(&self, _context: &mut StateContext) -> Result<State> {
         info!("Starting TiDB connection test...");
         println!("Starting TiDB connection test...");
         Ok(State::Initial)
     }
 
-    async fn execute(&self, _context: &mut StateContext) -> Result<State, Box<dyn std::error::Error + Send + Sync>> {
+    async fn execute(&self, _context: &mut StateContext) -> Result<State> {
         Ok(State::ParsingConfig)
     }
 
-    async fn exit(&self, _context: &mut StateContext) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn exit(&self, _context: &mut StateContext) -> Result<()> {
         Ok(())
     }
 }
@@ -46,12 +47,12 @@ impl ParsingConfigHandler {
 
 #[async_trait]
 impl StateHandler for ParsingConfigHandler {
-    async fn enter(&self, _context: &mut StateContext) -> Result<State, crate::state_machine::StateError> {
+    async fn enter(&self, _context: &mut StateContext) -> Result<State> {
         println!("Parsing connection configuration...");
         Ok(State::ParsingConfig)
     }
 
-    async fn execute(&self, context: &mut StateContext) -> Result<State, crate::state_machine::StateError> {
+    async fn execute(&self, context: &mut StateContext) -> Result<State> {
         // Parse host and port from connection string
         let (host, port) = parse_connection_string(&self.host)?;
         
@@ -67,7 +68,7 @@ impl StateHandler for ParsingConfigHandler {
         Ok(State::Connecting)
     }
 
-    async fn exit(&self, _context: &mut StateContext) -> Result<(), crate::state_machine::StateError> {
+    async fn exit(&self, _context: &mut StateContext) -> Result<()> {
         Ok(())
     }
 }
@@ -77,12 +78,12 @@ pub struct ConnectingHandler;
 
 #[async_trait]
 impl StateHandler for ConnectingHandler {
-    async fn enter(&self, _context: &mut StateContext) -> Result<State, crate::state_machine::StateError> {
+    async fn enter(&self, _context: &mut StateContext) -> Result<State> {
         println!("Establishing connection to TiDB...");
         Ok(State::Connecting)
     }
 
-    async fn execute(&self, context: &mut StateContext) -> Result<State, crate::state_machine::StateError> {
+    async fn execute(&self, context: &mut StateContext) -> Result<State> {
         info!("Attempting connection to {}:{} as user {}", context.host, context.port, context.username);
         
         // Create connection pool
@@ -103,7 +104,7 @@ impl StateHandler for ConnectingHandler {
         Ok(State::TestingConnection)
     }
 
-    async fn exit(&self, _context: &mut StateContext) -> Result<(), crate::state_machine::StateError> {
+    async fn exit(&self, _context: &mut StateContext) -> Result<()> {
         Ok(())
     }
 }
@@ -113,16 +114,16 @@ pub struct TestingConnectionHandler;
 
 #[async_trait]
 impl StateHandler for TestingConnectionHandler {
-    async fn enter(&self, _context: &mut StateContext) -> Result<State, crate::state_machine::StateError> {
+    async fn enter(&self, _context: &mut StateContext) -> Result<State> {
         println!("Testing connection...");
         Ok(State::TestingConnection)
     }
 
-    async fn execute(&self, context: &mut StateContext) -> Result<State, crate::state_machine::StateError> {
+    async fn execute(&self, context: &mut StateContext) -> Result<State> {
         if let Some(ref mut conn) = context.connection {
             debug!("Testing connection with SELECT 1");
             // Simple ping test
-            let result: Result<Vec<Row>, Error> = conn.exec("SELECT 1", ());
+            let result: std::result::Result<Vec<Row>, Error> = conn.exec("SELECT 1", ());
             match result {
                 Ok(_) => {
                     info!("Connection test passed");
@@ -143,7 +144,7 @@ impl StateHandler for TestingConnectionHandler {
         }
     }
 
-    async fn exit(&self, _context: &mut StateContext) -> Result<(), crate::state_machine::StateError> {
+    async fn exit(&self, _context: &mut StateContext) -> Result<()> {
         Ok(())
     }
 }
@@ -153,12 +154,12 @@ pub struct VerifyingDatabaseHandler;
 
 #[async_trait]
 impl StateHandler for VerifyingDatabaseHandler {
-    async fn enter(&self, _context: &mut StateContext) -> Result<State, crate::state_machine::StateError> {
+    async fn enter(&self, _context: &mut StateContext) -> Result<State> {
         println!("Verifying database...");
         Ok(State::VerifyingDatabase)
     }
 
-    async fn execute(&self, context: &mut StateContext) -> Result<State, crate::state_machine::StateError> {
+    async fn execute(&self, context: &mut StateContext) -> Result<State> {
         if let Some(ref mut conn) = context.connection {
             if let Some(ref db_name) = context.database {
                 // Test if we can access the specified database
@@ -185,7 +186,7 @@ impl StateHandler for VerifyingDatabaseHandler {
         }
     }
 
-    async fn exit(&self, _context: &mut StateContext) -> Result<(), crate::state_machine::StateError> {
+    async fn exit(&self, _context: &mut StateContext) -> Result<()> {
         Ok(())
     }
 }
@@ -195,15 +196,15 @@ pub struct GettingVersionHandler;
 
 #[async_trait]
 impl StateHandler for GettingVersionHandler {
-    async fn enter(&self, _context: &mut StateContext) -> Result<State, crate::state_machine::StateError> {
+    async fn enter(&self, _context: &mut StateContext) -> Result<State> {
         println!("Getting server version...");
         Ok(State::GettingVersion)
     }
 
-    async fn execute(&self, context: &mut StateContext) -> Result<State, crate::state_machine::StateError> {
+    async fn execute(&self, context: &mut StateContext) -> Result<State> {
         if let Some(ref mut conn) = context.connection {
             let query = "SELECT VERSION() as version";
-            let result: Result<Vec<Row>, Error> = conn.exec(query, ());
+            let result: std::result::Result<Vec<Row>, Error> = conn.exec(query, ());
             
             match result {
                 Ok(rows) => {
@@ -233,7 +234,7 @@ impl StateHandler for GettingVersionHandler {
         }
     }
 
-    async fn exit(&self, _context: &mut StateContext) -> Result<(), crate::state_machine::StateError> {
+    async fn exit(&self, _context: &mut StateContext) -> Result<()> {
         Ok(())
     }
 } 
@@ -251,15 +252,15 @@ impl NextStateVersionHandler {
 
 #[async_trait]
 impl StateHandler for NextStateVersionHandler {
-    async fn enter(&self, _context: &mut StateContext) -> Result<State, StateError> {
+    async fn enter(&self, _context: &mut StateContext) -> Result<State> {
         println!("Getting server version...");
         Ok(State::GettingVersion)
     }
 
-    async fn execute(&self, context: &mut StateContext) -> Result<State, StateError> {
+    async fn execute(&self, context: &mut StateContext) -> Result<State> {
         if let Some(ref mut conn) = context.connection {
             let query = "SELECT VERSION() as version";
-            let result: Result<Vec<Row>, Error> = conn.exec(query, ());
+            let result: std::result::Result<Vec<Row>, Error> = conn.exec(query, ());
             match result {
                 Ok(rows) => {
                     if let Some(row) = rows.first() {
@@ -288,7 +289,7 @@ impl StateHandler for NextStateVersionHandler {
         }
     }
 
-    async fn exit(&self, _context: &mut StateContext) -> Result<(), StateError> {
+    async fn exit(&self, _context: &mut StateContext) -> Result<()> {
         Ok(())
     }
 } 

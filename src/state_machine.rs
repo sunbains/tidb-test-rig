@@ -1,9 +1,7 @@
 use std::fmt;
 use mysql::PooledConn;
 use std::any::Any;
-
-/// Type alias for error types used in state handlers
-pub type StateError = Box<dyn std::error::Error + Send + Sync>;
+use crate::errors::{StateError, StateMachineError};
 
 /// Represents the different states in the TiDB connection process
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -194,7 +192,9 @@ impl StateMachine {
                 // Transition to next state
                 self.current_state = next_state;
             } else {
-                return Err(format!("No handler registered for state: {:?}", self.current_state).into());
+                return Err(StateMachineError::NoHandlerRegistered {
+                    state: format!("{:?}", self.current_state)
+                }.into());
             }
         }
 
@@ -205,9 +205,9 @@ impl StateMachine {
             }
             State::Error(msg) => {
                 eprintln!("✗ State machine failed: {msg}");
-                Err(msg.clone().into())
+                Err(StateMachineError::HandlerError(msg.clone()).into())
             }
-            _ => Err("Unexpected final state".into()),
+            _ => Err(StateMachineError::HandlerError("Unexpected final state".to_string()).into()),
         }
     }
 

@@ -1,8 +1,8 @@
 #![allow(non_snake_case)]
 
-use crate::state_machine::{State, StateContext, StateHandler, StateError};
+use crate::state_machine::{State, StateContext, StateHandler};
+use crate::errors::Result;
 use mysql::prelude::*;
-use mysql::*;
 use chrono::{NaiveDateTime, Utc};
 use std::time::Duration;
 use tokio::time::sleep;
@@ -26,7 +26,7 @@ pub struct ImportJob {
     #[allow(non_snake_case)]
     pub Source_File_Size: String,
     #[allow(non_snake_case)]
-    pub Imported_Rows: i64,
+    pub Imported_Rows: Option<i64>,
     #[allow(non_snake_case)]
     pub Result_Message: String,
     #[allow(non_snake_case)]
@@ -84,7 +84,7 @@ impl JobMonitor {
         Self { state_machine }
     }
     
-    pub async fn run(&mut self) -> Result<(), StateError> {
+    pub async fn run(&mut self) -> Result<()> {
         self.state_machine.run().await
     }
     
@@ -102,14 +102,14 @@ pub struct CheckingImportJobsHandler;
 
 #[async_trait]
 impl StateHandler for CheckingImportJobsHandler {
-    async fn enter(&self, context: &mut StateContext) -> Result<State, StateError> {
+    async fn enter(&self, context: &mut StateContext) -> Result<State> {
         println!("Checking for active import jobs...");
         // Initialize job monitor context
         context.set_handler_context(State::CheckingImportJobs, JobMonitorContext::new(0));
         Ok(State::CheckingImportJobs)
     }
 
-    async fn execute(&self, context: &mut StateContext) -> Result<State, StateError> {
+    async fn execute(&self, context: &mut StateContext) -> Result<State> {
         if let Some(ref mut conn) = context.connection {
             // Execute SHOW IMPORT JOBS
             let query = "SHOW IMPORT JOBS";
@@ -141,7 +141,7 @@ impl StateHandler for CheckingImportJobsHandler {
         }
     }
 
-    async fn exit(&self, context: &mut StateContext) -> Result<(), StateError> {
+    async fn exit(&self, context: &mut StateContext) -> Result<()> {
         // Move the context to the next state
         context.move_handler_context::<JobMonitorContext>(&State::CheckingImportJobs, State::ShowingImportJobDetails);
         Ok(())
@@ -161,7 +161,7 @@ impl ShowingImportJobDetailsHandler {
 
 #[async_trait]
 impl StateHandler for ShowingImportJobDetailsHandler {
-    async fn enter(&self, context: &mut StateContext) -> Result<State, StateError> {
+    async fn enter(&self, context: &mut StateContext) -> Result<State> {
         // Update the monitor duration in the context
         if let Some(job_context) = context.get_handler_context_mut::<JobMonitorContext>(&State::ShowingImportJobDetails) {
             job_context.monitor_duration = self.monitor_duration;
@@ -171,7 +171,7 @@ impl StateHandler for ShowingImportJobDetailsHandler {
         Ok(State::ShowingImportJobDetails)
     }
 
-    async fn execute(&self, context: &mut StateContext) -> Result<State, StateError> {
+    async fn execute(&self, context: &mut StateContext) -> Result<State> {
         // Extract context data first to avoid borrowing conflicts
         let (monitor_duration, active_jobs) = if let Some(job_context) = context.get_handler_context::<JobMonitorContext>(&State::ShowingImportJobDetails) {
             (job_context.monitor_duration, job_context.active_import_jobs.clone())
@@ -205,7 +205,7 @@ impl StateHandler for ShowingImportJobDetailsHandler {
                                 job.Phase,
                                 job.Start_Time.map(|t| t.to_string()).unwrap_or_else(|| "N/A".to_string()),
                                 job.Source_File_Size,
-                                job.Imported_Rows,
+                                job.Imported_Rows.unwrap_or_default(),
                                 elapsed_h, elapsed_m, elapsed_s
                             );
                         }
@@ -223,7 +223,7 @@ impl StateHandler for ShowingImportJobDetailsHandler {
         Ok(State::Completed)
     }
 
-    async fn exit(&self, context: &mut StateContext) -> Result<(), StateError> {
+    async fn exit(&self, context: &mut StateContext) -> Result<()> {
         // Clean up the context
         context.remove_handler_context(&State::ShowingImportJobDetails);
         Ok(())
