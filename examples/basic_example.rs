@@ -1,11 +1,11 @@
-use connect::{ExampleSetup, print_example_header, print_success};
+use connect::{TestSetup, print_example_header, print_success};
 
 #[tokio::main]
 async fn main() {
     print_example_header("TiDB Basic Connection Test");
     
     // Use the shared example setup
-    let mut setup = match ExampleSetup::new() {
+    let mut setup = match TestSetup::new() {
         Ok(setup) => setup,
         Err(e) => {
             eprintln!("Failed to initialize example setup: {}", e);

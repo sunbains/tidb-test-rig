@@ -1,7 +1,7 @@
 # TiDB Multi-Connection Test Tool Makefile
 
 .PHONY: help build test clean examples build-examples run-simple run-advanced check format lint \
-	run-simple-connection run-isolation-test run-macro-cli run-logging-example
+	run-simple-connection run-isolation-test run-cli-example run-logging-example
 
 # Default target
 help:
@@ -18,7 +18,7 @@ help:
 	@echo "  run-advanced          - Build and run advanced multi-connection example"
 	@echo "  run-simple-connection - Build and run simple connection example"
 	@echo "  run-isolation-test    - Build and run isolation test example"
-	@echo "  run-macro-cli         - Build and run macro-based CLI example"
+	@echo "  run-cli-example       - Build and run CLI example"
 	@echo "  run-logging-example   - Build and run logging example"
 	@echo "  check                 - Check if code compiles without building"
 	@echo "  format                - Format code with rustfmt"
@@ -59,8 +59,8 @@ run-simple-connection:
 run-isolation-test:
 	cargo run --example isolation_test_example -- -H localhost:4000 -u root -d test
 
-run-macro-cli:
-	cargo run --example macro_cli_example --features="isolation_test" $(ARGS)
+run-cli-example:
+	cargo run --example cli_example --features="isolation_test" -- $(ARGS)
 
 run-logging-example:
 	cargo run --example logging_example -- --log-level debug --log-file --log-file-path logs/mylog.log

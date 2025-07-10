@@ -53,8 +53,8 @@ path = "examples/isolation_test_example.rs"
 required-features = ["isolation_test"]
 
 [[example]]
-name = "macro_cli_example"
-path = "examples/macro_cli_example.rs"
+name = "cli_example"
+path = "examples/cli_example.rs"
 required-features = ["isolation_test"]
 
 [[example]]

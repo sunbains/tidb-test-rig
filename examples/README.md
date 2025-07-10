@@ -98,16 +98,16 @@ cargo run --example basic_example -- --log-level debug --log-file --log-file-pat
 
 The project provides shared utilities in `src/lib_utils.rs` that eliminate code duplication across examples:
 
-### ExampleSetup
+### TestSetup
 For examples using the legacy `parse_args()` approach:
 ```rust
-use connect::{ExampleSetup, print_example_header, print_success};
+use connect::{TestSetup, print_example_header, print_success};
 
 #[tokio::main]
 async fn main() {
     print_example_header("My Example");
     
-    let mut setup = ExampleSetup::new()?;
+    let mut setup = TestSetup::new()?;
     setup.run_with_job_monitoring().await?;
     
     print_success("Example completed!");

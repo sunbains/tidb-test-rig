@@ -278,7 +278,7 @@ examples/
 ├── simple_connection_example.rs  # Basic connection test
 ├── isolation_test_example.rs     # Transaction isolation testing
 ├── logging_example.rs            # Logging demonstration
-├── macro_cli_example.rs          # Macro-based CLI example
+├── cli_example.rs                # CLI example
 ├── simple_multi_connection.rs    # Basic multi-connection example
 ├── multi_connection_example.rs   # Advanced multi-connection example
 └── README.md                     # Example documentation

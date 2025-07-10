@@ -362,7 +362,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut state_machine = StateMachine::new();
     
     // Register standard handlers using the shared utility
-    connect::ExampleSetup::register_standard_handlers(&mut state_machine, host, user, password, Some(database));
+    connect::TestSetup::register_standard_handlers(&mut state_machine, host, user, password, Some(database));
     
     // Register isolation test handlers
     state_machine.register_handler(State::CreatingTable, Box::new(CreatingTableHandler));

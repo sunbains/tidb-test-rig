@@ -9,12 +9,12 @@ use clap::Parser;
 use std::process;
 
 /// Common setup for examples using the legacy parse_args approach
-pub struct ExampleSetup {
+pub struct TestSetup {
     pub args: crate::cli::CommonArgs,
     pub state_machine: StateMachine,
 }
 
-impl ExampleSetup {
+impl TestSetup {
     /// Create a new example setup with standard configuration
     pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
         // Parse command line arguments
@@ -162,7 +162,7 @@ impl CommonArgsSetup {
         let mut state_machine = StateMachine::new();
         
         // Register standard state handlers
-        ExampleSetup::register_standard_handlers(&mut state_machine, host, user, password, database);
+        TestSetup::register_standard_handlers(&mut state_machine, host, user, password, database);
         
         Ok(Self {
             args,
@@ -178,7 +178,7 @@ impl CommonArgsSetup {
                 Ok(())
             }
             Err(e) => {
-                ExampleSetup::handle_connection_error(&e);
+                TestSetup::handle_connection_error(&e);
                 Err(e)
             }
         }
@@ -218,7 +218,7 @@ impl CommonArgsSetup {
                 Ok(())
             }
             Err(e) => {
-                ExampleSetup::handle_connection_error(&e);
+                TestSetup::handle_connection_error(&e);
                 Err(e)
             }
         }
@@ -250,6 +250,6 @@ pub fn create_state_machine_with_handlers(
     database: Option<String>,
 ) -> crate::state_machine::StateMachine {
     let mut state_machine = crate::state_machine::StateMachine::new();
-    ExampleSetup::register_standard_handlers(&mut state_machine, host, user, password, database);
+    TestSetup::register_standard_handlers(&mut state_machine, host, user, password, database);
     state_machine
 } 
