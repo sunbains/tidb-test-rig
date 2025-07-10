@@ -11,32 +11,31 @@ All examples use a shared command-line interface library that provides:
 - **Flexible Password Input**: Command line, environment variable, or interactive prompt
 - **Parameter Validation**: Automatic validation of connection parameters
 - **Help and Usage**: Built-in help with `--help` flag
-- **Compile-time Options**: Different CLI options based on example type using features and macros
 - **Integrated Logging**: Control log level, file output, and verbosity from the CLI
 
 ### CLI Usage
 
 ```bash
 # Basic usage with interactive password prompt
-cargo run --example simple_connection -- -H localhost:4000 -u root -d test
+cargo run --example basic_example -- -H localhost:4000 -u root -d test
 
 # Using environment variables
 export TIDB_HOST=localhost:4000
 export TIDB_USER=root
 export TIDB_PASSWORD=mypassword
-cargo run --example simple_connection
+cargo run --example basic_example
 
 # Using command line password (less secure)
-cargo run --example simple_connection -- -H localhost:4000 -u root --password mypassword
+cargo run --example basic_example -- -H localhost:4000 -u root --password mypassword
 
 # Skip password prompt (for automated testing)
-cargo run --example simple_connection -- -H localhost:4000 -u root --no-password-prompt
+cargo run --example basic_example -- -H localhost:4000 -u root --no-password-prompt
 
 # Enable debug logging to console
-cargo run --example simple_connection -- --log-level debug
+cargo run --example basic_example -- --log-level debug
 
 # Log to a file
-cargo run --example simple_connection -- --log-file --log-file-path logs/mylog.log
+cargo run --example basic_example -- --log-file --log-file-path logs/mylog.log
 ```
 
 ### Available Arguments
@@ -89,18 +88,19 @@ log_state_transition!(from, to);
 ### Example: Logging to File
 
 ```bash
-cargo run --example logging_example -- --log-level debug --log-file --log-file-path logs/mylog.log
+cargo run --example basic_example -- --log-level debug --log-file --log-file-path logs/mylog.log
 ```
 
 ## Available Examples
 
-### 1. Simple Connection Example (`simple_connection_example.rs`)
-A basic example showing how to connect to TiDB and perform basic operations.
+### 1. Basic Example (`basic_example.rs`)
+A comprehensive example showing how to connect to TiDB and perform basic operations.
 
 **Features:**
 - Uses the common CLI library for argument parsing
 - Demonstrates basic connection testing
 - Shows version checking and database verification
+- Includes import job monitoring capabilities
 - Minimal example for getting started
 
 ### 2. Isolation Test Example (`isolation_test_example.rs`)
@@ -129,16 +129,7 @@ A comprehensive example showing advanced multi-connection scenarios with import 
 - Advanced error handling and recovery
 - Coordination between multiple state machines
 
-### 5. Macro-based CLI Example (`macro_cli_example.rs`)
-A demonstration of compile-time CLI configuration using macros.
-
-**Features:**
-- Uses macro-generated CLI arguments specific to isolation testing
-- Shows how to customize CLI options at compile time
-- Demonstrates example-specific argument handling
-- Includes test rows configuration for isolation testing
-
-### 6. Logging Example (`logging_example.rs`)
+### 5. Logging Example (`logging_example.rs`)
 A demonstration of the logging facility, including log levels, file output, performance metrics, and error context.
 
 **Features:**
@@ -155,14 +146,11 @@ A demonstration of the logging facility, including log levels, file output, perf
 # Build all examples
 cargo build --examples
 
-# Run simple connection example
-cargo run --example simple_connection -- -H localhost:4000 -u root -d test
+# Run basic example
+cargo run --example basic_example -- -H localhost:4000 -u root -d test
 
 # Run isolation test example
 cargo run --example isolation_test_example -- -H localhost:4000 -u root -d test
-
-# Run macro-based CLI example
-cargo run --example macro_cli_example -- -H localhost:4000 -u root -d test --test-rows 20
 
 # Run simple multi-connection example
 cargo run --example simple_multi_connection
@@ -183,8 +171,8 @@ cargo check --examples
 # Build all examples
 make examples
 
-# Run simple connection example
-make run-simple-connection
+# Run basic example
+make run-basic
 
 # Run isolation test example
 make run-isolation-test
@@ -213,11 +201,9 @@ Before running the examples, you may need to configure:
 2. **Authentication**: Ensure you have valid TiDB credentials
 3. **Network Access**: Verify connectivity to your TiDB instances
 
-## Compile-time CLI Configuration
+## Feature-based Configuration
 
-The project supports different CLI configurations at compile time:
-
-### Feature-based Configuration
+The project supports different features at compile time:
 
 ```bash
 # Build with import job monitoring support
@@ -233,27 +219,11 @@ cargo build --features multi_connection
 cargo build --features "import_jobs,multi_connection"
 ```
 
-### Macro-based Configuration
-
-Examples can use macros to generate custom CLI arguments:
-
-```rust
-use connect::{generate_cli_args, generate_cli_impl};
-
-// Generate CLI arguments specific to isolation testing
-generate_cli_args!(isolation_test);
-
-// Generate CLI implementation specific to isolation testing
-generate_cli_impl!(isolation_test);
-```
-
-This approach allows each example to have its own CLI interface while sharing common functionality.
-
 ## Example Output
 
-### Simple Connection Example
+### Basic Example
 ```
-TiDB Simple Connection Test
+TiDB Basic Connection Test
 ===========================
 Connection Info:
   Host: localhost:4000
@@ -264,7 +234,7 @@ Connection Info:
 TiDB version: 6.5.0
 ✓ Database 'test' exists
 
-✅ Simple connection test completed successfully!
+✅ Basic connection test completed successfully!
 ```
 
 ### Isolation Test Example
@@ -318,7 +288,7 @@ Check the logs for detailed information.
 To run examples with debug output:
 
 ```bash
-RUST_LOG=debug cargo run --example simple_connection
+RUST_LOG=debug cargo run --example basic_example
 ```
 
 ## Contributing
