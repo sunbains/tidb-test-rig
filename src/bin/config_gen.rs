@@ -303,7 +303,8 @@ mod tests {
             "test-bin",
             "--output", output_path.to_str().unwrap(),
             "--format", "toml",
-            "--host", "tomlhost:4000"
+            "--host", "tomlhost:4000",
+            "--username", "tomluser"
         ]);
         
         let config = ConfigBuilder::new()

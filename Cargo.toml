@@ -51,15 +51,7 @@ name = "isolation"
 path = "src/bin/isolation.rs"
 required-features = ["isolation_test"]
 
-[[bin]]
-name = "cli"
-path = "src/bin/cli.rs"
-required-features = ["isolation_test"]
 
-[[bin]]
-name = "logging"
-path = "src/bin/logging.rs"
-required-features = []
 
 [[bin]]
 name = "job_monitor"
