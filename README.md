@@ -8,7 +8,6 @@ This tool is designed to test and monitor TiDB database connections with advance
 
 - **Multi-Connection Management**: Coordinate multiple TiDB connections simultaneously
 - **State Machine Architecture**: Robust, extensible state-driven workflows
-- **Import Job Monitoring**: Real-time monitoring of TiDB import jobs
 - **Secure Authentication**: Password input with hidden terminal input
 - **Async Operations**: Full async/await support with Tokio runtime
 - **Error Handling**: Comprehensive error handling with graceful degradation
@@ -37,7 +36,6 @@ All other examples (multi-connection, isolation, macro CLI, etc.) are also avail
 - ✅ **Connection Testing**: Verify TiDB connectivity and authentication
 - ✅ **Database Verification**: Check database existence and permissions
 - ✅ **Version Detection**: Retrieve and display TiDB version information
-- ✅ **Import Job Monitoring**: Monitor active import jobs with real-time updates
 - ✅ **Multi-Connection Coordination**: Manage multiple connections with shared state
 - ✅ **State Machine Workflows**: Extensible state-driven architecture
 - ✅ **Secure Password Input**: Hidden password prompts for security
@@ -45,7 +43,6 @@ All other examples (multi-connection, isolation, macro CLI, etc.) are also avail
 
 ### Advanced Features
 - 🔄 **State Transitions**: Automatic state progression with error handling
-- 📊 **Job Monitoring**: Real-time import job status with elapsed time tracking
 - 🔗 **Connection Pooling**: Efficient connection management and reuse
 - 📝 **Structured Logging**: Comprehensive logging with different verbosity levels
 - 🛡️ **Error Recovery**: Graceful error handling and recovery mechanisms
@@ -91,7 +88,6 @@ For scenarios requiring multiple connections:
 2. **StateHandler**: Trait for implementing state-specific logic
 3. **StateContext**: Shared context with connection and handler-specific data
 4. **ConnectionCoordinator**: Manages multiple connections with shared state
-5. **ImportJobHandlers**: Specialized handlers for import job monitoring
 
 ## Installation
 
@@ -393,8 +389,6 @@ telnet your-tidb-host 4000
 # Error: No connection available
 # Solution: Check connection parameters and network connectivity
 
-# Error: Import job monitoring fails
-# Solution: Verify user has SHOW IMPORT JOBS permission
 ```
 
 ### Debug Mode
