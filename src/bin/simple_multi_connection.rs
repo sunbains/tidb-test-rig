@@ -1,3 +1,72 @@
+//!
+//! # Simple Multi-Connection TiDB Testing Binary
+//!
+//! This binary demonstrates a straightforward approach to running multiple TiDB connections in parallel.
+//! It is designed as an easy-to-understand example for basic concurrency and load testing scenarios,
+//! and serves as a starting point for more advanced multi-connection workflows.
+//!
+//! ## Overview
+//!
+//! This test creates and manages multiple TiDB connections simultaneously, running them in parallel
+//! with minimal coordination. Each connection is managed by its own state machine, and results are
+//! collected in a shared state for simple reporting at the end of the test.
+//!
+//! This approach is ideal for:
+//! - **Basic Load Testing**: Simulate multiple clients connecting and running queries concurrently
+//! - **Connection Health Checks**: Verify that multiple connections can be established and used in parallel
+//! - **Quick Prototyping**: Use as a template for building more complex multi-connection tests
+//!
+//! ## Architecture
+//!
+//! - **SimpleMultiConnectionCoordinator**: Manages a list of connection configs and a shared state for results
+//! - **StateMachine per Connection**: Each connection runs its own state machine independently
+//! - **SharedTestState**: Collects connection results and global status for reporting
+//!
+//! ## State Flow
+//!
+//! Each connection follows this state progression:
+//! 1. **Initial** → **ParsingConfig** → **Connecting** → **TestingConnection**
+//! 2. **VerifyingDatabase** → **GettingVersion** → **Completed**
+//!
+//! All connections run these states concurrently, and their results are aggregated at the end.
+//!
+//! ## Features
+//!
+//! - **Parallel Connection Management**: Multiple connections run in parallel using Tokio tasks
+//! - **Minimal Coordination**: No complex event or message passing between connections
+//! - **Simple Reporting**: Aggregates and prints connection results and statuses
+//! - **Easy to Extend**: Serves as a foundation for more advanced multi-connection scenarios
+//!
+//! ## Usage
+//!
+//! ```bash
+//! # Basic usage with default settings
+//! cargo run --bin simple_multi_connection --features multi_connection
+//!
+//! # Custom connection count
+//! cargo run --bin simple_multi_connection --features multi_connection -- --connection-count 5
+//!
+//! # With configuration file
+//! cargo run --bin simple_multi_connection --features multi_connection -- -c config.json
+//! ```
+//!
+//! ## Output
+//!
+//! The test prints:
+//! - Connection status for each connection (host, status, errors)
+//! - Global test status
+//! - Summary of all connection results
+//!
+//! ## Error Handling
+//!
+//! - Individual connection failures are reported and do not affect other connections
+//! - Errors are collected and displayed in the final report
+//!
+//! ## Extensibility
+//!
+//! This binary is intended as a simple, clear example. For more advanced coordination, shared state,
+//! or import job monitoring, see the `multi_connection.rs` binary.
+
 use connect::state_machine::{StateMachine, State};
 use connect::errors::StateError;
 use connect::state_handlers::{InitialHandler, ParsingConfigHandler, ConnectingHandler, TestingConnectionHandler, VerifyingDatabaseHandler, GettingVersionHandler};

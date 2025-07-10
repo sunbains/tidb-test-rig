@@ -1,3 +1,77 @@
+//!
+//! # TiDB Configuration Generator Binary
+//!
+//! This binary generates configuration files for the TiDB testing framework, providing a convenient
+//! way to create properly formatted configuration files with sensible defaults and customization options.
+//!
+//! ## Overview
+//!
+//! The configuration generator creates JSON or TOML configuration files that can be used by all
+//! the testing binaries in this framework. It uses a builder pattern for easy configuration creation
+//! and provides sensible defaults while allowing full customization of all settings.
+//!
+//! This tool is useful for:
+//! - **Quick Setup**: Generate working configuration files with minimal effort
+//! - **Environment-Specific Configs**: Create different configs for development, staging, and production
+//! - **Template Creation**: Generate base configurations that can be further customized
+//! - **Automation**: Integrate configuration generation into CI/CD pipelines
+//!
+//! ## Features
+//!
+//! - **Multiple Output Formats**: Supports both JSON and TOML configuration formats
+//! - **Builder Pattern**: Clean, fluent API for building configurations
+//! - **Sensible Defaults**: Provides reasonable defaults for all settings
+//! - **Full Customization**: Override any setting via command-line arguments
+//! - **Validation**: Ensures generated configurations are valid and complete
+//!
+//! ## CLI Options
+//!
+//! - `--output, -o`: Output file path (default: tidb_config.json)
+//! - `--format, -f`: Output format: json or toml (default: json)
+//! - `--host`: Database host (default: localhost:4000)
+//! - `--username`: Database username (default: root)
+//! - `--database`: Database name (optional)
+//! - `--log-level`: Log level (default: info)
+//!
+//! ## Usage
+//!
+//! ```bash
+//! # Generate default JSON configuration
+//! cargo run --bin config_gen
+//!
+//! # Generate TOML configuration with custom settings
+//! cargo run --bin config_gen -- --format toml --host my-tidb:4000 --username myuser --database mydb
+//!
+//! # Generate configuration with custom output path
+//! cargo run --bin config_gen -- --output my_config.json --host prod-tidb:4000 --log-level debug
+//! ```
+//!
+//! ## Output
+//!
+//! The generator creates configuration files with this structure:
+//! - **Database Settings**: Host, username, database name, connection pool settings
+//! - **Logging Configuration**: Log level, format, file/console output settings
+//! - **Test Configuration**: Test-specific settings like number of rows, timeouts
+//!
+//! ## Integration
+//!
+//! Generated configuration files can be used with all testing binaries:
+//! - `cargo run --bin basic -- -c tidb_config.json`
+//! - `cargo run --bin job_monitor --features import_jobs -- -c tidb_config.json`
+//! - `cargo run --bin isolation --features isolation_test -- -c tidb_config.json`
+//!
+//! ## Examples
+//!
+//! ### Development Configuration
+//! ```bash
+//! cargo run --bin config_gen -- --host localhost:4000 --username root --log-level debug
+//! ```
+//!
+//! ### Production Configuration
+//! ```bash
+//! cargo run --bin config_gen -- --format toml --host prod-tidb:4000 --username appuser --database production --log-level warn
+//! ```
+
 use connect::ConfigBuilder;
 use clap::Parser;
 use std::path::PathBuf;
@@ -30,11 +104,7 @@ struct Args {
     #[arg(long, default_value = "info")]
     log_level: String,
     
-    /// Test rows
-    #[arg(long, default_value = "10")]
-    test_rows: u32,
-    
-    // Monitor duration moved to job_monitor.rs
+    // test_rows moved to isolation.rs
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -44,8 +114,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut builder = ConfigBuilder::new()
         .host(args.host)
         .username(args.username)
-        .log_level(args.log_level)
-        .test_rows(args.test_rows);
+        .log_level(args.log_level);
     
     if let Some(database) = args.database {
         builder = builder.database(database);
@@ -90,18 +159,16 @@ mod tests {
             "--host", "testhost:4000",
             "--username", "testuser",
             "--database", "testdb",
-            "--log-level", "debug",
-            "--test-rows", "20"
-        ]);
-        
-        assert_eq!(args.output.to_string_lossy(), "test_config.json");
-        assert_eq!(args.format, "json");
-        assert_eq!(args.host, "testhost:4000");
-        assert_eq!(args.username, "testuser");
-        assert_eq!(args.database, Some("testdb".to_string()));
-        assert_eq!(args.log_level, "debug");
-        assert_eq!(args.test_rows, 20);
-        // monitor_duration moved to job_monitor.rs
+            "--log-level", "debug"
+    ]);
+    
+    assert_eq!(args.output.to_string_lossy(), "test_config.json");
+    assert_eq!(args.format, "json");
+    assert_eq!(args.host, "testhost:4000");
+    assert_eq!(args.username, "testuser");
+    assert_eq!(args.database, Some("testdb".to_string()));
+    assert_eq!(args.log_level, "debug");
+    // test_rows moved to isolation.rs
     }
 
     #[test]
@@ -113,8 +180,7 @@ mod tests {
         assert_eq!(args.username, "root");
         assert_eq!(args.database, None);
         assert_eq!(args.log_level, "info");
-        assert_eq!(args.test_rows, 10);
-        // monitor_duration moved to job_monitor.rs
+        // test_rows moved to isolation.rs
     }
 
     #[test]
@@ -125,14 +191,12 @@ mod tests {
             .username("testuser")
             .database("testdb")
             .log_level("debug")
-            .test_rows(25)
             .build();
         
         assert_eq!(config.database.host, "testhost:4000");
         assert_eq!(config.database.username, "testuser");
         assert_eq!(config.database.database, Some("testdb".to_string()));
         assert_eq!(config.logging.level, "debug");
-        assert_eq!(config.test.rows, 25);
     }
 
     #[test]
@@ -145,17 +209,15 @@ mod tests {
             "test-bin",
             "--output", output_path.to_str().unwrap(),
             "--host", "genhost:4000",
-            "--username", "genuser",
-            "--test-rows", "15"
+            "--username", "genuser"
         ]);
         
         // Simulate the main function logic
         let builder = ConfigBuilder::new()
             .host(args.host)
             .username(args.username)
-            .log_level(args.log_level)
-            .test_rows(args.test_rows);
-            // monitor_duration moved to job_monitor.rs
+            .log_level(args.log_level);
+            // test_rows moved to isolation.rs
         
         let config = builder.build();
         
@@ -167,7 +229,6 @@ mod tests {
         let loaded_config = AppConfig::from_file(&output_path).unwrap();
         assert_eq!(loaded_config.database.host, "genhost:4000");
         assert_eq!(loaded_config.database.username, "genuser");
-        assert_eq!(loaded_config.test.rows, 15);
     }
 
     #[test]
@@ -186,9 +247,8 @@ mod tests {
         let config = ConfigBuilder::new()
             .host(args.host)
             .username(args.username)
-            .log_level(args.log_level)
-            .test_rows(args.test_rows);
-            // monitor_duration moved to job_monitor.rs
+            .log_level(args.log_level);
+            // test_rows moved to isolation.rs
         
         let config = config.build();
         

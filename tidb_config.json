@@ -1,14 +1,14 @@
 {
   "database": {
-    "host": "prod-tidb:4000",
-    "username": "produser",
+    "host": "testhost:4000",
+    "username": "testuser",
     "password": null,
-    "database": "proddb",
+    "database": "testdb",
     "pool_size": 5,
     "timeout_secs": 30
   },
   "logging": {
-    "level": "debug",
+    "level": "info",
     "format": "text",
     "file": null,
     "console": true

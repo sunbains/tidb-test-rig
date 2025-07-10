@@ -1,3 +1,72 @@
+//!
+//! # TiDB Isolation Test Binary
+//!
+//! This binary implements a simple test for TiDB's transaction isolation guarantees (such as repeatable read).
+//! It is designed to verify that TiDB enforces correct isolation semantics under concurrent transactions.
+//!
+//! ## Overview
+//!
+//! The isolation test creates a dedicated test table, populates it with data, and then runs concurrent transactions
+//! to verify that isolation properties (e.g., repeatable read) are upheld. The test is useful for:
+//! - **Verifying Transaction Isolation**: Ensuring TiDB's isolation level is correctly implemented
+//! - **Regression Testing**: Detecting changes or regressions in isolation behavior across TiDB versions
+//! - **Database Correctness**: Validating that concurrent operations do not violate isolation guarantees
+//!
+//! ## Architecture
+//!
+//! - **State Machine**: Drives the workflow through all phases of the test
+//! - **Custom Handlers**: Implements handlers for creating tables, populating data, and running isolation checks
+//! - **Test Context**: Stores test table name, results, and phase for each run
+//!
+//! ## State Flow
+//!
+//! The test progresses through these states:
+//! 1. **Initial** → **ParsingConfig** → **Connecting**
+//! 2. **CreatingTable**: Create a dedicated test table for isolation testing
+//! 3. **PopulatingData**: Insert test rows into the table
+//! 4. **TestingIsolation**: Run concurrent transactions to verify isolation
+//! 5. **VerifyingResults**: Check and report the results
+//! 6. **Completed**
+//!
+//! ## Features
+//!
+//! - **Automated Table Setup**: Creates and cleans up a dedicated test table
+//! - **Concurrent Transaction Testing**: Runs multiple transactions to test isolation
+//! - **Detailed Reporting**: Prints step-by-step results and any detected anomalies
+//! - **Configurable Test Size**: Number of test rows is configurable via CLI
+//! - **Extensible**: Handlers can be extended for more complex isolation scenarios
+//!
+//! ## Usage
+//!
+//! ```bash
+//! # Basic usage with default settings
+//! cargo run --bin isolation --features isolation_test
+//!
+//! # Custom number of test rows
+//! cargo run --bin isolation --features isolation_test -- --test-rows 20
+//!
+//! # With configuration file
+//! cargo run --bin isolation --features isolation_test -- -c config.json
+//! ```
+//!
+//! ## Output
+//!
+//! The test prints:
+//! - Connection and test configuration
+//! - Step-by-step progress through each phase
+//! - Results of isolation checks and any errors detected
+//!
+//! ## Error Handling
+//!
+//! - All errors are reported with context
+//! - Test aborts on critical failures (e.g., connection errors, table creation failures)
+//! - Results are printed for debugging and regression tracking
+//!
+//! ## Extensibility
+//!
+//! This binary is intended as a robust, extensible foundation for isolation and concurrency testing in TiDB.
+//! Handlers and test logic can be extended to cover more advanced isolation scenarios as needed.
+
 use connect::state_machine::{StateMachine, State, StateContext, StateHandler};
 use connect::{CommonArgs, print_test_header, print_success, print_error_and_exit, register_standard_handlers};
 use connect::state_handlers::NextStateVersionHandler;
