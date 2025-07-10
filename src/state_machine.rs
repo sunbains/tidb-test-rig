@@ -16,6 +16,10 @@ pub enum State {
     GettingVersion,
     CheckingImportJobs,
     ShowingImportJobDetails,
+    CreatingTable,
+    PopulatingData,
+    TestingIsolation,
+    VerifyingResults,
     Completed,
     Error(String),
 }
@@ -31,6 +35,10 @@ impl fmt::Display for State {
             State::GettingVersion => write!(f, "Getting Server Version"),
             State::CheckingImportJobs => write!(f, "Checking Import Jobs"),
             State::ShowingImportJobDetails => write!(f, "Showing Import Job Details"),
+            State::CreatingTable => write!(f, "Creating Test Table"),
+            State::PopulatingData => write!(f, "Populating Test Data"),
+            State::TestingIsolation => write!(f, "Testing Isolation"),
+            State::VerifyingResults => write!(f, "Verifying Results"),
             State::Completed => write!(f, "Completed"),
             State::Error(msg) => write!(f, "Error: {msg}"),
         }

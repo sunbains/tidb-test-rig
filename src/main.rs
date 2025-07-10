@@ -1,37 +1,18 @@
-use clap::Parser;
 use std::process;
 use connect::state_machine::{StateMachine, State};
 use connect::state_handlers::{InitialHandler, ParsingConfigHandler, ConnectingHandler, TestingConnectionHandler, VerifyingDatabaseHandler, GettingVersionHandler};
-use connect::{CheckingImportJobsHandler, ShowingImportJobDetailsHandler};
-use rpassword::prompt_password;
-
-#[derive(Parser)]
-#[command(name = "tidb-client")]
-#[command(about = "A basic TiDB client for connection testing")]
-struct Args {
-    /// Hostname and port in format hostname:port
-    #[arg(short = 'H', long, default_value = "tidb.qyruvz1u6xtd.clusters.dev.tidb-cloud.com:4000")]
-    host: String,
-    
-    /// Username for database authentication
-    #[arg(short = 'u', long)]
-    user: String,
-    
-    /// Database name (optional)
-    #[arg(short = 'd', long)]
-    database: Option<String>,
-
-    /// Duration to monitor import jobs in seconds (default: 60)
-    #[arg(short = 't', long, default_value = "60")]
-    monitor_duration: u64,
-}
+use connect::{CheckingImportJobsHandler, ShowingImportJobDetailsHandler, parse_args};
 
 #[tokio::main]
 async fn main() {
-    let args = Args::parse();
-
-    // Prompt for password securely
-    let password = prompt_password("Password: ").expect("Failed to read password");
+    // Parse command line arguments
+    let args = parse_args().expect("Failed to parse arguments");
+    
+    // Print connection info
+    args.print_connection_info();
+    
+    // Get connection info
+    let (host, user, password, database) = args.get_connection_info().expect("Failed to get connection info");
     
     // Create and configure the state machine
     let mut state_machine = StateMachine::new();
@@ -41,10 +22,10 @@ async fn main() {
     state_machine.register_handler(
         State::ParsingConfig,
         Box::new(ParsingConfigHandler::new(
-            args.host.clone(),
-            args.user.clone(),
+            host,
+            user,
             password,
-            args.database.clone()
+            database
         ))
     );
     state_machine.register_handler(State::Connecting, Box::new(ConnectingHandler));

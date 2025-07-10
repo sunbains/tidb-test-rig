@@ -3,6 +3,14 @@ name = "connect"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+default = []
+import_jobs = []
+isolation_test = []
+multi_connection = []
+debug = []
+verbose = []
+
 [dependencies]
 clap = { version = "4.0", features = ["derive"] }
 mysql = { version = "26.0", features = ["chrono"] }
@@ -13,11 +21,26 @@ async-trait = "0.1"
 serde = { version = "1.0", features = ["derive"] }
 
 [[example]]
+name = "simple_connection"
+path = "examples/simple_connection_example.rs"
+required-features = []
+
+[[example]]
 name = "simple_multi_connection"
 path = "examples/simple_multi_connection.rs"
-required-features = []
+required-features = ["multi_connection"]
 
 [[example]]
 name = "multi_connection_example"
 path = "examples/multi_connection_example.rs"
-required-features = []
+required-features = ["multi_connection", "import_jobs"]
+
+[[example]]
+name = "isolation_test_example"
+path = "examples/isolation_test_example.rs"
+required-features = ["isolation_test"]
+
+[[example]]
+name = "macro_cli_example"
+path = "examples/macro_cli_example.rs"
+required-features = ["isolation_test"]
