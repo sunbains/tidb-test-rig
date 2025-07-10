@@ -82,5 +82,4 @@ async fn main() {
             process::exit(1);
         }
     }
-}
-
+} 

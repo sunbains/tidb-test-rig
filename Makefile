@@ -13,6 +13,7 @@ help:
 	@echo "  clean                 - Clean build artifacts"
 	@echo "  examples              - Build all examples"
 	@echo "  build-examples        - Build all examples"
+	@echo "  run-basic             - Build and run basic connection example"
 	@echo "  run-simple            - Build and run simple multi-connection example"
 	@echo "  run-advanced          - Build and run advanced multi-connection example"
 	@echo "  run-simple-connection - Build and run simple connection example"
@@ -48,6 +49,9 @@ run-simple:
 
 run-advanced:
 	cargo run --example multi_connection_example
+
+run-basic:
+	cargo run --example basic_example -- -H localhost:4000 -u root -d test
 
 run-simple-connection:
 	cargo run --example simple_connection -- -H localhost:4000 -u root -d test

@@ -13,6 +13,24 @@ This tool is designed to test and monitor TiDB database connections with advance
 - **Async Operations**: Full async/await support with Tokio runtime
 - **Error Handling**: Comprehensive error handling with graceful degradation
 
+## Library Structure
+
+This project is now a **reusable Rust library** for TiDB connection and import job testing. The main CLI application previously in `src/main.rs` has been moved to `examples/basic_example.rs`.
+
+- **Library usage:** Import the `connect` crate in your own Rust projects and use the state machine, handlers, and coordination logic directly.
+- **CLI usage:** Run the main CLI as an example:
+  ```bash
+  cargo run --example basic_example -- -H localhost:4000 -u root -d test
+  ```
+  or
+  ```bash
+  make run-basic
+  ```
+
+All other examples (multi-connection, isolation, macro CLI, etc.) are also available in the `examples/` directory and use the library API.
+
+---
+
 ## Features
 
 ### Core Capabilities
@@ -146,6 +164,12 @@ done
 ## Examples
 
 The project includes comprehensive examples demonstrating various use cases:
+
+### Basic Example (Main CLI)
+```bash
+cargo run --example basic_example -- -H localhost:4000 -u root -d test
+```
+This is the main CLI entry point for single-connection and import job monitoring workflows.
 
 ### Simple Multi-Connection Example
 ```bash
