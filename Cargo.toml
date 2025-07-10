@@ -1,3 +1,6 @@
+[workspace]
+members = ["src/bin"]
+
 [package]
 name = "test_rig"
 version = "0.1.0"
@@ -30,38 +33,6 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "time"] }
 tracing-appender = "0.2"
 thiserror = "2.0"
-
-[[bin]]
-name = "basic"
-path = "src/bin/basic.rs"
-required-features = []
-
-[[bin]]
-name = "simple_multi_connection"
-path = "src/bin/simple_multi_connection.rs"
-required-features = ["multi_connection"]
-
-[[bin]]
-name = "multi_connection"
-path = "src/bin/multi_connection.rs"
-required-features = ["multi_connection", "import_jobs"]
-
-[[bin]]
-name = "isolation"
-path = "src/bin/isolation.rs"
-required-features = ["isolation_test"]
-
-
-
-[[bin]]
-name = "job_monitor"
-path = "src/bin/job_monitor.rs"
-required-features = ["import_jobs"]
-
-[[bin]]
-name = "config_gen"
-path = "src/bin/config_gen.rs"
-required-features = []
 
 [dev-dependencies]
 tempfile = "3.10"

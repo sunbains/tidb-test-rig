@@ -213,26 +213,26 @@ All binaries support these common options:
 ## Project Structure
 
 ```
-src/
-├── bin/                    # Binary executables with test-specific configs
-│   ├── basic.rs           # Basic connection test
-│   ├── simple_multi_connection.rs
-│   ├── multi_connection.rs
-│   ├── isolation.rs       # Isolation testing with IsolationTestConfig
-│   ├── job_monitor.rs     # Import job monitoring with ImportJobConfig
-│   ├── logging.rs         # Logging test
-│   └── config_gen.rs      # Configuration generator
-├── cli.rs                 # Command-line interface utilities
-├── config.rs              # Core configuration management (AppConfig, DatabaseConfig, etc.)
-├── connection.rs          # Database connection utilities
-├── errors.rs              # Error types and handling
-├── import_job_handlers.rs # Import job state handlers
-├── import_job_monitor.rs  # Import job monitoring
-├── lib_utils.rs           # Common utilities
-├── logging.rs             # Logging configuration
-├── state_machine.rs       # State machine framework
-├── state_handlers.rs      # State handlers
-└── multi_connection_state_machine.rs
+test_rig/
+├── src/
+│   ├── lib.rs              # Main library with shared functionality
+│   ├── config.rs           # Core configuration management (AppConfig, DatabaseConfig, etc.)
+│   ├── cli.rs              # CLI argument parsing
+│   ├── errors.rs           # Error types and handling
+│   ├── state_machine.rs    # State machine framework
+│   ├── state_handlers.rs   # State handlers for different test phases
+│   ├── import_job_handlers.rs # Import job specific handlers
+│   ├── lib_utils.rs        # Utility functions
+│   └── bin/                # Binary executables (separate workspace)
+│       ├── Cargo.toml      # Binary package configuration
+│       ├── basic.rs        # Basic connection test
+│       ├── config_gen.rs   # Configuration file generator
+│       ├── isolation.rs    # Transaction isolation test
+│       ├── job_monitor.rs  # Import job monitoring
+│       ├── multi_connection.rs # Multi-connection test
+│       └── simple_multi_connection.rs # Simple multi-connection test
+├── Cargo.toml              # Main package configuration (workspace)
+└── README.md               # This file
 ```
 
 ## Configuration Architecture
@@ -267,7 +267,10 @@ The framework uses `thiserror` for comprehensive error handling:
 ### Building
 
 ```bash
-# Build all binaries
+# Build entire workspace (library + binaries)
+cargo build --workspace
+
+# Build only the library
 cargo build
 
 # Build specific binary
@@ -280,7 +283,10 @@ cargo build --bin job_monitor --features import_jobs
 ### Testing
 
 ```bash
-# Run unit tests
+# Run all tests in workspace
+cargo test --workspace
+
+# Run only library tests
 cargo test
 
 # Run with specific features
