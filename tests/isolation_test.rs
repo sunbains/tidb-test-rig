@@ -1,5 +1,5 @@
 use connect::state_machine::{StateMachine, State, StateContext, StateHandler, StateError};
-use connect::{CommonArgs, print_example_header, print_success, print_error_and_exit};
+use connect::{CommonArgs, print_test_header, print_success, print_error_and_exit};
 use mysql::prelude::*;
 use mysql::*;
 use async_trait::async_trait;
@@ -7,8 +7,8 @@ use serde::{Deserialize, Serialize};
 use clap::Parser;
 
 #[derive(Parser, Debug)]
-#[command(name = "isolation-test-example")]
-#[command(about = "TiDB isolation test example with test-specific arguments")]
+#[command(name = "isolation-test")]
+#[command(about = "TiDB isolation test with test-specific arguments")]
 pub struct IsolationTestArgs {
     #[command(flatten)]
     pub common: CommonArgs,
@@ -372,7 +372,7 @@ impl StateHandler for VerifyingResultsHandler {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    print_example_header("TiDB Repeatable Read Isolation Test");
+    print_test_header("TiDB Repeatable Read Isolation Test");
     
     // Parse command line arguments using the specific args type
     let args = IsolationTestArgs::parse();

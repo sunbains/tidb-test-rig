@@ -16,4 +16,4 @@ pub use import_job_handlers::{CheckingImportJobsHandler, ShowingImportJobDetails
 pub use import_job_monitor::{JobMonitor, ImportJob as JobMonitorImportJob};
 pub use connection_manager::{ConnectionCoordinator, ConnectionInfo, SharedState, GlobalConfig};
 pub use multi_connection_state_machine::{MultiConnectionStateMachine, CoordinationHandler};
-pub use lib_utils::{TestSetup, CommonArgsSetup, print_example_header, print_success, print_error_and_exit}; 
+pub use lib_utils::{TestSetup, CommonArgsSetup, print_test_header, print_success, print_error_and_exit}; 

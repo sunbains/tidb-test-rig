@@ -5,8 +5,8 @@ use std::env;
 pub type ConnInfoResult = Result<(String, String, String, Option<String>), Box<dyn std::error::Error>>;
 
 #[derive(Parser, Debug, Clone)]
-#[command(name = "tidb-examples")]
-#[command(about = "TiDB connection and testing examples")]
+#[command(name = "tidb-tests")]
+#[command(about = "TiDB connection and testing tests")]
 pub struct CommonArgs {
     /// Hostname and port in format hostname:port
     #[arg(short = 'H', long, default_value = "localhost:4000")]

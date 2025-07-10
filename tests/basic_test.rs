@@ -1,11 +1,11 @@
-use connect::{CommonArgs, print_example_header, print_success, print_error_and_exit};
+use connect::{CommonArgs, print_test_header, print_success, print_error_and_exit};
 use connect::state_machine::{StateMachine, State};
 use connect::{InitialHandler, ParsingConfigHandler, ConnectingHandler, TestingConnectionHandler, VerifyingDatabaseHandler, GettingVersionHandler};
 use clap::Parser;
 
 #[derive(Parser, Debug)]
-#[command(name = "basic-example")]
-#[command(about = "Basic TiDB connection example with only common arguments")]
+#[command(name = "basic-test")]
+#[command(about = "Basic TiDB connection test with only common arguments")]
 pub struct Args {
     #[command(flatten)]
     pub common: CommonArgs,
@@ -25,7 +25,7 @@ impl Args {
 
 #[tokio::main]
 async fn main() {
-    print_example_header("TiDB Basic Connection Test");
+    print_test_header("TiDB Basic Connection Test");
     let args = Args::parse();
     args.init_logging().expect("Failed to initialize logging");
     args.print_connection_info();

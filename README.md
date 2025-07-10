@@ -14,7 +14,7 @@ This tool is designed to test and monitor TiDB database connections with advance
 
 ## Library Structure
 
-This project is now a **reusable Rust library** for TiDB connection and import job testing. The main CLI application previously in `src/main.rs` has been moved to `examples/basic_test.rs`.
+This project is now a **reusable Rust library** for TiDB connection and import job testing. The main CLI application previously in `src/main.rs` has been moved to `tests/basic_test.rs`.
 
 - **Library usage:** Import the `connect` crate in your own Rust projects and use the state machine, handlers, and coordination logic directly.
 - **CLI usage:** Run the main CLI as a test:
@@ -26,7 +26,7 @@ This project is now a **reusable Rust library** for TiDB connection and import j
   make run-basic
   ```
 
-All other tests (multi-connection, isolation, CLI, etc.) are also available in the `examples/` directory and use the library API.
+All other tests (multi-connection, isolation, CLI, etc.) are also available in the `tests/` directory and use the library API.
 
 ### Modular CLI Architecture
 
@@ -133,7 +133,7 @@ cargo run -- -u your_username -t 120
 
 ### Command Line Options
 
-Each example has its own CLI arguments. Here are the common options shared across examples:
+Each test has its own CLI arguments. Here are the common options shared across tests:
 
 ```bash
 Common Options:
@@ -171,9 +171,9 @@ for db in db1 db2 db3; do
 done
 ```
 
-## Examples
+## Tests
 
-The project includes comprehensive examples demonstrating various use cases:
+The project includes comprehensive tests demonstrating various use cases:
 
 ### Basic Test (Main CLI)
 ```bash
@@ -213,14 +213,14 @@ Shows advanced scenarios with import job monitoring across multiple connections.
 
 ### Building Tests
 ```bash
-# Build all tests
+# Build all test binaries (Rust uses --examples for this purpose)
 cargo build --examples
 
-# Check test compilation
+# Check test compilation for all test binaries
 cargo check --examples
 
 # Using Make
-make examples
+make tests
 make run-simple
 make run-advanced
 ```
@@ -240,7 +240,7 @@ make test
 make clean
 
 # Build all tests
-make examples
+make tests
 
 # Run specific tests
 make run-simple-connection
@@ -270,7 +270,7 @@ make help
 
 **Note:** Each test has its own CLI arguments. Use `--help` with any test to see its specific options.
 
-See [examples/README.md](examples/README.md) for detailed test documentation.
+See [tests/README.md](tests/README.md) for detailed test documentation.
 
 ## Configuration
 
@@ -302,10 +302,10 @@ src/
 ├── connection_manager.rs   # Multi-connection coordination
 ├── multi_connection_state_machine.rs  # Multi-connection state machines
 ├── cli.rs                  # Common CLI argument handling
-├── lib_utils.rs            # Shared utilities for examples
+├── lib_utils.rs            # Shared utilities for tests
 └── logging.rs              # Logging infrastructure
 
-examples/
+tests/
 ├── simple_connection_test.rs     # Basic connection test
 ├── isolation_test.rs             # Transaction isolation testing
 ├── logging_test.rs               # Logging demonstration
@@ -326,7 +326,7 @@ docs/
 use connect::{InitialHandler, ParsingConfigHandler, ConnectingHandler, 
               TestingConnectionHandler, VerifyingDatabaseHandler, GettingVersionHandler};
 use connect::{CommonArgs, TestSetup, CommonArgsSetup};
-use connect::lib_utils::{print_example_header, print_success, print_error_and_exit};
+use connect::lib_utils::{print_test_header, print_success, print_error_and_exit};
 ```
 
 #### Test-Specific Imports
@@ -471,7 +471,7 @@ cargo run -- -u admin --verbose
 ### Testing Guidelines
 - Unit tests for individual components
 - Integration tests for workflows
-- Example tests for user scenarios
+- Test scenarios for user workflows
 - Performance tests for critical paths
 
 ## License
@@ -495,5 +495,5 @@ For issues and questions:
 - Check the troubleshooting section
 - Review the architecture documentation
 - Open an issue on the repository
-- Check example implementations
+- Check test implementations
 

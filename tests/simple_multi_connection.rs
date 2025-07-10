@@ -4,12 +4,12 @@ use connect::JobMonitor;
 use std::sync::{Arc, Mutex};
 use tokio::task::JoinHandle;
 use std::collections::HashMap;
-use connect::{CommonArgs, print_example_header, print_success, print_error_and_exit};
+use connect::{CommonArgs, print_test_header, print_success, print_error_and_exit};
 use clap::Parser;
 
 #[derive(Parser, Debug)]
 #[command(name = "simple-multi-connection")]
-#[command(about = "Simple multi-connection example with connection count argument")]
+#[command(about = "Simple multi-connection test with connection count argument")]
 pub struct Args {
     #[command(flatten)]
     pub common: CommonArgs,
@@ -238,7 +238,7 @@ impl SimpleMultiConnectionCoordinator {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    print_example_header("Simple Multi-Connection TiDB Testing");
+    print_test_header("Simple Multi-Connection TiDB Testing");
     let args = Args::parse();
     args.init_logging()?;
     args.print_connection_info();

@@ -2,32 +2,30 @@ use crate::state_machine::{StateMachine, State};
 use crate::{
     InitialHandler, ParsingConfigHandler, ConnectingHandler, 
     TestingConnectionHandler, VerifyingDatabaseHandler, GettingVersionHandler,
-    parse_args, JobMonitor
+    JobMonitor
 };
 use crate::cli::CommonArgs;
 use clap::Parser;
 use std::process;
 
-/// Common setup for examples using the legacy parse_args approach
+/// Common setup for tests using the new CommonArgs approach
 pub struct TestSetup {
-    pub args: crate::cli::CommonArgs,
-    pub state_machine: StateMachine,
+    pub args: CommonArgs,
 }
 
 impl TestSetup {
-    /// Create a new example setup with standard configuration
-    pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
-        // Parse command line arguments
-        let args = parse_args().expect("Failed to parse arguments");
-        
-        // Initialize logging
-        args.init_logging().expect("Failed to initialize logging");
-        
-        // Print connection info
-        args.print_connection_info();
-        
+    /// Create a new test setup with CommonArgs
+    pub fn new(args: &CommonArgs) -> Self {
+        Self {
+            args: args.clone(),
+        }
+    }
+    
+    /// Run the basic connection workflow
+    pub async fn run_basic_workflow(&self) -> Result<(), crate::state_machine::StateError> {
         // Get connection info
-        let (host, user, password, database) = args.get_connection_info().expect("Failed to get connection info");
+        let (host, user, password, database) = self.args.get_connection_info()
+            .map_err(|e| crate::state_machine::StateError::from(e.to_string()))?;
         
         // Create and configure the state machine
         let mut state_machine = StateMachine::new();
@@ -35,10 +33,17 @@ impl TestSetup {
         // Register standard state handlers
         Self::register_standard_handlers(&mut state_machine, host, user, password, database);
         
-        Ok(Self {
-            args,
-            state_machine,
-        })
+        // Run the state machine
+        match state_machine.run().await {
+            Ok(_) => {
+                println!("Connection test completed successfully!");
+                Ok(())
+            }
+            Err(e) => {
+                Self::handle_connection_error(&e);
+                Err(e)
+            }
+        }
     }
     
     /// Register the standard set of state handlers
@@ -65,59 +70,7 @@ impl TestSetup {
         state_machine.register_handler(State::GettingVersion, Box::new(GettingVersionHandler));
     }
     
-    /// Run the state machine with standard error handling
-    pub async fn run_with_error_handling(&mut self) -> Result<(), crate::state_machine::StateError> {
-        match self.state_machine.run().await {
-            Ok(_) => {
-                println!("Connection test completed successfully!");
-                Ok(())
-            }
-            Err(e) => {
-                Self::handle_connection_error(&e);
-                Err(e)
-            }
-        }
-    }
-    
-    /// Run the state machine and optionally start job monitoring
-    pub async fn run_with_job_monitoring(&mut self) -> Result<(), crate::state_machine::StateError> {
-        match self.state_machine.run().await {
-            Ok(_) => {
-                println!("Connection test completed successfully!");
-                
-                // If monitor duration is specified, run job monitoring
-                if self.args.monitor_duration > 0 {
-                    println!("\nStarting import job monitoring...");
-                    
-                    // Create job monitor with the connection from the main state machine
-                    let mut job_monitor = JobMonitor::new(self.args.monitor_duration);
-                    
-                    // Transfer the connection to the job monitor
-                    if let Some(conn) = self.state_machine.get_context_mut().connection.take() {
-                        job_monitor.get_context_mut().connection = Some(conn);
-                        job_monitor.get_context_mut().host = self.state_machine.get_context().host.clone();
-                        job_monitor.get_context_mut().port = self.state_machine.get_context().port;
-                        job_monitor.get_context_mut().username = self.state_machine.get_context().username.clone();
-                        job_monitor.get_context_mut().password = self.state_machine.get_context().password.clone();
-                        job_monitor.get_context_mut().database = self.state_machine.get_context().database.clone();
-                        
-                        // Run the job monitor
-                        if let Err(e) = job_monitor.run().await {
-                            eprintln!("✗ Job monitoring failed: {e}");
-                        }
-                    } else {
-                        eprintln!("✗ No connection available for job monitoring");
-                    }
-                }
-                
-                Ok(())
-            }
-            Err(e) => {
-                Self::handle_connection_error(&e);
-                Err(e)
-            }
-        }
-    }
+
     
     /// Handle connection errors with helpful messages
     pub fn handle_connection_error(e: &crate::state_machine::StateError) {
@@ -137,14 +90,14 @@ impl TestSetup {
     }
 }
 
-/// Common setup for examples using the new CommonArgs approach
+/// Common setup for tests using the new CommonArgs approach
 pub struct CommonArgsSetup {
     pub args: CommonArgs,
     pub state_machine: StateMachine,
 }
 
 impl CommonArgsSetup {
-    /// Create a new example setup with CommonArgs
+    /// Create a new test setup with CommonArgs
     pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
         // Parse command line arguments
         let args = CommonArgs::parse();
@@ -225,8 +178,8 @@ impl CommonArgsSetup {
     }
 }
 
-/// Helper function to print a standard example header
-pub fn print_example_header(title: &str) {
+/// Helper function to print a standard test header
+pub fn print_test_header(title: &str) {
     println!("{}", title);
     println!("{}", "=".repeat(title.len()));
 }
