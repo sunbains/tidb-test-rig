@@ -14,7 +14,6 @@ All examples use shared utilities that provide:
 - **Integrated Logging**: Control log level, file output, and verbosity from the CLI
 - **Shared State Machine Setup**: Common state machine configuration and handler registration
 - **Standardized Error Handling**: Consistent error handling and user-friendly error messages
-- **Job Monitoring Integration**: Built-in support for import job monitoring
 
 ### CLI Usage
 
