@@ -278,5 +278,5 @@ cargo run --bin isolation --features isolation_test -- -c tidb_config.json --ver
 
 ## License
 
-This project is licensed under the MIT License.
+[LICENSE file](LICENSE)
 

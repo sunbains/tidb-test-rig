@@ -165,3 +165,16 @@ pub fn create_state_machine_with_handlers(
     register_standard_handlers(&mut state_machine, host, user, password, database);
     state_machine
 } 
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_print_test_header_and_success() {
+        print_test_header("Header");
+        print_success("Success");
+    }
+
+    // print_error_and_exit cannot be tested as it exits the process
+} 

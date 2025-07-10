@@ -204,4 +204,29 @@ impl From<Box<dyn std::error::Error>> for ConnectError {
     fn from(err: Box<dyn std::error::Error>) -> Self {
         ConnectError::Unknown(err.to_string())
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io;
+
+    #[test]
+    fn test_connect_error_display() {
+        let err = ConnectError::Configuration("bad config".to_string());
+        assert!(format!("{}", err).contains("bad config"));
+    }
+
+    #[test]
+    fn test_from_io_error() {
+        let io_err = io::Error::new(io::ErrorKind::Other, "io fail");
+        let err: ConnectError = io_err.into();
+        assert!(format!("{}", err).contains("io fail"));
+    }
+
+    #[test]
+    fn test_result_alias() {
+        fn returns_result() -> Result<u32> { Ok(42) }
+        assert_eq!(returns_result().unwrap(), 42);
+    }
 } 

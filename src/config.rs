@@ -354,3 +354,90 @@ impl ConfigBuilder {
         self.config
     }
 } 
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::NamedTempFile;
+    use std::io::Write;
+    use serial_test::serial;
+
+    #[test]
+    #[serial]
+    fn test_default_config() {
+        let config = AppConfig::default();
+        assert_eq!(config.database.host, "localhost:4000");
+        assert_eq!(config.database.username, "root");
+        assert_eq!(config.logging.level, "info");
+    }
+
+    #[test]
+    #[serial]
+    fn test_from_file_json() {
+        let json = r#"{
+            "database": {"host": "h", "username": "u"},
+            "logging": {"level": "debug", "format": "text", "console": true},
+            "test": {"rows": 1, "timeout_secs": 2, "verbose": false},
+            "import_jobs": {"monitor_duration": 1, "update_interval": 1, "show_details": true}
+        }"#;
+        let mut file = NamedTempFile::new().unwrap();
+        file.write_all(json.as_bytes()).unwrap();
+        let config = AppConfig::from_file(file.path()).unwrap();
+        assert_eq!(config.database.host, "h");
+        assert_eq!(config.database.username, "u");
+        assert_eq!(config.logging.level, "debug");
+    }
+
+    #[test]
+    #[serial]
+    fn test_from_file_toml() {
+        let toml = r#"
+            [database]
+            host = "h"
+            username = "u"
+            [logging]
+            level = "debug"
+            format = "text"
+            console = true
+            [test]
+            rows = 1
+            timeout_secs = 2
+            verbose = false
+            [import_jobs]
+            monitor_duration = 1
+            update_interval = 1
+            show_details = true
+        "#;
+        let file = tempfile::Builder::new().suffix(".toml").tempfile().unwrap();
+        std::fs::write(file.path(), toml).unwrap();
+        let config = AppConfig::from_file(file.path()).unwrap();
+        assert_eq!(config.database.host, "h");
+        assert_eq!(config.database.username, "u");
+        assert_eq!(config.logging.level, "debug");
+    }
+
+    #[test]
+    #[serial]
+    fn test_env_override() {
+        let prev = std::env::var("TIDB_HOST").ok();
+        let unique = "envhost_config_test";
+        unsafe { std::env::set_var("TIDB_HOST", unique); }
+        let mut config = AppConfig::default();
+        config.apply_environment_overrides();
+        assert_eq!(config.database.host, unique);
+        match prev {
+            Some(val) => unsafe { std::env::set_var("TIDB_HOST", val); },
+            None => unsafe { std::env::remove_var("TIDB_HOST"); },
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn test_save_and_load_json() {
+        let config = AppConfig::default();
+        let file = NamedTempFile::new().unwrap();
+        config.save_to_file(file.path()).unwrap();
+        let loaded = AppConfig::from_file(file.path()).unwrap();
+        assert_eq!(loaded.database.host, "localhost:4000");
+    }
+} 

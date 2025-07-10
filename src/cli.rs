@@ -237,6 +237,61 @@ impl CommonArgs {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serial_test::serial;
+
+    #[test]
+    #[serial]
+    fn test_common_args_defaults() {
+        let args = CommonArgs::parse_from(["test-bin"]);
+        assert_eq!(args.host, "localhost:4000");
+        assert_eq!(args.user, "root");
+    }
+
+    #[test]
+    #[serial]
+    fn test_get_host_user_database() {
+        let prev_host = std::env::var("TIDB_HOST").ok();
+        let prev_user = std::env::var("TIDB_USER").ok();
+        let prev_database = std::env::var("TIDB_DATABASE").ok();
+        unsafe { std::env::remove_var("TIDB_HOST"); }
+        unsafe { std::env::remove_var("TIDB_USER"); }
+        unsafe { std::env::remove_var("TIDB_DATABASE"); }
+        let args = CommonArgs::parse_from(["test-bin", "-H", "h:1", "-u", "u", "-d", "db"]);
+        assert_eq!(args.get_host(), "h:1");
+        assert_eq!(args.get_user(), "u");
+        assert_eq!(args.get_database(), Some("db".to_string()));
+        match prev_host {
+            Some(val) => unsafe { std::env::set_var("TIDB_HOST", val); },
+            None => unsafe { std::env::remove_var("TIDB_HOST"); },
+        }
+        match prev_user {
+            Some(val) => unsafe { std::env::set_var("TIDB_USER", val); },
+            None => unsafe { std::env::remove_var("TIDB_USER"); },
+        }
+        match prev_database {
+            Some(val) => unsafe { std::env::set_var("TIDB_DATABASE", val); },
+            None => unsafe { std::env::remove_var("TIDB_DATABASE"); },
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn test_env_override() {
+        let prev = std::env::var("TIDB_HOST").ok();
+        let unique = "envhost_cli_test:123";
+        unsafe { std::env::set_var("TIDB_HOST", unique); }
+        let args = CommonArgs::parse_from(["test-bin"]); // use default host
+        assert_eq!(args.get_host(), unique);
+        match prev {
+            Some(val) => unsafe { std::env::set_var("TIDB_HOST", val); },
+            None => unsafe { std::env::remove_var("TIDB_HOST"); },
+        }
+    }
+}
+
 pub fn parse_args() -> std::result::Result<CommonArgs, Box<dyn std::error::Error>> {
     let args = CommonArgs::parse();
     args.validate()?;
