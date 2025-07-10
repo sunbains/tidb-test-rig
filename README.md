@@ -240,17 +240,17 @@ The project includes a comprehensive Makefile for common development tasks:
 make build
 
 # Build all binaries
-make build-db-tests
+make build-test
 
 # Clean build artifacts
 make clean
 
 # Run specific binaries
-make run-basic-db-tests
-make run-isolation-db-tests
-make run-cli-db-tests
-make run-logging-db-tests
-make run-job-monitor-db-tests
+make run-basic-test
+make run-isolation-test
+make run-cli-test
+make run-logging-test
+make run-job-monitor-test
 
 # Code quality
 make format
@@ -265,12 +265,12 @@ make help
 
 | Target | Description | Binary |
 |--------|-------------|---------|
-| `run-basic-db-tests` | Basic connection test | `cargo run --bin basic` |
+| `run-basic-test` | Basic connection test | `cargo run --bin basic` |
 | `run-simple-connection` | Simple connection test | `cargo run --bin simple_connection` |
-| `run-isolation-db-tests` | Transaction isolation test | `cargo run --bin isolation` |
-| `run-cli-db-tests` | CLI test with modular arguments | `cargo run --bin cli` |
-| `run-logging-db-tests` | Logging demonstration | `cargo run --bin logging` |
-| `run-job-monitor-db-tests` | Job monitoring test | `cargo run --bin job_monitor` |
+| `run-isolation-test` | Transaction isolation test | `cargo run --bin isolation` |
+| `run-cli-test` | CLI test with modular arguments | `cargo run --bin cli` |
+| `run-logging-test` | Logging demonstration | `cargo run --bin logging` |
+| `run-job-monitor-test` | Job monitoring test | `cargo run --bin job_monitor` |
 | `run-simple` | Simple multi-connection test | `cargo run --bin simple_multi_connection` |
 | `run-advanced` | Advanced multi-connection test | `cargo run --bin multi_connection` |
 
