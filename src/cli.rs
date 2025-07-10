@@ -2,6 +2,8 @@ use clap::Parser;
 use rpassword::prompt_password;
 use std::env;
 
+pub type ConnInfoResult = Result<(String, String, String, Option<String>), Box<dyn std::error::Error>>;
+
 #[derive(Parser)]
 #[command(name = "tidb-examples")]
 #[command(about = "TiDB connection and testing examples")]
@@ -101,7 +103,7 @@ impl CommonArgs {
     }
     
     /// Get connection info as a tuple for easy use
-    pub fn get_connection_info(&self) -> Result<(String, String, String, Option<String>), Box<dyn std::error::Error>> {
+    pub fn get_connection_info(&self) -> ConnInfoResult {
         let password = self.get_password()?;
         Ok((
             self.get_host(),
@@ -117,19 +119,14 @@ impl CommonArgs {
         if !self.host.contains(':') {
             return Err("Host must be in format 'hostname:port'".into());
         }
-        
         // Validate port number
-        if let Some(port_str) = self.host.split(':').nth(1) {
-            if let Err(_) = port_str.parse::<u16>() {
-                return Err("Invalid port number".into());
-            }
+        if let Some(port_str) = self.host.split(':').nth(1) && port_str.parse::<u16>().is_err() {
+            return Err("Invalid port number".into());
         }
-        
         // Validate username
         if self.user.is_empty() {
             return Err("Username cannot be empty".into());
         }
-        
         Ok(())
     }
     
@@ -186,7 +183,7 @@ pub fn parse_args() -> Result<CommonArgs, Box<dyn std::error::Error>> {
 }
 
 /// Helper function to get connection info with error handling
-pub fn get_connection_info() -> Result<(String, String, String, Option<String>), Box<dyn std::error::Error>> {
+pub fn get_connection_info() -> ConnInfoResult {
     let args = parse_args()?;
     args.get_connection_info()
 } 

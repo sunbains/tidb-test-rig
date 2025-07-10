@@ -1,7 +1,7 @@
 use std::process;
 use connect::state_machine::{StateMachine, State};
 use connect::{InitialHandler, ParsingConfigHandler, ConnectingHandler, TestingConnectionHandler, VerifyingDatabaseHandler, GettingVersionHandler};
-use connect::{CheckingImportJobsHandler, ShowingImportJobDetailsHandler, parse_args};
+use connect::{JobMonitor, parse_args};
 
 #[tokio::main]
 async fn main() {
@@ -35,16 +35,36 @@ async fn main() {
     state_machine.register_handler(State::TestingConnection, Box::new(TestingConnectionHandler));
     state_machine.register_handler(State::VerifyingDatabase, Box::new(VerifyingDatabaseHandler));
     state_machine.register_handler(State::GettingVersion, Box::new(GettingVersionHandler));
-    state_machine.register_handler(State::CheckingImportJobs, Box::new(CheckingImportJobsHandler));
-    state_machine.register_handler(
-        State::ShowingImportJobDetails, 
-        Box::new(ShowingImportJobDetailsHandler::new(args.monitor_duration))
-    );
     
     // Run the state machine
     match state_machine.run().await {
         Ok(_) => {
             println!("Connection test completed successfully!");
+            
+            // If monitor duration is specified, run job monitoring
+            if args.monitor_duration > 0 {
+                println!("\nStarting import job monitoring...");
+                
+                // Create job monitor with the connection from the main state machine
+                let mut job_monitor = JobMonitor::new(args.monitor_duration);
+                
+                // Transfer the connection to the job monitor
+                if let Some(conn) = state_machine.get_context_mut().connection.take() {
+                    job_monitor.get_context_mut().connection = Some(conn);
+                    job_monitor.get_context_mut().host = state_machine.get_context().host.clone();
+                    job_monitor.get_context_mut().port = state_machine.get_context().port;
+                    job_monitor.get_context_mut().username = state_machine.get_context().username.clone();
+                    job_monitor.get_context_mut().password = state_machine.get_context().password.clone();
+                    job_monitor.get_context_mut().database = state_machine.get_context().database.clone();
+                    
+                    // Run the job monitor
+                    if let Err(e) = job_monitor.run().await {
+                        eprintln!("✗ Job monitoring failed: {e}");
+                    }
+                } else {
+                    eprintln!("✗ No connection available for job monitoring");
+                }
+            }
         }
         Err(e) => {
             eprintln!("✗ Failed to complete connection test: {e}");

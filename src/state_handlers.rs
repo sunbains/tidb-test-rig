@@ -211,7 +211,7 @@ impl StateHandler for GettingVersionHandler {
                         if let Some(version) = row.get::<String, _>("version") {
                             context.server_version = Some(version.clone());
                             println!("✓ Server version: {version}");
-                            Ok(State::CheckingImportJobs)
+                            Ok(State::Completed)
                         } else {
                             context.set_error("Could not extract version from result".to_string());
                             Err("Could not extract version from result".into())

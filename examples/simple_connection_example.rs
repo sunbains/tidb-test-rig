@@ -1,6 +1,7 @@
 use connect::state_machine::{StateMachine, State};
 use connect::{InitialHandler, ParsingConfigHandler, ConnectingHandler, TestingConnectionHandler, VerifyingDatabaseHandler, GettingVersionHandler};
-use connect::parse_args;
+use connect::cli::CommonArgs;
+use clap::Parser;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -8,7 +9,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("===========================");
     
     // Parse command line arguments using the common CLI library
-    let args = parse_args()?;
+    let args = CommonArgs::parse();
     
     // Print connection info
     args.print_connection_info();
@@ -41,7 +42,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("\n✅ Simple connection test completed successfully!");
         }
         Err(e) => {
-            eprintln!("\n❌ Simple connection test failed: {}", e);
+            eprintln!("\n❌ Simple connection test failed: {e}");
             std::process::exit(1);
         }
     }

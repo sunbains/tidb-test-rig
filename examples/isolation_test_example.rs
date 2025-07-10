@@ -5,6 +5,8 @@ use mysql::prelude::*;
 use mysql::*;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
+use connect::cli::CommonArgs;
+use clap::Parser;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct TestRow {
@@ -348,7 +350,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("===================================");
     
     // Parse command line arguments
-    let args = parse_args()?;
+    let args = CommonArgs::parse();
     
     // Print connection info
     args.print_connection_info();

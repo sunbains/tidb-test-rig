@@ -1,6 +1,6 @@
 use connect::state_machine::{StateMachine, State, StateError};
 use connect::state_handlers::{InitialHandler, ParsingConfigHandler, ConnectingHandler, TestingConnectionHandler, VerifyingDatabaseHandler, GettingVersionHandler};
-use connect::{CheckingImportJobsHandler, ShowingImportJobDetailsHandler};
+use connect::JobMonitor;
 use std::sync::{Arc, Mutex};
 use tokio::task::JoinHandle;
 use std::collections::HashMap;
@@ -114,11 +114,6 @@ impl SimpleMultiConnectionCoordinator {
                 state_machine.register_handler(State::TestingConnection, Box::new(TestingConnectionHandler));
                 state_machine.register_handler(State::VerifyingDatabase, Box::new(VerifyingDatabaseHandler));
                 state_machine.register_handler(State::GettingVersion, Box::new(GettingVersionHandler));
-                state_machine.register_handler(State::CheckingImportJobs, Box::new(CheckingImportJobsHandler));
-                state_machine.register_handler(
-                    State::ShowingImportJobDetails, 
-                    Box::new(ShowingImportJobDetailsHandler::new(30)) // 30 seconds monitoring
-                );
                 
                 // Update status to connecting
                 if let Ok(mut state) = shared_state.lock() {
@@ -138,6 +133,26 @@ impl SimpleMultiConnectionCoordinator {
                             state.global_status = "All connections completed".to_string();
                         }
                         println!("✓ Connection {} completed successfully", connection_id);
+                        
+                        // Run job monitoring for this connection
+                        println!("Starting job monitoring for connection {}...", connection_id);
+                        let mut job_monitor = JobMonitor::new(30); // 30 seconds monitoring
+                        
+                        // Transfer the connection to the job monitor
+                        if let Some(conn) = state_machine.get_context_mut().connection.take() {
+                            job_monitor.get_context_mut().connection = Some(conn);
+                            job_monitor.get_context_mut().host = state_machine.get_context().host.clone();
+                            job_monitor.get_context_mut().port = state_machine.get_context().port;
+                            job_monitor.get_context_mut().username = state_machine.get_context().username.clone();
+                            job_monitor.get_context_mut().password = state_machine.get_context().password.clone();
+                            job_monitor.get_context_mut().database = state_machine.get_context().database.clone();
+                            
+                            // Run the job monitor
+                            if let Err(e) = job_monitor.run().await {
+                                eprintln!("✗ Job monitoring failed for connection {}: {}", connection_id, e);
+                            }
+                        }
+                        
                         Ok(())
                     }
                     Err(e) => {

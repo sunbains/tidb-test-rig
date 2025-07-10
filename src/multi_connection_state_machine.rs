@@ -54,7 +54,6 @@ impl MultiConnectionStateMachine {
         _coordinator_sender: mpsc::Sender<CoordinationMessage>,
     ) {
         use crate::state_handlers::{InitialHandler, ParsingConfigHandler, ConnectingHandler, TestingConnectionHandler, VerifyingDatabaseHandler, GettingVersionHandler};
-        use crate::{CheckingImportJobsHandler, ShowingImportJobDetailsHandler};
 
         state_machine.register_handler(State::Initial, Box::new(InitialHandler));
         state_machine.register_handler(State::ParsingConfig, Box::new(ParsingConfigHandler::new(
@@ -67,8 +66,6 @@ impl MultiConnectionStateMachine {
         state_machine.register_handler(State::TestingConnection, Box::new(TestingConnectionHandler));
         state_machine.register_handler(State::VerifyingDatabase, Box::new(VerifyingDatabaseHandler));
         state_machine.register_handler(State::GettingVersion, Box::new(GettingVersionHandler));
-        state_machine.register_handler(State::CheckingImportJobs, Box::new(CheckingImportJobsHandler));
-        state_machine.register_handler(State::ShowingImportJobDetails, Box::new(ShowingImportJobDetailsHandler::new(60)));
     }
 
     /// Start coordination processing
@@ -124,7 +121,7 @@ impl MultiConnectionStateMachine {
     }
 
     /// Get all active import jobs across all connections
-    pub fn get_active_import_jobs(&self) -> Vec<crate::connection_manager::ImportJobInfo> {
+    pub fn get_active_import_jobs(&self) -> Vec<crate::job_monitor::ImportJobInfo> {
         self.coordinator.get_active_import_jobs()
     }
 }

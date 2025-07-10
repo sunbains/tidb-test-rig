@@ -105,10 +105,8 @@ impl LogConfig {
 /// Initialize the logging system
 pub fn init_logging(config: LogConfig) -> Result<(), Box<dyn std::error::Error>> {
     // Create logs directory if it doesn't exist
-    if config.file {
-        if let Some(parent) = config.file_path.parent() {
-            fs::create_dir_all(parent)?;
-        }
+    if config.file && let Some(parent) = config.file_path.parent() {
+        fs::create_dir_all(parent)?;
     }
 
     // Build the subscriber
@@ -144,17 +142,15 @@ pub fn init_logging_from_env() -> Result<(), Box<dyn std::error::Error>> {
     let mut config = LogConfig::default();
 
     // Set log level from environment
-    if let Ok(level_str) = std::env::var("RUST_LOG") {
-        if let Ok(level) = level_str.parse::<Level>() {
-            config = config.with_level(level);
-        }
+    if let Ok(level_str) = std::env::var("RUST_LOG")
+        && let Ok(level) = level_str.parse::<Level>() {
+        config = config.with_level(level);
     }
 
     // Set file logging from environment
-    if let Ok(file_enabled) = std::env::var("TIDB_LOG_FILE") {
-        if file_enabled.to_lowercase() == "true" {
-            config = config.with_file(true);
-        }
+    if let Ok(file_enabled) = std::env::var("TIDB_LOG_FILE")
+        && file_enabled.to_lowercase() == "true" {
+        config = config.with_file(true);
     }
 
     // Set file path from environment

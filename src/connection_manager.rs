@@ -3,13 +3,14 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
 use serde::{Serialize, Deserialize};
+use crate::job_monitor;
 
 /// Shared state that can be accessed by multiple state machines
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SharedState {
     pub global_config: GlobalConfig,
     pub connection_status: HashMap<String, ConnectionStatus>,
-    pub import_jobs: Vec<ImportJobInfo>,
+    pub import_jobs: Vec<job_monitor::ImportJobInfo>,
     pub coordination_events: Vec<CoordinationEvent>,
 }
 
@@ -42,16 +43,6 @@ pub enum ConnectionState {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ImportJobInfo {
-    pub job_id: String,
-    pub connection_id: String,
-    pub phase: String,
-    pub status: String,
-    pub start_time: chrono::DateTime<chrono::Utc>,
-    pub end_time: Option<chrono::DateTime<chrono::Utc>>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum CoordinationEvent {
     ConnectionEstablished { connection_id: String },
     ConnectionFailed { connection_id: String, error: String },
@@ -65,8 +56,8 @@ pub enum CoordinationEvent {
 #[derive(Debug)]
 pub enum CoordinationMessage {
     UpdateConnectionStatus(ConnectionStatus),
-    AddImportJob(ImportJobInfo),
-    UpdateImportJob(String, ImportJobInfo),
+    AddImportJob(job_monitor::ImportJobInfo),
+    UpdateImportJob(String, job_monitor::ImportJobInfo),
     BroadcastEvent(CoordinationEvent),
     RequestGlobalState,
     ResponseGlobalState(SharedState),
@@ -186,7 +177,7 @@ impl ConnectionCoordinator {
     }
 
     /// Get all active import jobs across all connections
-    pub fn get_active_import_jobs(&self) -> Vec<ImportJobInfo> {
+    pub fn get_active_import_jobs(&self) -> Vec<job_monitor::ImportJobInfo> {
         if let Ok(state) = self.shared_state.lock() {
             state.import_jobs.iter()
                 .filter(|job| job.end_time.is_none())

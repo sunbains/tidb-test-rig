@@ -1,8 +1,10 @@
+use clap::Parser;
 use connect::state_machine::{StateMachine, State};
 use connect::{InitialHandler, ParsingConfigHandler, ConnectingHandler, TestingConnectionHandler, VerifyingDatabaseHandler, GettingVersionHandler};
-use connect::{parse_args, log_performance_metric, log_memory_usage, ErrorContext};
+use connect::{log_performance_metric, log_memory_usage, ErrorContext};
 use tracing::{info, debug, warn, error, instrument};
 use std::time::Instant;
+use connect::cli::CommonArgs;
 
 #[instrument(skip_all)]
 async fn perform_logged_operation(operation_name: &str) -> Result<(), Box<dyn std::error::Error>> {
@@ -27,10 +29,10 @@ async fn perform_logged_operation(operation_name: &str) -> Result<(), Box<dyn st
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("TiDB Logging Example");
-    println!("====================");
+    println!("=====================");
     
     // Parse command line arguments
-    let args = parse_args()?;
+    let args = CommonArgs::parse();
     
     // Initialize logging with CLI arguments
     args.init_logging()?;
@@ -86,7 +88,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let error_context = ErrorContext::new("state_machine_execution", "Failed to complete state machine");
             error_context.log_error(&*e);
             
-            eprintln!("\n❌ Logging example failed: {}", e);
+            eprintln!("\n❌ Logging example failed: {e}");
             std::process::exit(1);
         }
     }

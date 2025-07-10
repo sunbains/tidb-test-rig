@@ -1,20 +1,14 @@
 use connect::state_machine::{StateMachine, State};
 use connect::{InitialHandler, ParsingConfigHandler, ConnectingHandler, TestingConnectionHandler, VerifyingDatabaseHandler, GettingVersionHandler};
-use connect::{generate_cli_args, generate_cli_impl};
+use connect::cli::CommonArgs;
 use clap::Parser;
-
-// Generate CLI arguments specific to this example
-generate_cli_args!(isolation_test);
-
-// Generate CLI implementation specific to this example
-generate_cli_impl!(isolation_test);
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("TiDB Macro-based CLI Example");
     println!("=============================");
     
-    // Parse command line arguments using the macro-generated CLI
+    // Parse command line arguments using the shared CLI
     let args = CommonArgs::parse();
     
     // Print connection info (includes test_rows for isolation test)
