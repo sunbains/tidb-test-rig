@@ -4,8 +4,6 @@ pub mod config_extensions;
 pub mod connection;
 pub mod connection_manager;
 pub mod errors;
-pub mod import_job_handlers;
-pub mod import_job_monitor;
 pub mod lib_utils;
 pub mod logging;
 pub mod multi_connection_state_machine;
@@ -22,11 +20,9 @@ pub use config_extensions::{
 };
 pub use connection_manager::{ConnectionCoordinator, ConnectionInfo, GlobalConfig, SharedState};
 pub use errors::{
-    CliError, ConnectError, ConnectionError, ImportJobError, IsolationTestError, Result,
+    CliError, ConnectError, ConnectionError, Result,
     StateError,
 };
-pub use import_job_handlers::{CheckingImportJobsHandler, ShowingImportJobDetailsHandler};
-pub use import_job_monitor::{ImportJob as JobMonitorImportJob, JobMonitor};
 pub use lib_utils::register_standard_handlers;
 pub use lib_utils::{
     CommonArgsSetup, TestSetup, print_error_and_exit, print_success, print_test_header,

@@ -241,66 +241,6 @@ pub enum ConnectionError {
 }
 
 #[derive(Error, Debug)]
-pub enum ImportJobError {
-    #[error("No active import jobs found")]
-    NoActiveJobs,
-
-    #[error("Import job {job_id} not found")]
-    JobNotFound { job_id: String },
-
-    #[error("Failed to monitor import job {job_id}: {message}")]
-    MonitorFailed { job_id: String, message: String },
-
-    #[error("Import job monitoring timeout after {duration_secs} seconds")]
-    MonitorTimeout { duration_secs: u64 },
-
-    #[error("Import job {job_id} failed: {reason}")]
-    JobFailed { job_id: String, reason: String },
-
-    #[error("Import job {job_id} cancelled")]
-    JobCancelled { job_id: String },
-
-    #[error("Import job {job_id} stuck in state {state}")]
-    JobStuck { job_id: String, state: String },
-
-    #[error("Import job configuration invalid: {reason}")]
-    InvalidConfig { reason: String },
-
-    #[error("Import job quota exceeded")]
-    QuotaExceeded,
-}
-
-#[derive(Error, Debug)]
-pub enum IsolationTestError {
-    #[error("Failed to create test table {table}: {message}")]
-    TableCreationFailed { table: String, message: String },
-
-    #[error("Failed to populate test data: {0}")]
-    DataPopulationFailed(String),
-
-    #[error("Isolation test failed: {0}")]
-    TestFailed(String),
-
-    #[error("Failed to clean up test table {table}: {message}")]
-    CleanupFailed { table: String, message: String },
-
-    #[error("Isolation level {level} not supported")]
-    UnsupportedIsolationLevel { level: String },
-
-    #[error("Concurrent modification detected: {details}")]
-    ConcurrentModification { details: String },
-
-    #[error("Deadlock detected during isolation test")]
-    Deadlock,
-
-    #[error("Test data corruption detected: {details}")]
-    DataCorruption { details: String },
-
-    #[error("Isolation test timeout after {duration:?}")]
-    Timeout { duration: Duration },
-}
-
-#[derive(Error, Debug)]
 pub enum CliError {
     #[error("Missing required argument: {arg}")]
     MissingArgument { arg: String },
@@ -483,18 +423,6 @@ impl From<ConnectionError> for ConnectError {
 impl From<StateError> for ConnectError {
     fn from(err: StateError) -> Self {
         ConnectError::StateMachine(err.to_string())
-    }
-}
-
-impl From<ImportJobError> for ConnectError {
-    fn from(err: ImportJobError) -> Self {
-        ConnectError::ImportJob(err.to_string())
-    }
-}
-
-impl From<IsolationTestError> for ConnectError {
-    fn from(err: IsolationTestError) -> Self {
-        ConnectError::IsolationTest(err.to_string())
     }
 }
 

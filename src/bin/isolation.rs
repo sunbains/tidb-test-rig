@@ -81,6 +81,38 @@ use test_rig::{
     ConnectError,
 };
 use test_rig::{ConfigExtension, register_config_extension};
+use std::time::Duration;
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum IsolationTestError {
+    #[error("Failed to create test table {table}: {message}")]
+    TableCreationFailed { table: String, message: String },
+
+    #[error("Failed to populate test data: {0}")]
+    DataPopulationFailed(String),
+
+    #[error("Isolation test failed: {0}")]
+    TestFailed(String),
+
+    #[error("Failed to clean up test table {table}: {message}")]
+    CleanupFailed { table: String, message: String },
+
+    #[error("Isolation level {level} not supported")]
+    UnsupportedIsolationLevel { level: String },
+
+    #[error("Concurrent modification detected: {details}")]
+    ConcurrentModification { details: String },
+
+    #[error("Deadlock detected during isolation test")]
+    Deadlock,
+
+    #[error("Test data corruption detected: {details}")]
+    DataCorruption { details: String },
+
+    #[error("Isolation test timeout after {duration:?}")]
+    Timeout { duration: Duration },
+}
 
 /// Configuration extension for isolation test
 struct IsolationConfigExtension;

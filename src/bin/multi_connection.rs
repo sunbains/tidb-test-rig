@@ -201,15 +201,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
 
-        println!("\nActive Import Jobs:");
-        for job in &state.import_jobs {
-            if job.end_time.is_none() {
-                println!(
-                    "  Job {} on {}: {} - {}",
-                    job.job_id, job.connection_id, job.phase, job.status
-                );
-            }
-        }
+        // Removed: Active Import Jobs reporting
+        // println!("\nActive Import Jobs:");
+        // for job in &state.import_jobs {
+        //     if job.end_time.is_none() {
+        //         println!(
+        //             "  Job {} on {}: {} - {}",
+        //             job.job_id, job.connection_id, job.phase, job.status
+        //         );
+        //     }
+        // }
 
         println!("\nCoordination Events:");
         for event in &state.coordination_events {

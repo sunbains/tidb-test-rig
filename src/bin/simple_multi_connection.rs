@@ -70,7 +70,7 @@
 use clap::Parser;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use test_rig::JobMonitor;
+
 use test_rig::errors::StateError;
 use test_rig::state_handlers::{
     ConnectingHandler, GettingVersionHandler, InitialHandler, ParsingConfigHandler,
@@ -244,33 +244,6 @@ impl SimpleMultiConnectionCoordinator {
                             state.global_status = "All connections completed".to_string();
                         }
                         println!("✓ Connection {connection_id} completed successfully");
-
-                        // Run job monitoring for this connection
-                        println!(
-                            "Starting job monitoring for connection {connection_id}..."
-                        );
-                        let mut job_monitor = JobMonitor::new(30); // 30 seconds monitoring
-
-                        // Transfer the connection to the job monitor
-                        if let Some(conn) = state_machine.get_context_mut().connection.take() {
-                            job_monitor.get_context_mut().connection = Some(conn);
-                            job_monitor.get_context_mut().host =
-                                state_machine.get_context().host.clone();
-                            job_monitor.get_context_mut().port = state_machine.get_context().port;
-                            job_monitor.get_context_mut().username =
-                                state_machine.get_context().username.clone();
-                            job_monitor.get_context_mut().password =
-                                state_machine.get_context().password.clone();
-                            job_monitor.get_context_mut().database =
-                                state_machine.get_context().database.clone();
-
-                            // Run the job monitor
-                            if let Err(e) = job_monitor.run().await {
-                                eprintln!(
-                                    "✗ Job monitoring failed for connection {connection_id}: {e}"
-                                );
-                            }
-                        }
 
                         Ok(())
                     }

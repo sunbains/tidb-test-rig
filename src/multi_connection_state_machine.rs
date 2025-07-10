@@ -1,8 +1,8 @@
+use crate::state_machine::{State, StateContext, StateHandler};
 use crate::connection_manager::{
     ConnectionCoordinator, ConnectionInfo, ConnectionState, ConnectionStatus, CoordinationMessage,
 };
 use crate::errors::Result;
-use crate::state_machine::{State, StateContext, StateHandler};
 use async_trait::async_trait;
 use std::sync::Arc;
 use tokio::sync::mpsc;
@@ -144,11 +144,6 @@ impl MultiConnectionStateMachine {
     /// Check if all connections are ready
     pub fn all_connections_ready(&self) -> bool {
         self.coordinator.all_connections_ready()
-    }
-
-    /// Get all active import jobs across all connections
-    pub fn get_active_import_jobs(&self) -> Vec<crate::import_job_monitor::ImportJobInfo> {
-        self.coordinator.get_active_import_jobs()
     }
 }
 

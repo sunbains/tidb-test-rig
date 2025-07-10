@@ -1,13 +1,234 @@
+#![allow(non_snake_case)]
 use clap::Parser;
-use mysql::*;
+use mysql::prelude::*;
 use serde::{Deserialize, Serialize};
-use test_rig::import_job_handlers::{CheckingImportJobsHandler, ShowingImportJobDetailsHandler};
 use test_rig::state_handlers::{
     ConnectingHandler, InitialHandler, NextStateVersionHandler, ParsingConfigHandler,
     TestingConnectionHandler, VerifyingDatabaseHandler,
 };
 use test_rig::state_machine::{State, StateMachine};
 use test_rig::{CommonArgs, print_error_and_exit, print_success, print_test_header};
+use test_rig::errors::{Result, ConnectError};
+use test_rig::state_machine::{StateContext, StateHandler};
+use async_trait::async_trait;
+use chrono::{NaiveDateTime, Utc};
+use std::time::Duration;
+use tokio::time::sleep;
+
+// Import job types needed for the binary
+#[derive(Debug, Clone, FromRow)]
+pub struct ImportJob {
+    #[allow(non_snake_case)]
+    pub Job_ID: i32,
+    #[allow(non_snake_case)]
+    pub Data_Source: String,
+    #[allow(non_snake_case)]
+    pub Target_Table: String,
+    #[allow(non_snake_case)]
+    pub Table_ID: i32,
+    #[allow(non_snake_case)]
+    pub Phase: String,
+    #[allow(non_snake_case)]
+    pub Status: String,
+    #[allow(non_snake_case)]
+    pub Source_File_Size: String,
+    #[allow(non_snake_case)]
+    pub Imported_Rows: Option<i64>,
+    #[allow(non_snake_case)]
+    pub Result_Message: String,
+    #[allow(non_snake_case)]
+    pub Create_Time: Option<NaiveDateTime>,
+    #[allow(non_snake_case)]
+    pub Start_Time: Option<NaiveDateTime>,
+    #[allow(non_snake_case)]
+    pub End_Time: Option<NaiveDateTime>,
+    #[allow(non_snake_case)]
+    pub Created_By: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ImportJobInfo {
+    pub job_id: String,
+    pub connection_id: String,
+    pub phase: String,
+    pub status: String,
+    pub start_time: chrono::DateTime<chrono::Utc>,
+    pub end_time: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+/// Context specific to import job handlers
+#[derive(Clone)]
+pub struct ImportJobContext {
+    pub active_import_jobs: Vec<String>,
+    pub monitor_duration: u64,
+}
+
+impl ImportJobContext {
+    pub fn new(monitor_duration: u64) -> Self {
+        Self {
+            active_import_jobs: Vec::new(),
+            monitor_duration,
+        }
+    }
+}
+
+/// Handler for checking import jobs
+pub struct CheckingImportJobsHandler;
+
+#[async_trait]
+impl StateHandler for CheckingImportJobsHandler {
+    async fn enter(&self, context: &mut StateContext) -> Result<State> {
+        println!("Checking for active import jobs...");
+        // Initialize import job context
+        context.set_handler_context(State::CheckingImportJobs, ImportJobContext::new(0));
+        Ok(State::CheckingImportJobs)
+    }
+
+    async fn execute(&self, context: &mut StateContext) -> Result<State> {
+        if let Some(ref mut conn) = context.connection {
+            // Execute SHOW IMPORT JOBS
+            let query = "SHOW IMPORT JOBS";
+            let results: Vec<ImportJob> = conn.exec(query, ())?;
+
+            // Extract job IDs where End_Time is NULL
+            let mut active_jobs = Vec::new();
+            for job in results {
+                if job.End_Time.is_none() {
+                    active_jobs.push(job.Job_ID.to_string());
+                }
+            }
+
+            // Update the import job context
+            if let Some(import_context) =
+                context.get_handler_context_mut::<ImportJobContext>(&State::CheckingImportJobs)
+            {
+                import_context.active_import_jobs = active_jobs.clone();
+            }
+
+            // Check if we have active jobs
+            if active_jobs.is_empty() {
+                println!("✓ No active import jobs found");
+                Ok(State::Completed)
+            } else {
+                println!("✓ Found {} active import job(s)", active_jobs.len());
+                Ok(State::ShowingImportJobDetails)
+            }
+        } else {
+            return Err(ConnectError::StateMachine(
+                "No connection available for checking import jobs".to_string(),
+            ));
+        }
+    }
+
+    async fn exit(&self, context: &mut StateContext) -> Result<()> {
+        // Move the context to the next state
+        context.move_handler_context::<ImportJobContext>(
+            &State::CheckingImportJobs,
+            State::ShowingImportJobDetails,
+        );
+        Ok(())
+    }
+}
+
+/// Handler for showing import job details
+pub struct ShowingImportJobDetailsHandler {
+    monitor_duration: u64,
+}
+
+impl ShowingImportJobDetailsHandler {
+    pub fn new(monitor_duration: u64) -> Self {
+        Self { monitor_duration }
+    }
+}
+
+#[async_trait]
+impl StateHandler for ShowingImportJobDetailsHandler {
+    async fn enter(&self, context: &mut StateContext) -> Result<State> {
+        // Update the monitor duration in the context
+        if let Some(import_context) =
+            context.get_handler_context_mut::<ImportJobContext>(&State::ShowingImportJobDetails)
+        {
+            import_context.monitor_duration = self.monitor_duration;
+            println!(
+                "Monitoring {} active import job(s) for {} seconds...",
+                import_context.active_import_jobs.len(),
+                import_context.monitor_duration
+            );
+        }
+        Ok(State::ShowingImportJobDetails)
+    }
+
+    async fn execute(&self, context: &mut StateContext) -> Result<State> {
+        // Extract context data first to avoid borrowing conflicts
+        let (monitor_duration, active_jobs) = if let Some(import_context) =
+            context.get_handler_context::<ImportJobContext>(&State::ShowingImportJobDetails)
+        {
+            (
+                import_context.monitor_duration,
+                import_context.active_import_jobs.clone(),
+            )
+        } else {
+            return Err(ConnectError::StateMachine("Import job context not found".to_string()));
+        };
+
+        if let Some(ref mut conn) = context.connection {
+            let start_time = std::time::Instant::now();
+            let duration = Duration::from_secs(monitor_duration);
+
+            while start_time.elapsed() < duration {
+                println!(
+                    "\n--- Import Job Status Update ({}s remaining) ---",
+                    (duration - start_time.elapsed()).as_secs()
+                );
+
+                for job_id in &active_jobs {
+                    let query = format!("SHOW IMPORT JOB {job_id}");
+                    let results: Vec<ImportJob> = conn.exec(&query, ())?;
+                    for job in results {
+                        if job.End_Time.is_none() {
+                            // Calculate time elapsed using UTC for consistency
+                            let now = Utc::now().naive_utc();
+                            let start_time = job.Start_Time.unwrap_or(now);
+                            let elapsed = now - start_time;
+                            let elapsed_h = elapsed.num_seconds() / 3600;
+                            let elapsed_m = (elapsed.num_seconds() % 3600) / 60;
+                            let elapsed_s = elapsed.num_seconds() % 60;
+                            println!(
+                                "Job_ID: {} | Phase: {} | Start_Time: {} | Source_File_Size: {} | Imported_Rows: {} | Time elapsed: {:02}:{:02}:{:02}",
+                                job.Job_ID,
+                                job.Phase,
+                                job.Start_Time
+                                    .map(|t| t.to_string())
+                                    .unwrap_or_else(|| "N/A".to_string()),
+                                job.Source_File_Size,
+                                job.Imported_Rows.unwrap_or(0),
+                                elapsed_h,
+                                elapsed_m,
+                                elapsed_s
+                            );
+                        }
+                    }
+                }
+
+                // Sleep for 5 seconds before next update
+                sleep(Duration::from_secs(5)).await;
+            }
+
+            println!("\n✓ Import job monitoring completed after {monitor_duration} seconds");
+        } else {
+            return Err(ConnectError::StateMachine(
+                "No connection available for showing import job details".to_string(),
+            ));
+        }
+        Ok(State::Completed)
+    }
+
+    async fn exit(&self, context: &mut StateContext) -> Result<()> {
+        // Clean up the context
+        context.remove_handler_context(&State::ShowingImportJobDetails);
+        Ok(())
+    }
+}
 
 /// Import job monitoring configuration specific to the job monitor test
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -50,7 +271,7 @@ impl ImportJobConfig {
     /// Load configuration from a file
     pub fn from_file<P: AsRef<std::path::Path>>(
         path: P,
-    ) -> Result<Self, Box<dyn std::error::Error>> {
+    ) -> Result<Self> {
         let path = path.as_ref();
         let extension = path
             .extension()
@@ -60,11 +281,11 @@ impl ImportJobConfig {
         let config = match extension {
             "json" => {
                 let content = std::fs::read_to_string(path)?;
-                serde_json::from_str(&content)?
+                serde_json::from_str(&content).map_err(|e| ConnectError::from(e.to_string()))?
             }
             "toml" => {
                 let content = std::fs::read_to_string(path)?;
-                toml::from_str(&content)?
+                toml::from_str(&content).map_err(|e| ConnectError::from(e.to_string()))?
             }
             _ => return Err(format!("Unsupported config file format: {extension}").into()),
         };
@@ -76,7 +297,7 @@ impl ImportJobConfig {
     pub fn save_to_file<P: AsRef<std::path::Path>>(
         &self,
         path: P,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Result<()> {
         let path = path.as_ref();
         let extension = path
             .extension()
@@ -84,8 +305,8 @@ impl ImportJobConfig {
             .unwrap_or("json");
 
         let content = match extension {
-            "json" => serde_json::to_string_pretty(self)?,
-            "toml" => toml::to_string_pretty(self)?,
+            "json" => serde_json::to_string_pretty(self).map_err(|e| ConnectError::from(e.to_string()))?,
+            "toml" => toml::to_string_pretty(self).map_err(|e| ConnectError::from(e.to_string()))?,
             _ => return Err(format!("Unsupported config file format: {extension}").into()),
         };
 
@@ -109,7 +330,7 @@ impl ImportJobConfig {
     }
 
     /// Validate the configuration
-    pub fn validate(&self) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn validate(&self) -> Result<()> {
         if self.monitor_duration == 0 {
             return Err("Monitor duration must be greater than 0".into());
         }
@@ -140,8 +361,8 @@ struct Args {
 }
 
 impl Args {
-    pub fn init_logging(&self) -> Result<(), Box<dyn std::error::Error>> {
-        self.common.init_logging()
+    pub fn init_logging(&self) -> Result<()> {
+        self.common.init_logging().map_err(|e| ConnectError::from(e.to_string()))
     }
 
     pub fn get_connection_info(&self) -> test_rig::cli::ConnInfoResult {
@@ -149,9 +370,9 @@ impl Args {
     }
 
     /// Load import job configuration, merging CLI args and config file
-    pub fn get_import_config(&self) -> Result<ImportJobConfig, Box<dyn std::error::Error>> {
+    pub fn get_import_config(&self) -> Result<ImportJobConfig> {
         let mut config = if let Some(ref config_path) = self.import_config {
-            ImportJobConfig::from_file(config_path)?
+            ImportJobConfig::from_file(config_path).map_err(|e| ConnectError::from(e.to_string()))?
         } else {
             ImportJobConfig::default()
         };
@@ -163,7 +384,7 @@ impl Args {
         config.monitor_duration = self.monitor_duration;
 
         // Validate the configuration
-        config.validate()?;
+        config.validate().map_err(|e| ConnectError::from(e.to_string()))?;
 
         Ok(config)
     }

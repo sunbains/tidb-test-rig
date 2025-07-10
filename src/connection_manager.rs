@@ -1,4 +1,3 @@
-use crate::import_job_monitor;
 use mysql::PooledConn;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -10,7 +9,6 @@ use tokio::sync::mpsc;
 pub struct SharedState {
     pub global_config: GlobalConfig,
     pub connection_status: HashMap<String, ConnectionStatus>,
-    pub import_jobs: Vec<import_job_monitor::ImportJobInfo>,
     pub coordination_events: Vec<CoordinationEvent>,
 }
 
@@ -67,8 +65,6 @@ pub enum CoordinationEvent {
 #[derive(Debug)]
 pub enum CoordinationMessage {
     UpdateConnectionStatus(ConnectionStatus),
-    AddImportJob(import_job_monitor::ImportJobInfo),
-    UpdateImportJob(String, import_job_monitor::ImportJobInfo),
     BroadcastEvent(CoordinationEvent),
     RequestGlobalState,
     ResponseGlobalState(SharedState),
@@ -97,7 +93,6 @@ impl ConnectionCoordinator {
         let shared_state = Arc::new(Mutex::new(SharedState {
             global_config: config,
             connection_status: HashMap::new(),
-            import_jobs: Vec::new(),
             coordination_events: Vec::new(),
         }));
 
@@ -160,18 +155,6 @@ impl ConnectionCoordinator {
                             .insert(status.connection_id.clone(), status);
                     }
                 }
-                CoordinationMessage::AddImportJob(job) => {
-                    if let Ok(mut state) = self.shared_state.lock() {
-                        state.import_jobs.push(job);
-                    }
-                }
-                CoordinationMessage::UpdateImportJob(job_id, updated_job) => {
-                    if let Ok(mut state) = self.shared_state.lock()
-                        && let Some(job) = state.import_jobs.iter_mut().find(|j| j.job_id == job_id)
-                    {
-                        *job = updated_job;
-                    }
-                }
                 CoordinationMessage::BroadcastEvent(event) => {
                     if let Ok(mut state) = self.shared_state.lock() {
                         state.coordination_events.push(event);
@@ -197,20 +180,6 @@ impl ConnectionCoordinator {
             false
         }
     }
-
-    /// Get all active import jobs across all connections
-    pub fn get_active_import_jobs(&self) -> Vec<import_job_monitor::ImportJobInfo> {
-        if let Ok(state) = self.shared_state.lock() {
-            state
-                .import_jobs
-                .iter()
-                .filter(|job| job.end_time.is_none())
-                .cloned()
-                .collect()
-        } else {
-            Vec::new()
-        }
-    }
 }
 
 impl Default for SharedState {
@@ -222,7 +191,6 @@ impl Default for SharedState {
                 max_connections: 5,
             },
             connection_status: HashMap::new(),
-            import_jobs: Vec::new(),
             coordination_events: Vec::new(),
         }
     }
