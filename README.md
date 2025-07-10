@@ -14,6 +14,7 @@ A comprehensive Rust framework for testing TiDB connections, monitoring import j
 - **External Configuration**: Support for JSON and TOML configuration files
 - **Environment Variable Overrides**: Flexible configuration management
 - **Error Handling**: Rich error types with `thiserror`
+- **Modular Design**: Test-specific configurations are self-contained within their respective binaries
 
 ## Quick Start
 
@@ -46,6 +47,12 @@ cargo run --bin isolation --features isolation_test -- -c tidb_config.json
 
 ## Configuration
 
+### Core Configuration Structure
+
+The framework uses a modular configuration approach:
+- **Core Config** (`src/config.rs`): Contains shared database, logging, and test configurations
+- **Test-Specific Configs**: Each binary contains its own test-specific configuration structs and parsing logic
+
 ### Configuration File Format
 
 The framework supports both JSON and TOML configuration files:
@@ -71,11 +78,6 @@ The framework supports both JSON and TOML configuration files:
     "rows": 10,
     "timeout_secs": 60,
     "verbose": false
-  },
-  "import_jobs": {
-    "monitor_duration": 300,
-    "update_interval": 5,
-    "show_details": true
   }
 }
 ```
@@ -99,11 +101,30 @@ console = true
 rows = 10
 timeout_secs = 60
 verbose = false
+```
 
-[import_jobs]
-monitor_duration = 300
-update_interval = 5
-show_details = true
+### Test-Specific Configurations
+
+Each test binary contains its own configuration structs for test-specific settings:
+
+#### Job Monitor Config (`src/bin/job_monitor.rs`)
+```rust
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ImportJobConfig {
+    pub monitor_duration: u64,
+    pub update_interval: u64,
+    pub show_details: bool,
+}
+```
+
+#### Isolation Test Config (`src/bin/isolation.rs`)
+```rust
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IsolationTestConfig {
+    pub test_rows: usize,
+    pub isolation_level: String,
+    pub concurrent_connections: usize,
+}
 ```
 
 ### Environment Variables
@@ -172,7 +193,6 @@ All binaries support these common options:
 - `-H, --host <HOST>`: Database host (hostname:port)
 - `-u, --user <USER>`: Database username
 - `-d, --database <DB>`: Database name
-- `-t, --monitor-duration <SECONDS>`: Import job monitoring duration
 - `--password <PASSWORD>`: Database password
 - `--no-password-prompt`: Skip password prompt
 - `--log-level <LEVEL>`: Log level (debug, info, warn, error)
@@ -180,21 +200,33 @@ All binaries support these common options:
 - `--log-file-path <PATH>`: Log file path
 - `-v, --verbose`: Enable verbose logging
 
+### Test-Specific Options
+
+#### Job Monitor Options
+- `-t, --monitor-duration <SECONDS>`: Import job monitoring duration
+- `--update-interval <SECONDS>`: Status update interval
+- `--show-details`: Show detailed job information
+
+#### Isolation Test Options
+- `--test-rows <ROWS>`: Number of test rows to use
+- `--isolation-level <LEVEL>`: Database isolation level
+- `--concurrent-connections <COUNT>`: Number of concurrent connections
+
 ## Project Structure
 
 ```
 src/
-├── bin/                    # Binary executables
+├── bin/                    # Binary executables with test-specific configs
 │   ├── basic.rs           # Basic connection test
 │   ├── simple_connection.rs
 │   ├── simple_multi_connection.rs
 │   ├── multi_connection.rs
-│   ├── isolation.rs       # Isolation testing
-│   ├── job_monitor.rs     # Import job monitoring
+│   ├── isolation.rs       # Isolation testing with IsolationTestConfig
+│   ├── job_monitor.rs     # Import job monitoring with ImportJobConfig
 │   ├── logging.rs         # Logging test
 │   └── config_gen.rs      # Configuration generator
-├── cli.rs                 # Command-line interface
-├── config.rs              # Configuration management
+├── cli.rs                 # Command-line interface utilities
+├── config.rs              # Core configuration management (AppConfig, DatabaseConfig, etc.)
 ├── connection.rs          # Database connection utilities
 ├── errors.rs              # Error types and handling
 ├── import_job_handlers.rs # Import job state handlers
@@ -205,6 +237,22 @@ src/
 ├── state_handlers.rs      # State handlers
 └── multi_connection_state_machine.rs
 ```
+
+## Configuration Architecture
+
+### Design Principles
+
+1. **Separation of Concerns**: Core configs are shared, test-specific configs are isolated
+2. **Self-Contained Tests**: Each binary contains its own configuration parsing and validation
+3. **Reduced Coupling**: Test binaries don't depend on each other's config structures
+4. **Maintainability**: Changes to test-specific configs don't affect other tests
+
+### Benefits
+
+- **Better Organization**: Test-specific configs are co-located with their tests
+- **Reduced Dependencies**: No cross-dependencies between test configs
+- **Easier Maintenance**: Changes to one test's config don't affect others
+- **Clear Boundaries**: Clear separation between core and test-specific functionality
 
 ## Error Handling
 
@@ -259,9 +307,9 @@ cargo clippy
 
 ### Example Configuration Files
 
-See `examples/` directory for sample configuration files:
-- `examples/tidb_config.json` - JSON configuration example
-- `examples/tidb_config.toml` - TOML configuration example
+The framework generates sample configuration files:
+- `tidb_config.json` - JSON configuration example
+- `tidb_config.toml` - TOML configuration example
 
 ### Example Usage
 
