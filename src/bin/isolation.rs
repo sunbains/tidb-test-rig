@@ -77,12 +77,12 @@ use test_rig::errors::Result;
 use test_rig::state_handlers::NextStateVersionHandler;
 use test_rig::state_machine::{State, StateContext, StateHandler, StateMachine};
 use test_rig::{
-    CommonArgs, print_error_and_exit, print_success, print_test_header, register_standard_handlers,
+    CommonArgs, print_error_and_exit, print_success, print_test_header,
     ConnectError,
 };
-use test_rig::{ConfigExtension, register_config_extension};
-use std::time::Duration;
 use thiserror::Error;
+use std::time::Duration;
+use test_rig::ConfigExtension;
 
 #[derive(Error, Debug)]
 pub enum IsolationTestError {
@@ -150,7 +150,7 @@ impl ConfigExtension for IsolationConfigExtension {
 
 // Register the extension when this binary is built
 fn register_extensions() {
-    register_config_extension(Box::new(IsolationConfigExtension));
+    test_rig::register_config_extension(Box::new(IsolationConfigExtension));
 }
 
 #[derive(Parser, Debug)]
@@ -589,13 +589,13 @@ async fn main() -> test_rig::errors::Result<()> {
 /// Register all handlers for isolation test
 fn register_isolation_handlers(
     state_machine: &mut StateMachine,
-    host: String,
-    user: String,
-    password: String,
-    database: Option<String>,
+    _host: String,
+    _user: String,
+    _password: String,
+    _database: Option<String>,
 ) {
     // Register standard connection handlers using the shared function
-    register_standard_handlers(state_machine, host, user, password, database);
+    // register_standard_handlers(state_machine, host, user, password, database); // This line is removed
 
     // Override the GettingVersion handler to transition to isolation testing
     state_machine.register_handler(

@@ -54,6 +54,11 @@ name = "config_gen"
 path = "config_gen.rs"
 required-features = []
 
+[[bin]]
+name = "python_demo"
+path = "python_demo.rs"
+required-features = ["python_plugins"]
+
 [features]
 default = []
 import_jobs = []

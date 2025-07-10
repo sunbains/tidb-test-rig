@@ -1,13 +1,13 @@
-use test_rig::{
+use test_rig::error_utils::{
     ResilientConnectionManager,
     create_db_retry_config,
     create_db_circuit_breaker_config,
     classify_error,
     get_recovery_strategy,
     ErrorContextBuilder,
-    ConnectError,
 };
-use test_rig::errors::RetryStrategy;
+use test_rig::errors::{ConnectError, RetryStrategy, RetryConfig};
+use test_rig::retry::CircuitBreaker;
 use mysql::{Pool, Opts};
 use std::time::Duration;
 
@@ -85,7 +85,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Example 6: Custom retry configuration
     println!("\n=== Example 6: Custom Retry Configuration ===");
-    let custom_retry_config = test_rig::RetryConfig {
+    let custom_retry_config = RetryConfig {
         max_retries: 10,
         base_delay: Duration::from_millis(50),
         max_delay: Duration::from_secs(5),
@@ -95,7 +95,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Example 7: Circuit breaker states
     println!("\n=== Example 7: Circuit Breaker States ===");
-    let circuit_breaker = test_rig::CircuitBreaker::new(circuit_config);
+    let circuit_breaker = CircuitBreaker::new(circuit_config);
     println!("Initial circuit breaker state: {:?}", circuit_breaker.get_state());
 
     // Example 8: Error handling patterns
@@ -179,24 +179,23 @@ async fn demonstrate_error_handling_patterns() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use test_rig::{ErrorCategory, RecoveryStrategy};
 
     #[tokio::test]
     async fn test_error_classification() {
         let connection_error = ConnectError::Connection(mysql::Error::server_disconnected());
-        assert_eq!(classify_error(&connection_error), ErrorCategory::Transient);
+        assert_eq!(classify_error(&connection_error), test_rig::error_utils::ErrorCategory::Transient);
 
         let auth_error = ConnectError::Authentication("invalid".to_string());
-        assert_eq!(classify_error(&auth_error), ErrorCategory::Permanent);
+        assert_eq!(classify_error(&auth_error), test_rig::error_utils::ErrorCategory::Permanent);
     }
 
     #[tokio::test]
     async fn test_recovery_strategies() {
         let connection_error = ConnectError::Connection(mysql::Error::server_disconnected());
-        assert_eq!(get_recovery_strategy(&connection_error), RecoveryStrategy::Retry);
+        assert_eq!(get_recovery_strategy(&connection_error), test_rig::error_utils::RecoveryStrategy::Retry);
 
         let auth_error = ConnectError::Authentication("invalid".to_string());
-        assert_eq!(get_recovery_strategy(&auth_error), RecoveryStrategy::FailFast);
+        assert_eq!(get_recovery_strategy(&auth_error), test_rig::error_utils::RecoveryStrategy::FailFast);
     }
 
     #[tokio::test]
