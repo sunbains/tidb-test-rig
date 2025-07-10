@@ -144,9 +144,9 @@ Common Options:
   -h, --help                           Print help
 
 Test-specific options vary by test. Run any test with --help to see its specific options:
-  cargo run --example basic_test -- --help
-  cargo run --example isolation_test -- --help
-  cargo run --example cli_test -- --help
+  cargo test --test basic_test -- -- --help
+  cargo test --test isolation_test -- -- --help
+  cargo test --test cli_test -- -- --help
 ```
 
 ### Test Workflows
@@ -177,47 +177,47 @@ The project includes comprehensive tests demonstrating various use cases:
 
 ### Basic Test (Main CLI)
 ```bash
-cargo run --example basic_test -- -H localhost:4000 -u root -d test
+cargo test --test basic_test -- -- -H localhost:4000 -u root -d test
 ```
 This is the main CLI entry point for single-connection and import job monitoring workflows.
 
 ### CLI Test
 ```bash
-cargo run --example cli_test -- -H localhost:4000 -u root -d test
+cargo test --test cli_test -- -- -H localhost:4000 -u root -d test
 ```
 Demonstrates CLI argument parsing and basic connection testing with modular argument structure.
 
 ### Isolation Test
 ```bash
-cargo run --example isolation_test -- -H localhost:4000 -u root -d test --test-rows 20
+cargo test --test isolation_test -- -- -H localhost:4000 -u root -d test --test-rows 20
 ```
 Tests transaction isolation with configurable test data.
 
 ### Logging Test
 ```bash
-cargo run --example logging_test -- -H localhost:4000 -u root -d test
+cargo test --test logging_test -- -- -H localhost:4000 -u root -d test
 ```
 Demonstrates structured logging with different verbosity levels.
 
 ### Simple Multi-Connection Test
 ```bash
-cargo run --example simple_multi_connection
+cargo test --test simple_multi_connection --
 ```
 Demonstrates basic multi-connection management with state machine coordination.
 
 ### Advanced Multi-Connection Test
 ```bash
-cargo run --example multi_connection_test
+cargo test --test multi_connection_test --
 ```
 Shows advanced scenarios with import job monitoring across multiple connections.
 
 ### Building Tests
 ```bash
-# Build all test binaries (Rust uses --examples for this purpose)
-cargo build --examples
+# Build all test binaries
+cargo test --no-run
 
 # Check test compilation for all test binaries
-cargo check --examples
+cargo check --tests
 
 # Using Make
 make tests
@@ -245,8 +245,8 @@ make tests
 # Run specific tests
 make run-simple-connection
 make run-isolation-test
-make run-cli-example
-make run-logging-example
+make run-cli-test
+make run-logging-test
 
 # Code quality
 make format
