@@ -1,5 +1,4 @@
 pub mod cli;
-pub mod cli_macros;
 pub mod connection;
 pub mod state_machine;
 pub mod state_handlers;

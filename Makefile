@@ -56,7 +56,7 @@ run-isolation-test:
 	cargo run --example isolation_test_example -- -H localhost:4000 -u root -d test
 
 run-macro-cli:
-	cargo run --example macro_cli_example -- -H localhost:4000 -u root -d test --test-rows 20
+	cargo run --example macro_cli_example --features="isolation_test" $(ARGS)
 
 run-logging-example:
 	cargo run --example logging_example -- --log-level debug --log-file --log-file-path logs/mylog.log

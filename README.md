@@ -173,6 +173,51 @@ make run-simple
 make run-advanced
 ```
 
+### Using Makefile
+
+The project includes a comprehensive Makefile for common development tasks:
+
+```bash
+# Build the main application
+make build
+
+# Run tests
+make test
+
+# Clean build artifacts
+make clean
+
+# Build all examples
+make examples
+
+# Run specific examples
+make run-simple-connection
+make run-isolation-test
+make run-macro-cli ARGS="-- -H localhost:4000 -u root -d test --test-rows 20"
+make run-logging-example
+
+# Code quality
+make format
+make lint
+make check
+
+# Show help
+make help
+```
+
+#### Makefile Targets
+
+| Target | Description | Example |
+|--------|-------------|---------|
+| `run-simple-connection` | Basic connection test | `make run-simple-connection` |
+| `run-isolation-test` | Transaction isolation testing | `make run-isolation-test` |
+| `run-macro-cli` | Macro-based CLI example | `make run-macro-cli ARGS="-- -H localhost:4000 -u root -d test --test-rows 20"` |
+| `run-logging-example` | Logging demonstration | `make run-logging-example` |
+| `run-simple` | Simple multi-connection example | `make run-simple` |
+| `run-advanced` | Advanced multi-connection example | `make run-advanced` |
+
+**Note:** The `run-macro-cli` target requires the `isolation_test` feature and accepts custom arguments via the `ARGS` variable.
+
 See [examples/README.md](examples/README.md) for detailed example documentation.
 
 ## Configuration
