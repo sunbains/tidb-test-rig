@@ -14,19 +14,19 @@ This tool is designed to test and monitor TiDB database connections with advance
 
 ## Library Structure
 
-This project is now a **reusable Rust library** for TiDB connection and import job testing. The main CLI application previously in `src/main.rs` has been moved to `examples/basic_example.rs`.
+This project is now a **reusable Rust library** for TiDB connection and import job testing. The main CLI application previously in `src/main.rs` has been moved to `examples/basic_test.rs`.
 
 - **Library usage:** Import the `connect` crate in your own Rust projects and use the state machine, handlers, and coordination logic directly.
-- **CLI usage:** Run the main CLI as an example:
+- **CLI usage:** Run the main CLI as a test:
   ```bash
-  cargo run --example basic_example -- -H localhost:4000 -u root -d test
+  cargo run --example basic_test -- -H localhost:4000 -u root -d test
   ```
   or
   ```bash
   make run-basic
   ```
 
-All other examples (multi-connection, isolation, CLI, etc.) are also available in the `examples/` directory and use the library API.
+All other tests (multi-connection, isolation, CLI, etc.) are also available in the `examples/` directory and use the library API.
 
 ### Modular CLI Architecture
 
@@ -143,10 +143,10 @@ Common Options:
   -t, --monitor-duration <DURATION>    Duration to monitor import jobs in seconds [default: 60]
   -h, --help                           Print help
 
-Example-specific options vary by example. Run any example with --help to see its specific options:
-  cargo run --example basic_example -- --help
-  cargo run --example isolation_test_example -- --help
-  cargo run --example cli_example -- --help
+Example-specific options vary by test. Run any test with --help to see its specific options:
+  cargo run --example basic_test -- --help
+  cargo run --example isolation_test -- --help
+  cargo run --example cli_test -- --help
 ```
 
 ### Example Workflows
@@ -175,48 +175,48 @@ done
 
 The project includes comprehensive examples demonstrating various use cases:
 
-### Basic Example (Main CLI)
+### Basic Test (Main CLI)
 ```bash
-cargo run --example basic_example -- -H localhost:4000 -u root -d test
+cargo run --example basic_test -- -H localhost:4000 -u root -d test
 ```
 This is the main CLI entry point for single-connection and import job monitoring workflows.
 
-### CLI Example
+### CLI Test
 ```bash
-cargo run --example cli_example -- -H localhost:4000 -u root -d test
+cargo run --example cli_test -- -H localhost:4000 -u root -d test
 ```
 Demonstrates CLI argument parsing and basic connection testing with modular argument structure.
 
-### Isolation Test Example
+### Isolation Test
 ```bash
-cargo run --example isolation_test_example -- -H localhost:4000 -u root -d test --test-rows 20
+cargo run --example isolation_test -- -H localhost:4000 -u root -d test --test-rows 20
 ```
 Tests transaction isolation with configurable test data.
 
-### Logging Example
+### Logging Test
 ```bash
-cargo run --example logging_example -- -H localhost:4000 -u root -d test
+cargo run --example logging_test -- -H localhost:4000 -u root -d test
 ```
 Demonstrates structured logging with different verbosity levels.
 
-### Simple Multi-Connection Example
+### Simple Multi-Connection Test
 ```bash
 cargo run --example simple_multi_connection
 ```
 Demonstrates basic multi-connection management with state machine coordination.
 
-### Advanced Multi-Connection Example
+### Advanced Multi-Connection Test
 ```bash
-cargo run --example multi_connection_example
+cargo run --example multi_connection_test
 ```
 Shows advanced scenarios with import job monitoring across multiple connections.
 
-### Building Examples
+### Building Tests
 ```bash
-# Build all examples
+# Build all tests
 cargo build --examples
 
-# Check example compilation
+# Check test compilation
 cargo check --examples
 
 # Using Make
@@ -239,10 +239,10 @@ make test
 # Clean build artifacts
 make clean
 
-# Build all examples
+# Build all tests
 make examples
 
-# Run specific examples
+# Run specific tests
 make run-simple-connection
 make run-isolation-test
 make run-cli-example
@@ -263,14 +263,14 @@ make help
 |--------|-------------|---------|
 | `run-simple-connection` | Basic connection test | `make run-simple-connection` |
 | `run-isolation-test` | Transaction isolation testing | `make run-isolation-test` |
-| `run-cli-example` | CLI example with modular arguments | `make run-cli-example` |
+| `run-cli-example` | CLI test with modular arguments | `make run-cli-example` |
 | `run-logging-example` | Logging demonstration | `make run-logging-example` |
-| `run-simple` | Simple multi-connection example | `make run-simple` |
-| `run-advanced` | Advanced multi-connection example | `make run-advanced` |
+| `run-simple` | Simple multi-connection test | `make run-simple` |
+| `run-advanced` | Advanced multi-connection test | `make run-advanced` |
 
-**Note:** Each example has its own CLI arguments. Use `--help` with any example to see its specific options.
+**Note:** Each test has its own CLI arguments. Use `--help` with any test to see its specific options.
 
-See [examples/README.md](examples/README.md) for detailed example documentation.
+See [examples/README.md](examples/README.md) for detailed test documentation.
 
 ## Configuration
 
@@ -306,13 +306,13 @@ src/
 └── logging.rs              # Logging infrastructure
 
 examples/
-├── simple_connection_example.rs  # Basic connection test
-├── isolation_test_example.rs     # Transaction isolation testing
-├── logging_example.rs            # Logging demonstration
-├── cli_example.rs                # CLI example
-├── simple_multi_connection.rs    # Basic multi-connection example
-├── multi_connection_example.rs   # Advanced multi-connection example
-└── README.md                     # Example documentation
+├── simple_connection_test.rs     # Basic connection test
+├── isolation_test.rs             # Transaction isolation testing
+├── logging_test.rs               # Logging demonstration
+├── cli_test.rs                   # CLI test
+├── simple_multi_connection.rs    # Basic multi-connection test
+├── multi_connection_test.rs      # Advanced multi-connection test
+└── README.md                     # Test documentation
 
 docs/
 └── ARCHITECTURE.md              # Detailed architecture documentation
@@ -322,45 +322,45 @@ docs/
 
 #### Common Imports (from lib.rs)
 ```rust
-// All examples can import common functionality
+// All tests can import common functionality
 use connect::{InitialHandler, ParsingConfigHandler, ConnectingHandler, 
               TestingConnectionHandler, VerifyingDatabaseHandler, GettingVersionHandler};
 use connect::{CommonArgs, TestSetup, CommonArgsSetup};
 use connect::lib_utils::{print_example_header, print_success, print_error_and_exit};
 ```
 
-#### Example-Specific Imports
+#### Test-Specific Imports
 ```rust
-// Example-specific imports
+// Test-specific imports
 use connect::state_machine::{StateMachine, State, StateContext, StateHandler, StateError};
 use clap::Parser;
 
-// Each example defines its own Args struct
+// Each test defines its own Args struct
 #[derive(Parser)]
 #[command(flatten)]
 struct Args {
     #[command(flatten)]
     common: CommonArgs,
-    // Example-specific arguments here
+    // Test-specific arguments here
 }
 ```
 
-### Adding New Examples
+### Adding New Tests
 
-#### Example Structure
-Each example follows a consistent pattern:
+#### Test Structure
+Each test follows a consistent pattern:
 
 1. **Define Args struct** with `#[command(flatten)]` for `CommonArgs`
 2. **Use shared utilities** from `lib_utils.rs` for setup and error handling
-3. **Implement example-specific logic** using the state machine
+3. **Implement test-specific logic** using the state machine
 
 ```rust
 #[derive(Parser)]
-#[command(about = "Example description")]
+#[command(about = "Test description")]
 struct Args {
     #[command(flatten)]
     common: CommonArgs,
-    // Example-specific arguments
+    // Test-specific arguments
 }
 
 #[tokio::main]
@@ -368,15 +368,15 @@ async fn main() {
     let args = Args::parse();
     let setup = TestSetup::new(&args.common);
     
-    // Example-specific logic here
+    // Test-specific logic here
 }
 ```
 
 #### Adding New States
 1. For common states: Define in `state_machine.rs` and export in `lib.rs`
-2. For example-specific states: Use existing states in `State` enum or add new ones
+2. For test-specific states: Use existing states in `State` enum or add new ones
 3. Implement the handler in the appropriate module
-4. Register the handler in the example
+4. Register the handler in the test
 5. Update state transitions as needed
 
 ### Adding New Features

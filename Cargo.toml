@@ -28,13 +28,13 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "time"]
 tracing-appender = "0.2"
 
 [[example]]
-name = "basic_example"
-path = "examples/basic_example.rs"
+name = "basic_test"
+path = "examples/basic_test.rs"
 required-features = []
 
 [[example]]
 name = "simple_connection"
-path = "examples/simple_connection_example.rs"
+path = "examples/simple_connection_test.rs"
 required-features = []
 
 [[example]]
@@ -43,21 +43,21 @@ path = "examples/simple_multi_connection.rs"
 required-features = ["multi_connection"]
 
 [[example]]
-name = "multi_connection_example"
-path = "examples/multi_connection_example.rs"
+name = "multi_connection_test"
+path = "examples/multi_connection_test.rs"
 required-features = ["multi_connection", "import_jobs"]
 
 [[example]]
-name = "isolation_test_example"
-path = "examples/isolation_test_example.rs"
+name = "isolation_test"
+path = "examples/isolation_test.rs"
 required-features = ["isolation_test"]
 
 [[example]]
-name = "cli_example"
-path = "examples/cli_example.rs"
+name = "cli_test"
+path = "examples/cli_test.rs"
 required-features = ["isolation_test"]
 
 [[example]]
-name = "logging_example"
-path = "examples/logging_example.rs"
+name = "logging_test"
+path = "examples/logging_test.rs"
 required-features = []

@@ -48,22 +48,22 @@ run-simple:
 	cargo run --example simple_multi_connection
 
 run-advanced:
-	cargo run --example multi_connection_example
+	cargo run --example multi_connection_test
 
 run-basic:
-	cargo run --example basic_example -- -H localhost:4000 -u root -d test
+	cargo run --example basic_test -- -H localhost:4000 -u root -d test
 
 run-simple-connection:
 	cargo run --example simple_connection -- -H localhost:4000 -u root -d test
 
 run-isolation-test:
-	cargo run --example isolation_test_example -- -H localhost:4000 -u root -d test
+	cargo run --example isolation_test -- -H localhost:4000 -u root -d test
 
 run-cli-example:
-	cargo run --example cli_example --features="isolation_test" -- $(ARGS)
+	cargo run --example cli_test --features="isolation_test" -- $(ARGS)
 
 run-logging-example:
-	cargo run --example logging_example -- --log-level debug --log-file --log-file-path logs/mylog.log
+	cargo run --example logging_test -- --log-level debug --log-file --log-file-path logs/mylog.log
 
 # Check if code compiles
 check:

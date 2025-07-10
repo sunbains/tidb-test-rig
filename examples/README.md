@@ -1,10 +1,10 @@
-# TiDB Connection Test Tool - Examples
+# TiDB Connection Test Tool - Tests
 
-This directory contains example programs demonstrating how to use the TiDB connection test tool with a common CLI library and robust logging.
+This directory contains test programs demonstrating how to use the TiDB connection test tool with a common CLI library and robust logging.
 
 ## Common Setup and Utilities
 
-All examples use shared utilities that provide:
+All tests use shared utilities that provide:
 
 - **Standardized Arguments**: Common host, user, database, and monitoring parameters
 - **Environment Variable Support**: Configuration via `TIDB_HOST`, `TIDB_USER`, `TIDB_DATABASE`, `TIDB_PASSWORD`
@@ -19,30 +19,30 @@ All examples use shared utilities that provide:
 
 ```bash
 # Basic usage with interactive password prompt
-cargo run --example basic_example -- -H localhost:4000 -u root -d test
+cargo run --example basic_test -- -H localhost:4000 -u root -d test
 
 # Using environment variables
 export TIDB_HOST=localhost:4000
 export TIDB_USER=root
 export TIDB_PASSWORD=mypassword
-cargo run --example basic_example
+cargo run --example basic_test
 
 # Using command line password (less secure)
-cargo run --example basic_example -- -H localhost:4000 -u root --password mypassword
+cargo run --example basic_test -- -H localhost:4000 -u root --password mypassword
 
 # Skip password prompt (for automated testing)
-cargo run --example basic_example -- -H localhost:4000 -u root --no-password-prompt
+cargo run --example basic_test -- -H localhost:4000 -u root --no-password-prompt
 
 # Enable debug logging to console
-cargo run --example basic_example -- --log-level debug
+cargo run --example basic_test -- --log-level debug
 
 # Log to a file
-cargo run --example basic_example -- --log-file --log-file-path logs/mylog.log
+cargo run --example basic_test -- --log-file --log-file-path logs/mylog.log
 ```
 
 ### Available Arguments
 
-**Common Arguments (all examples):**
+**Common Arguments (all tests):**
 - `-H, --host`: Hostname and port (default: localhost:4000)
 - `-u, --user`: Username (default: root)
 - `-d, --database`: Database name (optional)
@@ -53,10 +53,10 @@ cargo run --example basic_example -- --log-file --log-file-path logs/mylog.log
 - `--log-file-path`: Path to log file (default: logs/tidb_connect.log)
 - `-v, --verbose`: Shortcut for debug logging
 
-**Example-specific Arguments:**
-- `-t, --monitor-duration`: Duration to monitor import jobs in seconds (default: 60) - *multi-connection examples*
-- `--test-rows`: Number of test rows to create for isolation testing (default: 10) - *isolation test examples*
-- `--connection-count`: Number of connections to create for multi-connection tests (default: 2) - *multi-connection examples*
+**Test-specific Arguments:**
+- `-t, --monitor-duration`: Duration to monitor import jobs in seconds (default: 60) - *multi-connection tests*
+- `--test-rows`: Number of test rows to create for isolation testing (default: 10) - *isolation test tests*
+- `--connection-count`: Number of connections to create for multi-connection tests (default: 2) - *multi-connection tests*
 
 ## Logging Facility
 
@@ -90,83 +90,83 @@ log_state_transition!(from, to);
 ### Example: Logging to File
 
 ```bash
-cargo run --example basic_example -- --log-level debug --log-file --log-file-path logs/mylog.log
+cargo run --example basic_test -- --log-level debug --log-file --log-file-path logs/mylog.log
 ```
 
-## Shared Example Utilities
+## Shared Test Utilities
 
-The project provides shared utilities in `src/lib_utils.rs` that eliminate code duplication across examples:
+The project provides shared utilities in `src/lib_utils.rs` that eliminate code duplication across tests:
 
 ### TestSetup
-For examples using the legacy `parse_args()` approach:
+For tests using the legacy `parse_args()` approach:
 ```rust
 use connect::{TestSetup, print_example_header, print_success};
 
 #[tokio::main]
 async fn main() {
-    print_example_header("My Example");
+    print_example_header("My Test");
     
     let mut setup = TestSetup::new()?;
     setup.run_with_job_monitoring().await?;
     
-    print_success("Example completed!");
+    print_success("Test completed!");
 }
 ```
 
 ### CommonArgsSetup
-For examples using the new `CommonArgs::parse()` approach:
+For tests using the new `CommonArgs::parse()` approach:
 ```rust
 use connect::{CommonArgsSetup, print_example_header, print_success};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    print_example_header("My Example");
+    print_example_header("My Test");
     
     let mut setup = CommonArgsSetup::new()?;
     setup.run_with_error_handling().await?;
     
-    print_success("Example completed!");
+    print_success("Test completed!");
     Ok(())
 }
 ```
 
 ### Helper Functions
-- `print_example_header(title)`: Print a formatted example header
+- `print_example_header(title)`: Print a formatted test header
 - `print_success(message)`: Print a success message
 - `print_error_and_exit(message, error)`: Print error and exit
 - `create_state_machine_with_handlers(...)`: Create state machine with standard handlers
 
-## Available Examples
+## Available Tests
 
-### 1. Basic Example (`basic_example.rs`)
-A comprehensive example showing how to connect to TiDB and perform basic operations.
+### 1. Basic Test (`basic_test.rs`)
+A comprehensive test showing how to connect to TiDB and perform basic operations.
 
 **Features:**
-- Uses the shared example utilities for setup and error handling
+- Uses the shared test utilities for setup and error handling
 - Demonstrates basic connection testing
 - Shows version checking and database verification
 - Includes import job monitoring capabilities
-- Minimal example for getting started
+- Minimal test for getting started
 
-### 2. Isolation Test Example (`isolation_test_example.rs`)
-A comprehensive example testing TiDB's repeatable read isolation.
+### 2. Isolation Test (`isolation_test.rs`)
+A comprehensive test testing TiDB's repeatable read isolation.
 
 **Features:**
 - Creates test tables and populates data
 - Tests transaction isolation with multiple connections
 - Demonstrates repeatable read behavior
-- Uses the shared example utilities for setup and error handling
+- Uses the shared test utilities for setup and error handling
 
-### 3. Simple Multi-Connection Example (`simple_multi_connection.rs`)
-A basic example showing how to create and manage multiple TiDB connections with the state machine infrastructure.
+### 3. Simple Multi-Connection Test (`simple_multi_connection.rs`)
+A basic test showing how to create and manage multiple TiDB connections with the state machine infrastructure.
 
 **Features:**
 - Creates multiple connections to different TiDB instances
 - Demonstrates basic connection coordination
 - Shows how to handle connection states and errors
 
-### 4. Advanced Multi-Connection Example (`multi_connection_example.rs`)
-A comprehensive example showing advanced multi-connection scenarios with import job monitoring.
+### 4. Advanced Multi-Connection Test (`multi_connection_test.rs`)
+A comprehensive test showing advanced multi-connection scenarios with import job monitoring.
 
 **Features:**
 - Complex connection management with shared state
@@ -174,7 +174,7 @@ A comprehensive example showing advanced multi-connection scenarios with import 
 - Advanced error handling and recovery
 - Coordination between multiple state machines
 
-### 5. Logging Example (`logging_example.rs`)
+### 5. Logging Test (`logging_test.rs`)
 A demonstration of the logging facility, including log levels, file output, performance metrics, and error context.
 
 **Features:**
@@ -183,52 +183,52 @@ A demonstration of the logging facility, including log levels, file output, perf
 - Logs performance and memory usage metrics
 - Integrates with the state machine and shared utilities
 
-## Building and Running Examples
+## Building and Running Tests
 
 ### Using Cargo Directly
 
 ```bash
-# Build all examples
+# Build all tests
 cargo build --examples
 
-# Run basic example
-cargo run --example basic_example -- -H localhost:4000 -u root -d test
+# Run basic test
+cargo run --example basic_test -- -H localhost:4000 -u root -d test
 
-# Run isolation test example
-cargo run --example isolation_test_example -- -H localhost:4000 -u root -d test
+# Run isolation test
+cargo run --example isolation_test -- -H localhost:4000 -u root -d test
 
-# Run simple multi-connection example
+# Run simple multi-connection test
 cargo run --example simple_multi_connection
 
-# Run advanced multi-connection example
-cargo run --example multi_connection_example
+# Run advanced multi-connection test
+cargo run --example multi_connection_test
 
-# Run logging example
-cargo run --example logging_example -- --log-level debug --log-file --log-file-path logs/mylog.log
+# Run logging test
+cargo run --example logging_test -- --log-level debug --log-file --log-file-path logs/mylog.log
 
-# Check if examples compile
+# Check if tests compile
 cargo check --examples
 ```
 
 ### Using Make
 
 ```bash
-# Build all examples
+# Build all tests
 make examples
 
-# Run basic example
+# Run basic test
 make run-basic
 
-# Run isolation test example
+# Run isolation test
 make run-isolation-test
 
-# Run simple multi-connection example
+# Run simple multi-connection test
 make run-simple-multi-connection
 
-# Run advanced multi-connection example
+# Run advanced multi-connection test
 make run-advanced
 
-# Run logging example
+# Run logging test
 make run-logging-example
 
 # Check compilation
@@ -240,7 +240,7 @@ make clean
 
 ## Configuration
 
-Before running the examples, you may need to configure:
+Before running the tests, you may need to configure:
 
 1. **Database Connection Details**: Use CLI arguments or environment variables
 2. **Authentication**: Ensure you have valid TiDB credentials
@@ -264,9 +264,9 @@ cargo build --features multi_connection
 cargo build --features "import_jobs,multi_connection"
 ```
 
-## Example Output
+## Test Output
 
-### Basic Example
+### Basic Test
 ```
 TiDB Basic Connection Test
 ===========================
@@ -282,7 +282,7 @@ TiDB version: 6.5.0
 ✅ Basic connection test completed successfully!
 ```
 
-### Isolation Test Example
+### Isolation Test
 ```
 TiDB Repeatable Read Isolation Test
 ===================================
@@ -300,7 +300,7 @@ Connection Info:
 ✅ Isolation test completed successfully!
 ```
 
-### Logging Example
+### Logging Test
 ```
 TiDB Logging Example
 ====================
@@ -330,25 +330,25 @@ Check the logs for detailed information.
 
 ### Debug Mode
 
-To run examples with debug output:
+To run tests with debug output:
 
 ```bash
-RUST_LOG=debug cargo run --example basic_example
+RUST_LOG=debug cargo run --example basic_test
 ```
 
 ## Contributing
 
-When adding new examples:
+When adding new tests:
 
-1. Follow the naming convention: `descriptive_name.rs`
-2. Add the example to `Cargo.toml` in the `[[example]]` section
+1. Follow the naming convention: `descriptive_name_test.rs`
+2. Add the test to `Cargo.toml` in the `[[example]]` section
 3. Update this README with documentation
 4. Include proper error handling and logging
-5. Test the example thoroughly before committing
+5. Test the test thoroughly before committing
 
 ## Architecture Notes
 
-The examples demonstrate the following architectural patterns:
+The tests demonstrate the following architectural patterns:
 
 - **State Machine Pattern**: Each connection uses a state machine for lifecycle management
 - **Coordinator Pattern**: Multiple connections are coordinated through a central coordinator
