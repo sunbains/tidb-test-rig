@@ -1,5 +1,5 @@
 use connect::state_machine::{StateMachine, State, StateContext, StateHandler, StateError};
-use connect::{CommonArgs, print_test_header, print_success, print_error_and_exit};
+use connect::{CommonArgs, print_test_header, print_success, print_error_and_exit, register_standard_handlers};
 use connect::state_handlers::NextStateVersionHandler;
 use mysql::prelude::*;
 use mysql::*;
@@ -413,19 +413,10 @@ fn register_isolation_handlers(
     password: String,
     database: Option<String>,
 ) {
-    use connect::state_handlers::{InitialHandler, ParsingConfigHandler, ConnectingHandler, TestingConnectionHandler, VerifyingDatabaseHandler};
+    // Register standard connection handlers using the shared function
+    register_standard_handlers(state_machine, host, user, password, database);
     
-    // Register standard connection handlers
-    state_machine.register_handler(State::Initial, Box::new(InitialHandler));
-    state_machine.register_handler(
-        State::ParsingConfig,
-        Box::new(ParsingConfigHandler::new(host, user, password, database))
-    );
-    state_machine.register_handler(State::Connecting, Box::new(ConnectingHandler));
-    state_machine.register_handler(State::TestingConnection, Box::new(TestingConnectionHandler));
-    state_machine.register_handler(State::VerifyingDatabase, Box::new(VerifyingDatabaseHandler));
-    
-    // Register custom version handler that transitions to isolation testing
+    // Override the GettingVersion handler to transition to isolation testing
     state_machine.register_handler(State::GettingVersion, Box::new(NextStateVersionHandler::new(State::CreatingTable)));
     
     // Register isolation test handlers
