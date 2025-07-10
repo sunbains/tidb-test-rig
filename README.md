@@ -324,6 +324,73 @@ cargo run --bin job_monitor --features import_jobs -- -c tidb_config.json --moni
 cargo run --bin isolation --features isolation_test -- -c tidb_config.json --verbose
 ```
 
+## Configuration Plugin Extension System
+
+The configuration generator (`config_gen.rs`) supports a **plugin pattern** for test-specific configuration options. This allows new tests to add their own CLI arguments and config logic without modifying the core generator.
+
+### How It Works
+- Each test binary can define a `ConfigExtension` implementing the `ConfigExtension` trait.
+- The extension registers itself with the config generator at runtime.
+- When you run `config_gen`, all registered extensions add their CLI options and config logic.
+- This keeps test-specific config code in the test binary, not in the core generator.
+
+### Example: Adding a Test-Specific Option
+Suppose you want to add a `--test-rows` option for the isolation test:
+
+**In `src/bin/isolation.rs`:**
+```rust
+use connect::{ConfigExtension, register_config_extension};
+use clap::Command;
+
+struct IsolationConfigExtension;
+
+impl ConfigExtension for IsolationConfigExtension {
+    fn add_cli_args(&self, app: Command) -> Command {
+        app.arg(
+            clap::Arg::new("test-rows")
+                .long("test-rows")
+                .help("Number of test rows to create for isolation testing")
+                .default_value("10")
+        )
+    }
+    fn build_config(&self, args: &clap::ArgMatches, config: &mut connect::config::AppConfig) -> std::result::Result<(), Box<dyn std::error::Error>> {
+        if let Some(test_rows) = args.get_one::<String>("test-rows") {
+            if let Ok(rows) = test_rows.parse::<u32>() {
+                config.test.rows = rows;
+            }
+        }
+        Ok(())
+    }
+    fn get_extension_name(&self) -> &'static str { "isolation_test" }
+    fn get_help_text(&self) -> &'static str { "Adds --test-rows option for isolation testing" }
+}
+
+fn register_extensions() {
+    register_config_extension(Box::new(IsolationConfigExtension));
+}
+
+// In your main function, call register_extensions() before parsing args:
+fn main() {
+    register_extensions();
+    // ... rest of main
+}
+```
+
+### Using the Extension
+Now, when you run the config generator, the `--test-rows` option will be available:
+
+```bash
+cargo run --bin config_gen -- --test-rows 25 --host my-tidb:4000 --username myuser
+```
+
+The generated config will include the test-specific setting, and the isolation test will use it automatically.
+
+### Benefits
+- **No core changes needed** for new test options
+- **Test-specific config stays with the test**
+- **Easy to extend**: just implement and register a new extension
+- **All CLI options are available in `config_gen --help`**
+
 ## License
 
 [LICENSE file](LICENSE)

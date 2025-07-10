@@ -72,61 +72,86 @@
 //! cargo run --bin config_gen -- --format toml --host prod-tidb:4000 --username appuser --database production --log-level warn
 //! ```
 
-use connect::ConfigBuilder;
-use clap::Parser;
+use connect::{ConfigBuilder, apply_extensions_to_command, apply_extensions_to_config, print_extensions_help};
+use clap::Command;
 use std::path::PathBuf;
 
-#[derive(Parser)]
-#[command(name = "config-gen")]
-#[command(about = "Generate TiDB configuration files")]
-struct Args {
-    /// Output file path
-    #[arg(short, long, default_value = "tidb_config.json")]
-    output: PathBuf,
-    
-    /// Output format (json, toml)
-    #[arg(short, long, default_value = "json")]
-    format: String,
-    
-    /// Database host
-    #[arg(long, default_value = "localhost:4000")]
-    host: String,
-    
-    /// Database username
-    #[arg(long, default_value = "root")]
-    username: String,
-    
-    /// Database name
-    #[arg(long)]
-    database: Option<String>,
-    
-    /// Log level
-    #[arg(long, default_value = "info")]
-    log_level: String,
-    
-    // test_rows moved to isolation.rs
-}
-
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let args = Args::parse();
+    // Build the CLI command with extensions
+    let app = Command::new("config-gen")
+        .about("Generate TiDB configuration files")
+        .arg(
+            clap::Arg::new("output")
+                .short('o')
+                .long("output")
+                .help("Output file path")
+                .default_value("tidb_config.json")
+        )
+        .arg(
+            clap::Arg::new("format")
+                .short('f')
+                .long("format")
+                .help("Output format (json, toml)")
+                .default_value("json")
+        )
+        .arg(
+            clap::Arg::new("host")
+                .long("host")
+                .help("Database host")
+                .default_value("localhost:4000")
+        )
+        .arg(
+            clap::Arg::new("username")
+                .long("username")
+                .help("Database username")
+                .default_value("root")
+        )
+        .arg(
+            clap::Arg::new("database")
+                .long("database")
+                .help("Database name")
+        )
+        .arg(
+            clap::Arg::new("log-level")
+                .long("log-level")
+                .help("Log level")
+                .default_value("info")
+        );
+    
+    // Apply extensions to the command
+    let app = apply_extensions_to_command(app);
+    
+    // Parse arguments
+    let args = app.get_matches();
+    
+    // Extract core arguments
+    let output = args.get_one::<String>("output").unwrap().to_string();
+    let format = args.get_one::<String>("format").unwrap().to_string();
+    let host = args.get_one::<String>("host").unwrap().to_string();
+    let username = args.get_one::<String>("username").unwrap().to_string();
+    let database = args.get_one::<String>("database").map(|s| s.to_string());
+    let log_level = args.get_one::<String>("log-level").unwrap().to_string();
     
     // Create configuration using builder pattern
     let mut builder = ConfigBuilder::new()
-        .host(args.host)
-        .username(args.username)
-        .log_level(args.log_level);
+        .host(host)
+        .username(username)
+        .log_level(log_level);
     
-    if let Some(database) = args.database {
+    if let Some(database) = database {
         builder = builder.database(database);
     }
     
-    let config = builder.build();
+    let mut config = builder.build();
+    
+    // Apply extensions to the configuration
+    apply_extensions_to_config(&args, &mut config)?;
     
     // Determine output format
-    let mut output_path = args.output;
-    if args.format == "toml" {
+    let mut output_path = PathBuf::from(output);
+    if format == "toml" {
         output_path.set_extension("toml");
-    } else if args.format == "json" {
+    } else if format == "json" {
         output_path.set_extension("json");
     }
     
@@ -139,6 +164,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  cargo run --bin job_monitor --features import_jobs -- -c {}", output_path.display());
     println!("  cargo run --bin isolation --features isolation_test -- -c {}", output_path.display());
     
+    // Print extension help if any extensions are registered
+    print_extensions_help();
+    
     Ok(())
 } 
 
@@ -150,9 +178,18 @@ mod tests {
     use std::fs;
     use serial_test::serial;
 
-    #[test]
+        #[test]
     fn test_args_parsing() {
-        let args = Args::parse_from([
+        let app = Command::new("test-bin")
+            .arg(clap::Arg::new("output").short('o').long("output"))
+            .arg(clap::Arg::new("format").short('f').long("format"))
+            .arg(clap::Arg::new("host").long("host"))
+            .arg(clap::Arg::new("username").long("username"))
+            .arg(clap::Arg::new("database").long("database"))
+            .arg(clap::Arg::new("log-level").long("log-level"));
+        
+        let app = apply_extensions_to_command(app);
+        let args = app.get_matches_from([
             "test-bin", 
             "--output", "test_config.json",
             "--format", "json",
@@ -160,27 +197,35 @@ mod tests {
             "--username", "testuser",
             "--database", "testdb",
             "--log-level", "debug"
-    ]);
-    
-    assert_eq!(args.output.to_string_lossy(), "test_config.json");
-    assert_eq!(args.format, "json");
-    assert_eq!(args.host, "testhost:4000");
-    assert_eq!(args.username, "testuser");
-    assert_eq!(args.database, Some("testdb".to_string()));
-    assert_eq!(args.log_level, "debug");
-    // test_rows moved to isolation.rs
+        ]);
+        
+        assert_eq!(args.get_one::<String>("output").unwrap(), "test_config.json");
+        assert_eq!(args.get_one::<String>("format").unwrap(), "json");
+        assert_eq!(args.get_one::<String>("host").unwrap(), "testhost:4000");
+        assert_eq!(args.get_one::<String>("username").unwrap(), "testuser");
+        assert_eq!(args.get_one::<String>("database").unwrap(), "testdb");
+        assert_eq!(args.get_one::<String>("log-level").unwrap(), "debug");
     }
 
     #[test]
     fn test_args_defaults() {
-        let args = Args::parse_from(["test-bin"]);
-        assert_eq!(args.output.to_string_lossy(), "tidb_config.json");
-        assert_eq!(args.format, "json");
-        assert_eq!(args.host, "localhost:4000");
-        assert_eq!(args.username, "root");
-        assert_eq!(args.database, None);
-        assert_eq!(args.log_level, "info");
-        // test_rows moved to isolation.rs
+        let app = Command::new("test-bin")
+            .arg(clap::Arg::new("output").short('o').long("output").default_value("tidb_config.json"))
+            .arg(clap::Arg::new("format").short('f').long("format").default_value("json"))
+            .arg(clap::Arg::new("host").long("host").default_value("localhost:4000"))
+            .arg(clap::Arg::new("username").long("username").default_value("root"))
+            .arg(clap::Arg::new("database").long("database"))
+            .arg(clap::Arg::new("log-level").long("log-level").default_value("info"));
+        
+        let app = apply_extensions_to_command(app);
+        let args = app.get_matches_from(["test-bin"]);
+        
+        assert_eq!(args.get_one::<String>("output").unwrap(), "tidb_config.json");
+        assert_eq!(args.get_one::<String>("format").unwrap(), "json");
+        assert_eq!(args.get_one::<String>("host").unwrap(), "localhost:4000");
+        assert_eq!(args.get_one::<String>("username").unwrap(), "root");
+        assert_eq!(args.get_one::<String>("database"), None);
+        assert_eq!(args.get_one::<String>("log-level").unwrap(), "info");
     }
 
     #[test]
@@ -205,7 +250,16 @@ mod tests {
         let temp_file = NamedTempFile::new().unwrap();
         let output_path = temp_file.path().with_extension("json");
         
-        let args = Args::parse_from([
+        let app = Command::new("test-bin")
+            .arg(clap::Arg::new("output").short('o').long("output"))
+            .arg(clap::Arg::new("format").short('f').long("format"))
+            .arg(clap::Arg::new("host").long("host"))
+            .arg(clap::Arg::new("username").long("username"))
+            .arg(clap::Arg::new("database").long("database"))
+            .arg(clap::Arg::new("log-level").long("log-level").default_value("info"));
+        
+        let app = apply_extensions_to_command(app);
+        let args = app.get_matches_from([
             "test-bin",
             "--output", output_path.to_str().unwrap(),
             "--host", "genhost:4000",
@@ -214,10 +268,9 @@ mod tests {
         
         // Simulate the main function logic
         let builder = ConfigBuilder::new()
-            .host(args.host)
-            .username(args.username)
-            .log_level(args.log_level);
-            // test_rows moved to isolation.rs
+            .host(args.get_one::<String>("host").unwrap())
+            .username(args.get_one::<String>("username").unwrap())
+            .log_level(args.get_one::<String>("log-level").unwrap());
         
         let config = builder.build();
         
@@ -237,7 +290,16 @@ mod tests {
         let temp_file = NamedTempFile::new().unwrap();
         let output_path = temp_file.path().with_extension("toml");
         
-        let args = Args::parse_from([
+        let app = Command::new("test-bin")
+            .arg(clap::Arg::new("output").short('o').long("output"))
+            .arg(clap::Arg::new("format").short('f').long("format"))
+            .arg(clap::Arg::new("host").long("host"))
+            .arg(clap::Arg::new("username").long("username"))
+            .arg(clap::Arg::new("database").long("database"))
+            .arg(clap::Arg::new("log-level").long("log-level").default_value("info"));
+        
+        let app = apply_extensions_to_command(app);
+        let args = app.get_matches_from([
             "test-bin",
             "--output", output_path.to_str().unwrap(),
             "--format", "toml",
@@ -245,12 +307,10 @@ mod tests {
         ]);
         
         let config = ConfigBuilder::new()
-            .host(args.host)
-            .username(args.username)
-            .log_level(args.log_level);
-            // test_rows moved to isolation.rs
-        
-        let config = config.build();
+            .host(args.get_one::<String>("host").unwrap())
+            .username(args.get_one::<String>("username").unwrap())
+            .log_level(args.get_one::<String>("log-level").unwrap())
+            .build();
         
         config.save_to_file(&output_path).unwrap();
         assert!(output_path.exists());
@@ -261,7 +321,6 @@ mod tests {
         assert!(content.contains("[database]"));
         assert!(content.contains("[logging]"));
         assert!(content.contains("[test]"));
-        // import_jobs moved to job_monitor.rs
     }
 
     #[test]

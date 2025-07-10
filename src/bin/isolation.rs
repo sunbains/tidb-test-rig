@@ -71,11 +71,49 @@ use connect::state_machine::{StateMachine, State, StateContext, StateHandler};
 use connect::{CommonArgs, print_test_header, print_success, print_error_and_exit, register_standard_handlers};
 use connect::state_handlers::NextStateVersionHandler;
 use connect::errors::{StateError, Result};
+use connect::{ConfigExtension, register_config_extension};
 use mysql::prelude::*;
 use mysql::*;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
+use clap::Command;
 use clap::Parser;
+
+/// Configuration extension for isolation test
+struct IsolationConfigExtension;
+
+impl ConfigExtension for IsolationConfigExtension {
+    fn add_cli_args(&self, app: Command) -> Command {
+        app.arg(
+            clap::Arg::new("test-rows")
+                .long("test-rows")
+                .help("Number of test rows to create for isolation testing")
+                .default_value("10")
+        )
+    }
+    
+    fn build_config(&self, args: &clap::ArgMatches, config: &mut connect::config::AppConfig) -> std::result::Result<(), Box<dyn std::error::Error>> {
+        if let Some(test_rows) = args.get_one::<String>("test-rows") {
+            if let Ok(rows) = test_rows.parse::<u32>() {
+                config.test.rows = rows;
+            }
+        }
+        Ok(())
+    }
+    
+    fn get_extension_name(&self) -> &'static str {
+        "isolation_test"
+    }
+    
+    fn get_help_text(&self) -> &'static str {
+        "Adds --test-rows option for isolation testing"
+    }
+}
+
+// Register the extension when this binary is built
+fn register_extensions() {
+    register_config_extension(Box::new(IsolationConfigExtension));
+}
 
 #[derive(Parser, Debug)]
 #[command(name = "isolation-test")]
@@ -443,6 +481,9 @@ impl StateHandler for VerifyingResultsHandler {
 
 #[tokio::main]
 async fn main() -> connect::errors::Result<()> {
+    // Register configuration extensions
+    register_extensions();
+    
     print_test_header("TiDB Repeatable Read Isolation Test");
     // Parse command line arguments using the specific args type
     let args = IsolationTestArgs::parse();
