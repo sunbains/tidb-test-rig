@@ -2,9 +2,9 @@
 
 This directory contains example programs demonstrating how to use the TiDB connection test tool with a common CLI library and robust logging.
 
-## Common CLI Library
+## Common Setup and Utilities
 
-All examples use a shared command-line interface library that provides:
+All examples use shared utilities that provide:
 
 - **Standardized Arguments**: Common host, user, database, and monitoring parameters
 - **Environment Variable Support**: Configuration via `TIDB_HOST`, `TIDB_USER`, `TIDB_DATABASE`, `TIDB_PASSWORD`
@@ -12,6 +12,9 @@ All examples use a shared command-line interface library that provides:
 - **Parameter Validation**: Automatic validation of connection parameters
 - **Help and Usage**: Built-in help with `--help` flag
 - **Integrated Logging**: Control log level, file output, and verbosity from the CLI
+- **Shared State Machine Setup**: Common state machine configuration and handler registration
+- **Standardized Error Handling**: Consistent error handling and user-friendly error messages
+- **Job Monitoring Integration**: Built-in support for import job monitoring
 
 ### CLI Usage
 
@@ -91,13 +94,56 @@ log_state_transition!(from, to);
 cargo run --example basic_example -- --log-level debug --log-file --log-file-path logs/mylog.log
 ```
 
+## Shared Example Utilities
+
+The project provides shared utilities in `src/lib_utils.rs` that eliminate code duplication across examples:
+
+### ExampleSetup
+For examples using the legacy `parse_args()` approach:
+```rust
+use connect::{ExampleSetup, print_example_header, print_success};
+
+#[tokio::main]
+async fn main() {
+    print_example_header("My Example");
+    
+    let mut setup = ExampleSetup::new()?;
+    setup.run_with_job_monitoring().await?;
+    
+    print_success("Example completed!");
+}
+```
+
+### CommonArgsSetup
+For examples using the new `CommonArgs::parse()` approach:
+```rust
+use connect::{CommonArgsSetup, print_example_header, print_success};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    print_example_header("My Example");
+    
+    let mut setup = CommonArgsSetup::new()?;
+    setup.run_with_error_handling().await?;
+    
+    print_success("Example completed!");
+    Ok(())
+}
+```
+
+### Helper Functions
+- `print_example_header(title)`: Print a formatted example header
+- `print_success(message)`: Print a success message
+- `print_error_and_exit(message, error)`: Print error and exit
+- `create_state_machine_with_handlers(...)`: Create state machine with standard handlers
+
 ## Available Examples
 
 ### 1. Basic Example (`basic_example.rs`)
 A comprehensive example showing how to connect to TiDB and perform basic operations.
 
 **Features:**
-- Uses the common CLI library for argument parsing
+- Uses the shared example utilities for setup and error handling
 - Demonstrates basic connection testing
 - Shows version checking and database verification
 - Includes import job monitoring capabilities
@@ -110,7 +156,7 @@ A comprehensive example testing TiDB's repeatable read isolation.
 - Creates test tables and populates data
 - Tests transaction isolation with multiple connections
 - Demonstrates repeatable read behavior
-- Uses the common CLI library for configuration
+- Uses the shared example utilities for setup and error handling
 
 ### 3. Simple Multi-Connection Example (`simple_multi_connection.rs`)
 A basic example showing how to create and manage multiple TiDB connections with the state machine infrastructure.
@@ -136,7 +182,7 @@ A demonstration of the logging facility, including log levels, file output, perf
 - Shows how to use the logging macros and error context
 - Demonstrates logging to both console and file
 - Logs performance and memory usage metrics
-- Integrates with the state machine and CLI
+- Integrates with the state machine and shared utilities
 
 ## Building and Running Examples
 

@@ -1,6 +1,5 @@
 use connect::state_machine::{StateMachine, State, StateContext, StateHandler, StateError};
-use connect::{InitialHandler, ParsingConfigHandler, ConnectingHandler, TestingConnectionHandler, VerifyingDatabaseHandler, GettingVersionHandler};
-use connect::parse_args;
+use connect::{CommonArgsSetup, print_example_header, print_success, print_error_and_exit};
 use mysql::prelude::*;
 use mysql::*;
 use async_trait::async_trait;
@@ -198,6 +197,7 @@ impl StateHandler for TestingIsolationHandler {
             
             // Step 2: Start transactions
             test_context.add_result(&format!("Step 2: Starting transactions on both connections..."));
+            
             conn.exec_drop("START TRANSACTION", ())?;
             conn2.exec_drop("START TRANSACTION", ())?;
             test_context.add_result(&format!("✓ Started transactions on both connections"));
@@ -346,8 +346,7 @@ impl StateHandler for VerifyingResultsHandler {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("TiDB Repeatable Read Isolation Test");
-    println!("===================================");
+    print_example_header("TiDB Repeatable Read Isolation Test");
     
     // Parse command line arguments
     let args = CommonArgs::parse();
@@ -362,21 +361,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create and configure the state machine
     let mut state_machine = StateMachine::new();
     
-    // Register standard handlers
-    state_machine.register_handler(State::Initial, Box::new(InitialHandler));
-    state_machine.register_handler(
-        State::ParsingConfig,
-        Box::new(ParsingConfigHandler::new(
-            host,
-            user,
-            password,
-            Some(database)
-        ))
-    );
-    state_machine.register_handler(State::Connecting, Box::new(ConnectingHandler));
-    state_machine.register_handler(State::TestingConnection, Box::new(TestingConnectionHandler));
-    state_machine.register_handler(State::VerifyingDatabase, Box::new(VerifyingDatabaseHandler));
-    state_machine.register_handler(State::GettingVersion, Box::new(GettingVersionHandler));
+    // Register standard handlers using the shared utility
+    connect::ExampleSetup::register_standard_handlers(&mut state_machine, host, user, password, Some(database));
     
     // Register isolation test handlers
     state_machine.register_handler(State::CreatingTable, Box::new(CreatingTableHandler));
@@ -390,11 +376,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Run the state machine
     match state_machine.run().await {
         Ok(_) => {
-            println!("\n✅ Isolation test completed successfully!");
+            print_success("Isolation test completed successfully!");
         }
         Err(e) => {
-            eprintln!("\n❌ Isolation test failed: {}", e);
-            std::process::exit(1);
+            print_error_and_exit("Isolation test failed", &*e);
         }
     }
     
