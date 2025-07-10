@@ -139,18 +139,18 @@ impl CommonArgsSetup {
 
 /// Helper function to print a standard test header
 pub fn print_test_header(title: &str) {
-    println!("{}", title);
+    println!("{title}");
     println!("{}", "=".repeat(title.len()));
 }
 
 /// Helper function to print a success message
 pub fn print_success(message: &str) {
-    println!("\n✅ {}", message);
+    println!("\n✅ {message}");
 }
 
 /// Helper function to print an error message and exit
 pub fn print_error_and_exit(message: &str, error: &dyn std::error::Error) {
-    eprintln!("\n❌ {}: {}", message, error);
+    eprintln!("\n❌ {message}: {error}");
     std::process::exit(1);
 }
 

@@ -176,7 +176,7 @@ impl CommonArgs {
         
         // Also print config file info if specified
         if let Some(ref config_path) = self.config {
-            println!("  Config File: {}", config_path);
+            println!("  Config File: {config_path}");
         }
     }
     

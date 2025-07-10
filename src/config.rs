@@ -4,6 +4,7 @@ use crate::errors::{ConnectError, Result};
 
 /// Main configuration structure for the TiDB connection and testing framework
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct AppConfig {
     /// Database connection settings
     #[serde(default)]
@@ -86,15 +87,6 @@ pub struct TestConfig {
 
 // ImportJobConfig moved to job_monitor.rs
 
-impl Default for AppConfig {
-    fn default() -> Self {
-        Self {
-            database: DatabaseConfig::default(),
-            logging: LoggingConfig::default(),
-            test: TestConfig::default(),
-        }
-    }
-}
 
 impl Default for DatabaseConfig {
     fn default() -> Self {
@@ -155,17 +147,17 @@ impl AppConfig {
         let config = match extension {
             "json" => {
                 let content = std::fs::read_to_string(path)
-                    .map_err(|e| ConnectError::Configuration(format!("Failed to read config file: {}", e)))?;
+                    .map_err(|e| ConnectError::Configuration(format!("Failed to read config file: {e}")))?;
                 serde_json::from_str(&content)
-                    .map_err(|e| ConnectError::Configuration(format!("Failed to parse JSON config: {}", e)))?
+                    .map_err(|e| ConnectError::Configuration(format!("Failed to parse JSON config: {e}")))?
             },
             "toml" => {
                 let content = std::fs::read_to_string(path)
-                    .map_err(|e| ConnectError::Configuration(format!("Failed to read config file: {}", e)))?;
+                    .map_err(|e| ConnectError::Configuration(format!("Failed to read config file: {e}")))?;
                 toml::from_str(&content)
-                    .map_err(|e| ConnectError::Configuration(format!("Failed to parse TOML config: {}", e)))?
+                    .map_err(|e| ConnectError::Configuration(format!("Failed to parse TOML config: {e}")))?
             },
-            _ => return Err(ConnectError::Configuration(format!("Unsupported config file format: {}", extension))),
+            _ => return Err(ConnectError::Configuration(format!("Unsupported config file format: {extension}"))),
         };
         
         Ok(config)
@@ -210,11 +202,10 @@ impl AppConfig {
         }
         
         // Test overrides
-        if let Ok(rows) = std::env::var("TIDB_TEST_ROWS") {
-            if let Ok(rows) = rows.parse() {
+        if let Ok(rows) = std::env::var("TIDB_TEST_ROWS")
+            && let Ok(rows) = rows.parse() {
                 self.test.rows = rows;
             }
-        }
         if let Ok(verbose) = std::env::var("TIDB_VERBOSE") {
             self.test.verbose = verbose.to_lowercase() == "true";
         }
@@ -233,17 +224,17 @@ impl AppConfig {
         let content = match extension {
             "json" => {
                 serde_json::to_string_pretty(self)
-                    .map_err(|e| ConnectError::Configuration(format!("Failed to serialize config: {}", e)))?
+                    .map_err(|e| ConnectError::Configuration(format!("Failed to serialize config: {e}")))?
             },
             "toml" => {
                 toml::to_string_pretty(self)
-                    .map_err(|e| ConnectError::Configuration(format!("Failed to serialize config: {}", e)))?
+                    .map_err(|e| ConnectError::Configuration(format!("Failed to serialize config: {e}")))?
             },
-            _ => return Err(ConnectError::Configuration(format!("Unsupported config file format: {}", extension))),
+            _ => return Err(ConnectError::Configuration(format!("Unsupported config file format: {extension}"))),
         };
         
         std::fs::write(path, content)
-            .map_err(|e| ConnectError::Configuration(format!("Failed to write config file: {}", e)))?;
+            .map_err(|e| ConnectError::Configuration(format!("Failed to write config file: {e}")))?;
         
         Ok(())
     }
@@ -275,6 +266,12 @@ impl AppConfig {
 /// Configuration builder for programmatic configuration
 pub struct ConfigBuilder {
     config: AppConfig,
+}
+
+impl Default for ConfigBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ConfigBuilder {
