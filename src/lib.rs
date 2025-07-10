@@ -9,6 +9,7 @@ pub mod multi_connection_state_machine;
 pub mod logging;
 pub mod lib_utils;
 pub mod errors;
+pub mod config;
 
 pub use cli::{CommonArgs, parse_args, get_connection_info};
 pub use logging::{LogConfig, init_logging, init_default_logging, init_logging_from_env, ErrorContext, log_performance_metric, log_memory_usage};
@@ -19,4 +20,5 @@ pub use connection_manager::{ConnectionCoordinator, ConnectionInfo, SharedState,
 pub use multi_connection_state_machine::{MultiConnectionStateMachine, CoordinationHandler};
 pub use lib_utils::{TestSetup, CommonArgsSetup, print_test_header, print_success, print_error_and_exit};
 pub use lib_utils::register_standard_handlers;
-pub use errors::{ConnectError, ConnectionError, StateMachineError, ImportJobError, IsolationTestError, CliError, StateError, Result}; 
+pub use errors::{ConnectError, ConnectionError, StateMachineError, ImportJobError, IsolationTestError, CliError, StateError, Result};
+pub use config::{AppConfig, DatabaseConfig, LoggingConfig, TestConfig, ImportJobConfig, ConfigBuilder}; 

@@ -1,0 +1,21 @@
+[database]
+host = "prod-tidb:4000"
+username = "produser"
+database = "proddb"
+pool_size = 5
+timeout_secs = 30
+
+[logging]
+level = "debug"
+format = "text"
+console = true
+
+[test]
+rows = 10
+timeout_secs = 60
+verbose = false
+
+[import_jobs]
+monitor_duration = 300
+update_interval = 5
+show_details = true
