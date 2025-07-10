@@ -21,4 +21,4 @@ pub use multi_connection_state_machine::{MultiConnectionStateMachine, Coordinati
 pub use lib_utils::{TestSetup, CommonArgsSetup, print_test_header, print_success, print_error_and_exit};
 pub use lib_utils::register_standard_handlers;
 pub use errors::{ConnectError, ConnectionError, StateMachineError, ImportJobError, IsolationTestError, CliError, StateError, Result};
-pub use config::{AppConfig, DatabaseConfig, LoggingConfig, TestConfig, ImportJobConfig, ConfigBuilder}; 
+pub use config::{AppConfig, DatabaseConfig, LoggingConfig, TestConfig, ConfigBuilder}; 

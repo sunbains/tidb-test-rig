@@ -108,3 +108,7 @@ format:
 lint:
 	cargo clippy
 	cargo clippy --tests 
+
+lint-fix:
+	cargo clippy --fix
+

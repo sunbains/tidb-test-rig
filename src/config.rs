@@ -17,9 +17,7 @@ pub struct AppConfig {
     #[serde(default)]
     pub test: TestConfig,
     
-    /// Import job monitoring settings
-    #[serde(default)]
-    pub import_jobs: ImportJobConfig,
+    // Import job monitoring settings moved to job_monitor.rs
 }
 
 /// Database connection configuration
@@ -86,21 +84,7 @@ pub struct TestConfig {
     pub verbose: bool,
 }
 
-/// Import job monitoring configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ImportJobConfig {
-    /// Default monitoring duration in seconds
-    #[serde(default = "default_monitor_duration")]
-    pub monitor_duration: u64,
-    
-    /// Update interval in seconds
-    #[serde(default = "default_update_interval")]
-    pub update_interval: u64,
-    
-    /// Show detailed job information
-    #[serde(default = "default_show_details")]
-    pub show_details: bool,
-}
+// ImportJobConfig moved to job_monitor.rs
 
 impl Default for AppConfig {
     fn default() -> Self {
@@ -108,7 +92,6 @@ impl Default for AppConfig {
             database: DatabaseConfig::default(),
             logging: LoggingConfig::default(),
             test: TestConfig::default(),
-            import_jobs: ImportJobConfig::default(),
         }
     }
 }
@@ -147,15 +130,7 @@ impl Default for TestConfig {
     }
 }
 
-impl Default for ImportJobConfig {
-    fn default() -> Self {
-        Self {
-            monitor_duration: default_monitor_duration(),
-            update_interval: default_update_interval(),
-            show_details: default_show_details(),
-        }
-    }
-}
+// ImportJobConfig default implementation moved to job_monitor.rs
 
 // Default value functions
 fn default_host() -> String { "localhost:4000".to_string() }
@@ -167,9 +142,7 @@ fn default_log_format() -> String { "text".to_string() }
 fn default_console_output() -> bool { true }
 fn default_test_rows() -> u32 { 10 }
 fn default_test_timeout() -> u64 { 60 }
-fn default_monitor_duration() -> u64 { 300 }
-fn default_update_interval() -> u64 { 5 }
-fn default_show_details() -> bool { true }
+// Import job default functions moved to job_monitor.rs
 
 impl AppConfig {
     /// Load configuration from a file
@@ -247,11 +220,7 @@ impl AppConfig {
         }
         
         // Import job overrides
-        if let Ok(duration) = std::env::var("TIDB_MONITOR_DURATION") {
-            if let Ok(duration) = duration.parse() {
-                self.import_jobs.monitor_duration = duration;
-            }
-        }
+        // Removed import job overrides
     }
     
     /// Save configuration to a file
@@ -345,10 +314,7 @@ impl ConfigBuilder {
         self
     }
     
-    pub fn monitor_duration(mut self, duration: u64) -> Self {
-        self.config.import_jobs.monitor_duration = duration;
-        self
-    }
+    // Removed monitor_duration
     
     pub fn build(self) -> AppConfig {
         self.config

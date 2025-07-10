@@ -88,9 +88,7 @@ impl CommonArgs {
         if let Some(ref database) = self.database {
             merged_config.database.database = Some(database.clone());
         }
-        if self.monitor_duration != 60 {
-            merged_config.import_jobs.monitor_duration = self.monitor_duration;
-        }
+        // monitor_duration moved to job_monitor.rs
         if self.log_level != "info" {
             merged_config.logging.level = self.log_level.clone();
         }

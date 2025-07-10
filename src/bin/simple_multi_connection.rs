@@ -1,10 +1,11 @@
-use connect::state_machine::{StateMachine, State, StateError};
+use connect::state_machine::{StateMachine, State};
+use connect::errors::StateError;
 use connect::state_handlers::{InitialHandler, ParsingConfigHandler, ConnectingHandler, TestingConnectionHandler, VerifyingDatabaseHandler, GettingVersionHandler};
 use connect::JobMonitor;
 use std::sync::{Arc, Mutex};
 use tokio::task::JoinHandle;
 use std::collections::HashMap;
-use connect::{CommonArgs, print_test_header, print_success, print_error_and_exit};
+use connect::{CommonArgs, print_test_header, print_success};
 use clap::Parser;
 
 #[derive(Parser, Debug)]
@@ -284,4 +285,75 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     print_success("Multi-connection testing completed!");
     Ok(())
+} 
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_args_parsing() {
+        let args = Args::parse_from([
+            "test-bin", 
+            "--connection-count", "5",
+            "-H", "localhost:4000",
+            "-u", "testuser"
+        ]);
+        assert_eq!(args.connection_count, 5);
+        assert_eq!(args.common.host, "localhost:4000");
+        assert_eq!(args.common.user, "testuser");
+    }
+
+    #[test]
+    fn test_args_defaults() {
+        let args = Args::parse_from(["test-bin"]);
+        assert_eq!(args.connection_count, 2); // default value
+        assert_eq!(args.common.host, "localhost:4000"); // default value
+        assert_eq!(args.common.user, "root"); // default value
+    }
+
+    #[test]
+    fn test_shared_test_state_default() {
+        let state = SharedTestState::default();
+        assert_eq!(state.global_status, "Initialized");
+        assert!(state.connection_results.is_empty());
+    }
+
+    #[test]
+    fn test_connection_config_creation() {
+        let config = ConnectionConfig {
+            id: "test-1".to_string(),
+            host: "localhost".to_string(),
+            port: 4000,
+            username: "testuser".to_string(),
+            password: "testpass".to_string(),
+            database: Some("testdb".to_string()),
+        };
+        assert_eq!(config.id, "test-1");
+        assert_eq!(config.host, "localhost");
+        assert_eq!(config.port, 4000);
+        assert_eq!(config.username, "testuser");
+        assert_eq!(config.database, Some("testdb".to_string()));
+    }
+
+    #[test]
+    fn test_coordinator_creation() {
+        let coordinator = SimpleMultiConnectionCoordinator::new();
+        assert_eq!(coordinator.connections.len(), 0);
+        
+        // Test that shared state is accessible
+        let shared_state = coordinator.get_shared_state();
+        if let Ok(state) = shared_state.lock() {
+            assert_eq!(state.global_status, "Initialized");
+            assert!(state.connection_results.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_connection_status_enum() {
+        assert!(matches!(ConnectionStatus::NotStarted, ConnectionStatus::NotStarted));
+        assert!(matches!(ConnectionStatus::Connecting, ConnectionStatus::Connecting));
+        assert!(matches!(ConnectionStatus::Completed, ConnectionStatus::Completed));
+        assert!(matches!(ConnectionStatus::Failed, ConnectionStatus::Failed));
+    }
 } 

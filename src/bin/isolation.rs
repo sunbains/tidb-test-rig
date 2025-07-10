@@ -419,3 +419,124 @@ fn register_isolation_handlers(
     state_machine.register_handler(State::TestingIsolation, Box::new(TestingIsolationHandler));
     state_machine.register_handler(State::VerifyingResults, Box::new(VerifyingResultsHandler));
 } 
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use connect::config::{AppConfig, TestConfig, ConfigBuilder};
+    use tempfile::NamedTempFile;
+    use std::io::Write;
+    use serial_test::serial;
+
+    #[test]
+    fn test_isolation_test_context() {
+        let context = IsolationTestContext::new();
+        assert_eq!(context.phase, IsolationTestPhase::Initial);
+        assert!(context.test_results.is_empty());
+        assert!(context.test_table_name.starts_with("isolation_test_"));
+    }
+
+    #[test]
+    fn test_test_row_serialization() {
+        let row = TestRow {
+            id: 1,
+            name: "test".to_string(),
+            value: 42,
+            created_at: "2023-01-01".to_string(),
+        };
+        assert_eq!(row.id, 1);
+        assert_eq!(row.name, "test");
+        assert_eq!(row.value, 42);
+    }
+
+    #[test]
+    fn test_isolation_test_args_parsing() {
+        let args = IsolationTestArgs::parse_from([
+            "test-bin", 
+            "--test-rows", "20",
+            "-H", "localhost:4000",
+            "-u", "testuser"
+        ]);
+        assert_eq!(args.test_rows, 20);
+        assert_eq!(args.common.host, "localhost:4000");
+        assert_eq!(args.common.user, "testuser");
+    }
+
+    #[test]
+    fn test_isolation_test_args_defaults() {
+        let args = IsolationTestArgs::parse_from(["test-bin"]);
+        assert_eq!(args.test_rows, 10); // default value
+        assert_eq!(args.common.host, "localhost:4000"); // default value
+        assert_eq!(args.common.user, "root"); // default value
+    }
+
+    #[test]
+    fn test_isolation_test_args_validation() {
+        let args = IsolationTestArgs::parse_from([
+            "test-bin", 
+            "--test-rows", "5",
+            "-H", "testhost:4000",
+            "-u", "testuser",
+            "-d", "testdb"
+        ]);
+        
+        // Test that all fields are properly set
+        assert_eq!(args.test_rows, 5);
+        assert_eq!(args.common.host, "testhost:4000");
+        assert_eq!(args.common.user, "testuser");
+        assert_eq!(args.common.database, Some("testdb".to_string()));
+        
+        // Test the helper methods
+        assert_eq!(args.get_database(), Some("testdb".to_string()));
+    }
+
+    #[test]
+    #[serial]
+    fn test_test_config_integration() {
+        // Test that TestConfig from config module works with isolation test logic
+        let test_config = TestConfig {
+            rows: 15,
+            timeout_secs: 120,
+            verbose: true,
+        };
+        
+        assert_eq!(test_config.rows, 15);
+        assert_eq!(test_config.timeout_secs, 120);
+        assert!(test_config.verbose);
+        
+        // Test integration with ConfigBuilder
+        let config = ConfigBuilder::new()
+            .test_rows(25)
+            .build();
+        
+        assert_eq!(config.test.rows, 25);
+    }
+
+    #[test]
+    #[serial]
+    fn test_isolation_config_file_parsing() {
+        let json = r#"{
+            "test": {"rows": 50, "timeout_secs": 180, "verbose": true}
+        }"#;
+        let mut file = NamedTempFile::new().unwrap();
+        file.write_all(json.as_bytes()).unwrap();
+        
+        let config = AppConfig::from_file(file.path()).unwrap();
+        assert_eq!(config.test.rows, 50);
+        assert_eq!(config.test.timeout_secs, 180);
+        assert!(config.test.verbose);
+    }
+
+    #[test]
+    fn test_isolation_test_args_with_config() {
+        // Test that isolation test args can work with config-based test settings
+        let args = IsolationTestArgs::parse_from([
+            "test-bin", 
+            "--test-rows", "30",
+            "-c", "test_config.json"
+        ]);
+        
+        assert_eq!(args.test_rows, 30);
+        // Note: In a real scenario, the config file would be loaded and merged
+    }
+} 
