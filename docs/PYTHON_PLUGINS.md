@@ -61,6 +61,124 @@ Use the `python_demo` binary to test your handlers:
 cargo run --bin python_demo --features python_plugins -- --python-module my_handlers
 ```
 
+## System Dependencies
+
+### Debian/Ubuntu
+
+Before using Python plugins, you need to install system dependencies on Debian/Ubuntu systems:
+
+#### 1. Install Python Development Headers
+
+```bash
+# For Python 3.11 (default on Ubuntu 22.04+)
+sudo apt update
+sudo apt install python3.11-dev python3.11-venv
+
+# For Python 3.10 (Ubuntu 20.04)
+sudo apt install python3.10-dev python3.10-venv
+
+# For Python 3.9 (older Ubuntu versions)
+sudo apt install python3.9-dev python3.9-venv
+```
+
+#### 2. Install Build Dependencies
+
+```bash
+# Essential build tools
+sudo apt install build-essential pkg-config
+
+# Additional dependencies for PyO3
+sudo apt install libssl-dev libffi-dev
+```
+
+#### 3. Install Python Package Dependencies
+
+If you're using Python handlers that require external packages (like `mysql-connector-python`):
+
+```bash
+# Install pip if not already available
+sudo apt install python3-pip
+
+# For systems with externally managed Python environments (Ubuntu 23.04+)
+# Use user-level installation to avoid conflicts
+pip3 install --user --break-system-packages mysql-connector-python
+
+# For older systems without external environment management
+pip3 install --user mysql-connector-python
+```
+
+#### 4. Verify Installation
+
+Test that Python and pip are working correctly:
+
+```bash
+# Check Python version
+python3 --version
+
+# Check pip installation
+pip3 --version
+
+# Test importing required packages
+python3 -c "import mysql.connector; print('MySQL connector installed successfully')"
+```
+
+#### 5. Environment Setup (Optional but Recommended)
+
+For better dependency management, consider using a virtual environment:
+
+```bash
+# Create a virtual environment
+python3 -m venv test_rig_env
+
+# Activate the environment
+source test_rig_env/bin/activate
+
+# Install packages in the virtual environment
+pip install mysql-connector-python
+
+# When running test_rig, activate the environment first
+source test_rig_env/bin/activate
+cargo run --bin python_demo --features python_plugins
+```
+
+### Troubleshooting Debian/Ubuntu Issues
+
+#### Permission Errors
+
+If you encounter permission errors when installing Python packages:
+
+```bash
+# Use user-level installation
+pip3 install --user --break-system-packages package_name
+
+# Or create a virtual environment
+python3 -m venv ~/test_rig_env
+source ~/test_rig_env/bin/activate
+pip install package_name
+```
+
+#### Missing Python Headers
+
+If you get errors about missing Python headers:
+
+```bash
+# Install the correct Python development package for your version
+python3 --version  # Check your Python version first
+sudo apt install python3.X-dev  # Replace X with your version
+```
+
+#### PyO3 Compilation Issues
+
+If PyO3 fails to compile:
+
+```bash
+# Ensure you have the latest Rust toolchain
+rustup update
+
+# Install additional build dependencies
+sudo apt install cmake libclang-dev
+```
+
 ## Handler Interface
 
 ### Base Class

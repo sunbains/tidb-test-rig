@@ -4,13 +4,11 @@ This guide covers advanced usage, design decisions, performance notes, and troub
 
 ---
 
-## 1. Extending with Custom States
+## 1. Extending with Custom States and Handlers
 
-The framework uses a state machine pattern. You can add custom states and handlers for new test phases or logic.
+The framework uses a state machine pattern. You can add custom states and handlers for new test phases or logic. Handlers can be written in **Rust** or **Python** (see Python Plugin Support below).
 
-### Example: Adding a Custom State
-
-Suppose you want to add a `Reporting` state that generates a summary report after all tests.
+### Example: Adding a Custom State (Rust)
 
 ```rust
 use test_rig::state_machine::{State, StateContext, StateHandler};
@@ -39,15 +37,61 @@ impl StateHandler for ReportingHandler {
 state_machine.register_handler(State::Reporting, Box::new(ReportingHandler));
 ```
 
-You can define new states in your own enum or use the provided `State` enum with custom variants.
+### Example: Adding a Custom State (Python)
+
+You can also write state handlers in Python and register them with the Rust state machine:
+
+```python
+from test_rig_python import PyStateHandler, PyStateContext, PyState
+
+class ReportingHandler(PyStateHandler):
+    def enter(self, context: PyStateContext) -> str:
+        print("Generating summary report...")
+        return PyState.completed()
+    def execute(self, context: PyStateContext) -> str:
+        print("✓ Report generated")
+        return PyState.completed()
+    def exit(self, context: PyStateContext) -> None:
+        pass
+```
+
+Register your Python handler using the Rust API:
+```rust
+use test_rig::python_bindings::register_python_handler;
+register_python_handler(&mut state_machine, State::Reporting, py_handler)?;
+```
 
 ---
 
-## 2. Architecture Decision Records (ADRs)
+## 2. Python Plugin Support and Cross-Language Integration
+
+The framework supports Python plugins for state handlers, enabling rapid prototyping and cross-language test logic. Python handlers can be used alongside Rust handlers in the same state machine.
+
+- Write handlers in Python using the `PyStateHandler` interface
+- Register Python handlers for any state
+- Use the standalone Python test runner for quick iteration
+- See [docs/PYTHON_PLUGIN.md](PYTHON_PLUGIN.md) for full details and examples
+
+### Configuration Compatibility
+- Python scripts use the same config files (`tidb_config.json`/`.toml`), environment variables, and CLI arguments as Rust binaries
+- Configuration priority: **CLI > Env > Config > Default** (for both Rust and Python)
+
+### Example: Running a Python Isolation Test
+```bash
+export TIDB_HOST=tidb.example.com:4000
+export TIDB_USER=myuser
+export TIDB_PASSWORD=mypass
+export TIDB_DATABASE=mydb
+python3 examples/run_isolation_test.py
+```
+
+---
+
+## 3. Architecture Decision Records (ADRs)
 
 ### Why a State Machine?
 - **Explicit test phases**: Each phase (connect, test, verify, report) is a state.
-- **Extensibility**: New states/handlers can be added without changing core logic.
+- **Extensibility**: New states/handlers can be added in Rust or Python.
 - **Error isolation**: Failures in one phase don't corrupt others.
 
 ### Why Plugin-Based Config Extensions?
@@ -61,22 +105,24 @@ You can define new states in your own enum or use the provided `State` enum with
 
 ### CLI/Environment/Config Precedence
 - **CLI > Env > Config > Default**: Most explicit wins, for user control and predictability.
+- **Python and Rust are now fully compatible in config precedence**
 
 ---
 
-## 3. Performance Characteristics
+## 4. Performance Characteristics
 
 - **Throughput**: The framework is async and can run many connections in parallel (see multi-connection tests).
 - **Latency**: Each state transition adds a small overhead, but most time is spent in DB/network I/O.
 - **Logging**: Structured logging is efficient, but file logging can add I/O overhead if enabled.
 - **Scaling**: For high concurrency, increase connection pool size and use async handlers.
 - **Resource usage**: Memory usage is low unless you store large test results in context.
+- **Python plugin overhead**: Calling into Python from Rust adds some FFI overhead, but is negligible for most test logic.
 
 **Tip:** For large-scale tests, run with `--release` and tune connection pool and async runtime settings.
 
 ---
 
-## 4. Troubleshooting Guide
+## 5. Troubleshooting Guide
 
 ### Common Issues
 - **Connection refused**: Check host/port, DB is running, firewall rules.
@@ -85,17 +131,21 @@ You can define new states in your own enum or use the provided `State` enum with
 - **Timeouts**: Increase `timeout_secs` in config, check network latency.
 - **State machine deadlock**: Ensure all states have handlers and transitions.
 - **Test hangs**: Enable verbose logging (`-v`), check for stuck async tasks.
+- **Python import errors**: Ensure `test_rig_python` is built and in your PYTHONPATH, or use the standalone Python runner for pure Python tests.
+- **Python environment issues**: Make sure dependencies (e.g., `mysql-connector-python`) are installed in the correct environment.
 
 ### Debugging Tips
 - **Enable verbose logging**: Use `-v` or `--log-level debug` for more output.
 - **Check error context**: Error messages include operation, attempt, and connection info.
 - **Use error context builder**: Add custom info to errors for easier debugging.
 - **Run with RUST_BACKTRACE=1**: Get full stack traces for panics.
+- **Use debug prints in Python handlers**: Print context and state transitions for troubleshooting.
 
 ### Interpreting Error Messages
 - **Transient errors**: Will be retried automatically (connection, timeout, network).
 - **Permanent errors**: Fail fast (auth, config, validation).
 - **Circuit breaker open**: Too many failures, wait for recovery timeout.
+- **Python handler errors**: Check Python stack trace and handler logic.
 
 ### What to Do If a Test Fails
 - Check the error message and context.
@@ -103,7 +153,8 @@ You can define new states in your own enum or use the provided `State` enum with
 - Validate your config and CLI arguments.
 - If using custom states, ensure all transitions are registered.
 - For persistent issues, file a bug with logs and error context.
+- For Python handler issues, check the [Python Plugin Documentation](PYTHON_PLUGIN.md).
 
 ---
 
-For more, see the main README and code comments throughout the framework. 
+For more, see the main README and [docs/PYTHON_PLUGIN.md](PYTHON_PLUGIN.md) for Python plugin details. 
