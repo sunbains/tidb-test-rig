@@ -18,12 +18,6 @@ pub enum State {
     TestingConnection,
     VerifyingDatabase,
     GettingVersion,
-    CheckingImportJobs,
-    ShowingImportJobDetails,
-    CreatingTable,
-    PopulatingData,
-    TestingIsolation,
-    VerifyingResults,
     Completed,
     Error(String),
 }
@@ -37,12 +31,6 @@ impl fmt::Display for State {
             State::TestingConnection => write!(f, "Testing Connection"),
             State::VerifyingDatabase => write!(f, "Verifying Database"),
             State::GettingVersion => write!(f, "Getting Server Version"),
-            State::CheckingImportJobs => write!(f, "Checking Import Jobs"),
-            State::ShowingImportJobDetails => write!(f, "Showing Import Job Details"),
-            State::CreatingTable => write!(f, "Creating Test Table"),
-            State::PopulatingData => write!(f, "Populating Test Data"),
-            State::TestingIsolation => write!(f, "Testing Isolation"),
-            State::VerifyingResults => write!(f, "Verifying Results"),
             State::Completed => write!(f, "Completed"),
             State::Error(msg) => write!(f, "Error: {msg}"),
         }
@@ -207,29 +195,18 @@ impl StateMachine {
                 // Exit current state
                 handler.exit(&mut self.context).await?;
 
-                // Transition to next state
+                // Update current state
                 self.current_state = next_state;
             } else {
                 return Err(ConnectError::StateMachine(format!(
-                    "No handler registered for state: {:?}",
+                    "No handler registered for state: {}",
                     self.current_state
                 )));
             }
         }
 
-        match &self.current_state {
-            State::Completed => {
-                println!("✓ State machine completed successfully!");
-                Ok(())
-            }
-            State::Error(msg) => {
-                eprintln!("✗ State machine failed: {msg}");
-                Err(ConnectError::StateMachine(msg.clone()))
-            }
-            _ => Err(ConnectError::StateMachine(
-                "Unexpected final state".to_string(),
-            )),
-        }
+        println!("State machine completed.");
+        Ok(())
     }
 
     pub fn get_current_state(&self) -> &State {

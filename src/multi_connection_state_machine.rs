@@ -66,27 +66,12 @@ impl MultiConnectionStateMachine {
         _connection_id: &str,
         _coordinator_sender: mpsc::Sender<CoordinationMessage>,
     ) {
-        use crate::state_handlers::{
-            ConnectingHandler, GettingVersionHandler, InitialHandler, ParsingConfigHandler,
-            TestingConnectionHandler, VerifyingDatabaseHandler,
-        };
+        use crate::state_handlers::InitialHandler;
 
         state_machine.register_handler(State::Initial, Box::new(InitialHandler));
-        state_machine.register_handler(
-            State::ParsingConfig,
-            Box::new(ParsingConfigHandler::new(
-                "".to_string(), // Will be set from coordinator
-                "".to_string(),
-                "".to_string(),
-                None,
-            )),
-        );
-        state_machine.register_handler(State::Connecting, Box::new(ConnectingHandler));
-        state_machine
-            .register_handler(State::TestingConnection, Box::new(TestingConnectionHandler));
-        state_machine
-            .register_handler(State::VerifyingDatabase, Box::new(VerifyingDatabaseHandler));
-        state_machine.register_handler(State::GettingVersion, Box::new(GettingVersionHandler));
+        // Note: For extensible state handling, use the dynamic state machine system
+        // The core StateMachine now only supports Initial, Completed, and Error states
+        // Use DynamicStateMachine for complex workflows with custom states
     }
 
     /// Start coordination processing

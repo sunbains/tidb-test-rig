@@ -5,12 +5,8 @@
 
 use crate::cli::CommonArgs;
 use crate::errors::{ConnectError, Result};
-use crate::state_handlers::GettingVersionHandler;
 use crate::state_machine::{State, StateMachine};
-use crate::{
-    ConnectingHandler, InitialHandler, ParsingConfigHandler, TestingConnectionHandler,
-    VerifyingDatabaseHandler,
-};
+use crate::state_handlers::InitialHandler;
 use clap::Parser;
 use std::process;
 
@@ -73,20 +69,15 @@ impl TestSetup {
 // Register the standard set of state handlers as a top-level function
 pub fn register_standard_handlers(
     state_machine: &mut StateMachine,
-    host: String,
-    user: String,
-    password: String,
-    database: Option<String>,
+    _host: String,
+    _user: String,
+    _password: String,
+    _database: Option<String>,
 ) {
     state_machine.register_handler(State::Initial, Box::new(InitialHandler));
-    state_machine.register_handler(
-        State::ParsingConfig,
-        Box::new(ParsingConfigHandler::new(host, user, password, database)),
-    );
-    state_machine.register_handler(State::Connecting, Box::new(ConnectingHandler));
-    state_machine.register_handler(State::TestingConnection, Box::new(TestingConnectionHandler));
-    state_machine.register_handler(State::VerifyingDatabase, Box::new(VerifyingDatabaseHandler));
-    state_machine.register_handler(State::GettingVersion, Box::new(GettingVersionHandler));
+    // Note: For extensible state handling, use the dynamic state machine system
+    // The core StateMachine now only supports Initial, Completed, and Error states
+    // Use DynamicStateMachine for complex workflows with custom states
 }
 
 /// Common setup for tests using the new CommonArgs approach

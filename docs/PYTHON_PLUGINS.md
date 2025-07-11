@@ -543,6 +543,7 @@ def execute(self, context: PyStateContext) -> str:
 
 You can use both Rust and Python handlers in the same state machine:
 
+#### With Core State Machine
 ```rust
 // Register Rust handlers
 state_machine.register_handler(State::Initial, Box::new(InitialHandler));
@@ -550,6 +551,20 @@ state_machine.register_handler(State::Connecting, Box::new(ConnectingHandler));
 
 // Load Python handlers
 load_python_handlers(&mut state_machine, "my_python_handlers")?;
+```
+
+#### With Dynamic State Machine
+```rust
+use test_rig::{DynamicStateMachine, common_states::*};
+
+let mut machine = DynamicStateMachine::new();
+
+// Register Rust handlers for common states
+machine.register_handler(parsing_config(), Box::new(ParsingConfigHandlerAdapter));
+machine.register_handler(connecting(), Box::new(ConnectingHandlerAdapter));
+
+// Load Python handlers for custom states
+load_python_handlers(&mut machine, "my_python_handlers")?;
 ```
 
 ### Gradual Migration

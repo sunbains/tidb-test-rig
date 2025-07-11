@@ -73,12 +73,12 @@ use std::sync::{Arc, Mutex};
 
 use test_rig::errors::ConnectError;
 use test_rig::errors::StateError;
-use test_rig::state_handlers::{
-    ConnectingHandler, GettingVersionHandler, InitialHandler, ParsingConfigHandler,
-    TestingConnectionHandler, VerifyingDatabaseHandler,
+use test_rig::{
+    CommonArgs, print_success, print_test_header,
+    dynamic_state, register_transitions, DynamicState, DynamicStateContext, DynamicStateHandler, DynamicStateMachine,
 };
-use test_rig::state_machine::{State, StateMachine};
-use test_rig::{CommonArgs, print_success, print_test_header};
+use async_trait::async_trait;
+use mysql::prelude::*;
 use tokio::task::JoinHandle;
 
 #[derive(Parser, Debug)]
@@ -161,6 +161,156 @@ pub struct ConnectionConfig {
     pub database: Option<String>,
 }
 
+// Define custom states for the workflow
+mod multi_connection_states {
+    // Re-export common states
+    pub use test_rig::common_states::{
+        parsing_config, connecting, testing_connection, verifying_database, getting_version, completed,
+    };
+}
+
+// Adapter for InitialHandler to DynamicStateHandler
+struct InitialHandlerAdapter;
+#[async_trait]
+impl DynamicStateHandler for InitialHandlerAdapter {
+    async fn enter(&self, _context: &mut DynamicStateContext) -> test_rig::Result<DynamicState> {
+        Ok(dynamic_state!("initial", "Initial"))
+    }
+    async fn execute(&self, _context: &mut DynamicStateContext) -> test_rig::Result<DynamicState> {
+        Ok(multi_connection_states::parsing_config())
+    }
+    async fn exit(&self, _context: &mut DynamicStateContext) -> test_rig::Result<()> {
+        Ok(())
+    }
+}
+
+// Adapter for ParsingConfigHandler to DynamicStateHandler
+struct ParsingConfigHandlerAdapter {
+    host: String,
+    user: String,
+    password: String,
+    database: Option<String>,
+}
+#[async_trait]
+impl DynamicStateHandler for ParsingConfigHandlerAdapter {
+    async fn enter(&self, _context: &mut DynamicStateContext) -> test_rig::Result<DynamicState> {
+        Ok(multi_connection_states::parsing_config())
+    }
+    async fn execute(&self, context: &mut DynamicStateContext) -> test_rig::Result<DynamicState> {
+        let (host, port) = test_rig::connection::parse_connection_string(&self.host)?;
+        context.host = host;
+        context.port = port;
+        context.username = self.user.clone();
+        context.password = self.password.clone();
+        context.database = self.database.clone();
+        Ok(multi_connection_states::connecting())
+    }
+    async fn exit(&self, _context: &mut DynamicStateContext) -> test_rig::Result<()> {
+        Ok(())
+    }
+}
+
+// Adapter for ConnectingHandler to DynamicStateHandler
+struct ConnectingHandlerAdapter;
+#[async_trait]
+impl DynamicStateHandler for ConnectingHandlerAdapter {
+    async fn enter(&self, _context: &mut DynamicStateContext) -> test_rig::Result<DynamicState> {
+        Ok(multi_connection_states::connecting())
+    }
+    async fn execute(&self, context: &mut DynamicStateContext) -> test_rig::Result<DynamicState> {
+        let pool = test_rig::connection::create_connection_pool(
+            &context.host,
+            context.port,
+            &context.username,
+            &context.password,
+            context.database.as_deref(),
+        )?;
+        let conn = pool.get_conn()?;
+        context.connection = Some(conn);
+        Ok(multi_connection_states::testing_connection())
+    }
+    async fn exit(&self, _context: &mut DynamicStateContext) -> test_rig::Result<()> {
+        Ok(())
+    }
+}
+
+// Adapter for TestingConnectionHandler to DynamicStateHandler
+struct TestingConnectionHandlerAdapter;
+#[async_trait]
+impl DynamicStateHandler for TestingConnectionHandlerAdapter {
+    async fn enter(&self, _context: &mut DynamicStateContext) -> test_rig::Result<DynamicState> {
+        Ok(multi_connection_states::testing_connection())
+    }
+    async fn execute(&self, context: &mut DynamicStateContext) -> test_rig::Result<DynamicState> {
+        if let Some(ref mut conn) = context.connection {
+            let result: std::result::Result<Vec<mysql::Row>, mysql::Error> = conn.exec("SELECT 1", ());
+            match result {
+                Ok(_) => Ok(multi_connection_states::verifying_database()),
+                Err(e) => Err(format!("Connection test failed: {e}").into()),
+            }
+        } else {
+            Err("No connection available for testing".into())
+        }
+    }
+    async fn exit(&self, _context: &mut DynamicStateContext) -> test_rig::Result<()> {
+        Ok(())
+    }
+}
+
+// Adapter for VerifyingDatabaseHandler to DynamicStateHandler
+struct VerifyingDatabaseHandlerAdapter;
+#[async_trait]
+impl DynamicStateHandler for VerifyingDatabaseHandlerAdapter {
+    async fn enter(&self, _context: &mut DynamicStateContext) -> test_rig::Result<DynamicState> {
+        Ok(multi_connection_states::verifying_database())
+    }
+    async fn execute(&self, context: &mut DynamicStateContext) -> test_rig::Result<DynamicState> {
+        if let Some(ref mut conn) = context.connection {
+            if let Some(ref db_name) = context.database {
+                let query = format!("USE `{db_name}`");
+                match conn.query_drop(query) {
+                    Ok(_) => Ok(multi_connection_states::getting_version()),
+                    Err(e) => Err(format!("Database verification failed: {e}").into()),
+                }
+            } else {
+                Ok(multi_connection_states::getting_version())
+            }
+        } else {
+            Err("No connection available for database verification".into())
+        }
+    }
+    async fn exit(&self, _context: &mut DynamicStateContext) -> test_rig::Result<()> {
+        Ok(())
+    }
+}
+
+// Adapter for GettingVersionHandler to DynamicStateHandler
+struct GettingVersionHandlerAdapter;
+#[async_trait]
+impl DynamicStateHandler for GettingVersionHandlerAdapter {
+    async fn enter(&self, _context: &mut DynamicStateContext) -> test_rig::Result<DynamicState> {
+        Ok(multi_connection_states::getting_version())
+    }
+    async fn execute(&self, context: &mut DynamicStateContext) -> test_rig::Result<DynamicState> {
+        if let Some(ref mut conn) = context.connection {
+            let version_query = "SELECT VERSION()";
+            match conn.query_first::<String, _>(version_query) {
+                Ok(Some(version)) => {
+                    context.server_version = Some(version.clone());
+                    Ok(multi_connection_states::completed())
+                }
+                Ok(None) => Err("No version returned from server".into()),
+                Err(e) => Err(format!("Failed to get server version: {e}").into()),
+            }
+        } else {
+            Err("No connection available for getting version".into())
+        }
+    }
+    async fn exit(&self, _context: &mut DynamicStateContext) -> test_rig::Result<()> {
+        Ok(())
+    }
+}
+
 impl SimpleMultiConnectionCoordinator {
     pub fn new() -> Self {
         Self {
@@ -208,24 +358,26 @@ impl SimpleMultiConnectionCoordinator {
             let database = connection.database.clone();
 
             let handle = tokio::spawn(async move {
-                // Create state machine for this connection
-                let mut state_machine = StateMachine::new();
+                // Create dynamic state machine for this connection
+                let mut machine = DynamicStateMachine::new();
 
                 // Register handlers
-                state_machine.register_handler(State::Initial, Box::new(InitialHandler));
-                state_machine.register_handler(
-                    State::ParsingConfig,
-                    Box::new(ParsingConfigHandler::new(
-                        host, username, password, database,
-                    )),
-                );
-                state_machine.register_handler(State::Connecting, Box::new(ConnectingHandler));
-                state_machine
-                    .register_handler(State::TestingConnection, Box::new(TestingConnectionHandler));
-                state_machine
-                    .register_handler(State::VerifyingDatabase, Box::new(VerifyingDatabaseHandler));
-                state_machine
-                    .register_handler(State::GettingVersion, Box::new(GettingVersionHandler));
+                machine.register_handler(dynamic_state!("initial", "Initial"), Box::new(InitialHandlerAdapter));
+                machine.register_handler(multi_connection_states::parsing_config(), Box::new(ParsingConfigHandlerAdapter {
+                    host, user: username, password, database,
+                }));
+                machine.register_handler(multi_connection_states::connecting(), Box::new(ConnectingHandlerAdapter));
+                machine.register_handler(multi_connection_states::testing_connection(), Box::new(TestingConnectionHandlerAdapter));
+                machine.register_handler(multi_connection_states::verifying_database(), Box::new(VerifyingDatabaseHandlerAdapter));
+                machine.register_handler(multi_connection_states::getting_version(), Box::new(GettingVersionHandlerAdapter));
+
+                // Register valid transitions
+                register_transitions!(machine, dynamic_state!("initial", "Initial"), [multi_connection_states::parsing_config()]);
+                register_transitions!(machine, multi_connection_states::parsing_config(), [multi_connection_states::connecting()]);
+                register_transitions!(machine, multi_connection_states::connecting(), [multi_connection_states::testing_connection()]);
+                register_transitions!(machine, multi_connection_states::testing_connection(), [multi_connection_states::verifying_database()]);
+                register_transitions!(machine, multi_connection_states::verifying_database(), [multi_connection_states::getting_version()]);
+                register_transitions!(machine, multi_connection_states::getting_version(), [multi_connection_states::completed()]);
 
                 // Update status to connecting
                 if let Ok(mut state) = shared_state.lock()
@@ -235,7 +387,7 @@ impl SimpleMultiConnectionCoordinator {
                 }
 
                 // Run the state machine
-                match state_machine.run().await {
+                match machine.run().await {
                     Ok(_) => {
                         // Update status to completed
                         if let Ok(mut state) = shared_state.lock() {

@@ -1,11 +1,8 @@
 use clap::Parser;
-use test_rig::state_handlers::GettingVersionHandler;
-use test_rig::state_machine::{State, StateMachine};
+// No specific handlers needed for basic binary
 use test_rig::{CommonArgs, print_error_and_exit, print_success, print_test_header};
-use test_rig::{
-    ConnectingHandler, InitialHandler, ParsingConfigHandler, TestingConnectionHandler,
-    VerifyingDatabaseHandler,
-};
+use test_rig::{State, StateMachine};
+use test_rig::state_handlers::{InitialHandler, ParsingConfigHandler, ConnectingHandler, TestingConnectionHandler, VerifyingDatabaseHandler, GettingVersionHandler};
 
 #[derive(Parser, Debug)]
 #[command(name = "basic-test")]
@@ -27,6 +24,8 @@ impl Args {
     }
 }
 
+// Use core state handlers for the basic workflow
+
 #[tokio::main]
 async fn main() {
     print_test_header("TiDB Basic Connection Test");
@@ -37,18 +36,17 @@ async fn main() {
         .get_connection_info()
         .expect("Failed to get connection info");
 
-    let mut state_machine = StateMachine::new();
-    state_machine.register_handler(State::Initial, Box::new(InitialHandler));
-    state_machine.register_handler(
-        State::ParsingConfig,
-        Box::new(ParsingConfigHandler::new(host, user, password, database)),
-    );
-    state_machine.register_handler(State::Connecting, Box::new(ConnectingHandler));
-    state_machine.register_handler(State::TestingConnection, Box::new(TestingConnectionHandler));
-    state_machine.register_handler(State::VerifyingDatabase, Box::new(VerifyingDatabaseHandler));
-    state_machine.register_handler(State::GettingVersion, Box::new(GettingVersionHandler));
+    let mut machine = StateMachine::new();
+    
+    // Register core state handlers
+    machine.register_handler(State::Initial, Box::new(InitialHandler));
+    machine.register_handler(State::ParsingConfig, Box::new(ParsingConfigHandler::new(host, user, password, database)));
+    machine.register_handler(State::Connecting, Box::new(ConnectingHandler));
+    machine.register_handler(State::TestingConnection, Box::new(TestingConnectionHandler));
+    machine.register_handler(State::VerifyingDatabase, Box::new(VerifyingDatabaseHandler));
+    machine.register_handler(State::GettingVersion, Box::new(GettingVersionHandler));
 
-    match state_machine.run().await {
+    match machine.run().await {
         Ok(_) => print_success("Basic connection test completed successfully!"),
         Err(e) => print_error_and_exit("Basic connection test failed", &e),
     }

@@ -1,7 +1,10 @@
 //! # State Handlers
-//!
+//! 
 //! Built-in state handler implementations for common TiDB operations.
 //! Provides handlers for connection, testing, verification, and monitoring workflows.
+//! 
+//! Note: For extensible state handling, use the dynamic state machine system.
+//! The core StateMachine now only supports Initial, Completed, and Error states.
 
 use crate::connection::{create_connection_pool, parse_connection_string};
 use crate::errors::Result;
@@ -23,7 +26,9 @@ impl StateHandler for InitialHandler {
     }
 
     async fn execute(&self, _context: &mut StateContext) -> Result<State> {
-        Ok(State::ParsingConfig)
+        // For extensible workflows, use DynamicStateMachine
+        // This core handler just completes immediately
+        Ok(State::Completed)
     }
 
     async fn exit(&self, _context: &mut StateContext) -> Result<()> {
@@ -54,7 +59,7 @@ impl ParsingConfigHandler {
 impl StateHandler for ParsingConfigHandler {
     async fn enter(&self, _context: &mut StateContext) -> Result<State> {
         println!("Parsing connection configuration...");
-        Ok(State::ParsingConfig)
+        Ok(State::Initial)
     }
 
     async fn execute(&self, context: &mut StateContext) -> Result<State> {
@@ -70,7 +75,10 @@ impl StateHandler for ParsingConfigHandler {
 
         info!("Configuration parsed: {}:{}", context.host, context.port);
         println!("✓ Configuration parsed: {}:{}", context.host, context.port);
-        Ok(State::Connecting)
+        
+        // For extensible workflows, use DynamicStateMachine
+        // This handler completes the basic workflow
+        Ok(State::Completed)
     }
 
     async fn exit(&self, _context: &mut StateContext) -> Result<()> {
@@ -85,7 +93,7 @@ pub struct ConnectingHandler;
 impl StateHandler for ConnectingHandler {
     async fn enter(&self, _context: &mut StateContext) -> Result<State> {
         println!("Establishing connection to TiDB...");
-        Ok(State::Connecting)
+        Ok(State::Initial)
     }
 
     async fn execute(&self, context: &mut StateContext) -> Result<State> {
@@ -112,7 +120,10 @@ impl StateHandler for ConnectingHandler {
             context.host, context.port
         );
         println!("✓ Connection established successfully");
-        Ok(State::TestingConnection)
+        
+        // For extensible workflows, use DynamicStateMachine
+        // This handler completes the basic workflow
+        Ok(State::Completed)
     }
 
     async fn exit(&self, _context: &mut StateContext) -> Result<()> {
@@ -127,7 +138,7 @@ pub struct TestingConnectionHandler;
 impl StateHandler for TestingConnectionHandler {
     async fn enter(&self, _context: &mut StateContext) -> Result<State> {
         println!("Testing connection...");
-        Ok(State::TestingConnection)
+        Ok(State::Initial)
     }
 
     async fn execute(&self, context: &mut StateContext) -> Result<State> {
@@ -139,7 +150,7 @@ impl StateHandler for TestingConnectionHandler {
                 Ok(_) => {
                     info!("Connection test passed");
                     println!("✓ Connection test passed");
-                    Ok(State::VerifyingDatabase)
+                    Ok(State::Completed)
                 }
                 Err(e) => {
                     error!("Connection test failed: {}", e);
@@ -167,7 +178,7 @@ pub struct VerifyingDatabaseHandler;
 impl StateHandler for VerifyingDatabaseHandler {
     async fn enter(&self, _context: &mut StateContext) -> Result<State> {
         println!("Verifying database...");
-        Ok(State::VerifyingDatabase)
+        Ok(State::Initial)
     }
 
     async fn execute(&self, context: &mut StateContext) -> Result<State> {
@@ -178,7 +189,7 @@ impl StateHandler for VerifyingDatabaseHandler {
                 match conn.query_drop(query) {
                     Ok(_) => {
                         println!("✓ Database '{db_name}' verified");
-                        Ok(State::GettingVersion)
+                        Ok(State::Completed)
                     }
                     Err(e) => {
                         context.set_error(format!("Database verification failed: {e}"));
@@ -188,7 +199,7 @@ impl StateHandler for VerifyingDatabaseHandler {
             } else {
                 // No specific database specified, just proceed
                 println!("✓ No specific database specified, proceeding...");
-                Ok(State::GettingVersion)
+                Ok(State::Completed)
             }
         } else {
             let error_msg = "No connection available for database verification";
@@ -209,33 +220,28 @@ pub struct GettingVersionHandler;
 impl StateHandler for GettingVersionHandler {
     async fn enter(&self, _context: &mut StateContext) -> Result<State> {
         println!("Getting server version...");
-        Ok(State::GettingVersion)
+        Ok(State::Initial)
     }
 
     async fn execute(&self, context: &mut StateContext) -> Result<State> {
         if let Some(ref mut conn) = context.connection {
-            let query = "SELECT VERSION() as version";
-            let result: std::result::Result<Vec<Row>, Error> = conn.exec(query, ());
-
-            match result {
-                Ok(rows) => {
-                    if let Some(row) = rows.first() {
-                        if let Some(version) = row.get::<String, _>("version") {
-                            context.server_version = Some(version.clone());
-                            println!("✓ Server version: {version}");
-                            Ok(State::Completed)
-                        } else {
-                            context.set_error("Could not extract version from result".to_string());
-                            Err("Could not extract version from result".into())
-                        }
-                    } else {
-                        context.set_error("No version information returned".to_string());
-                        Err("No version information returned".into())
-                    }
+            let version_query = "SELECT VERSION()";
+            match conn.query_first::<String, _>(version_query) {
+                Ok(Some(version)) => {
+                    context.server_version = Some(version.clone());
+                    info!("Server version: {}", version);
+                    println!("✓ Server version: {}", version);
+                    Ok(State::Completed)
+                }
+                Ok(None) => {
+                    let error_msg = "No version returned from server";
+                    context.set_error(error_msg.to_string());
+                    Err(error_msg.into())
                 }
                 Err(e) => {
-                    context.set_error(format!("Failed to get server version: {e}"));
-                    Err(format!("Failed to get server version: {e}").into())
+                    let error_msg = format!("Failed to get server version: {e}");
+                    context.set_error(error_msg.clone());
+                    Err(error_msg.into())
                 }
             }
         } else {
@@ -250,7 +256,7 @@ impl StateHandler for GettingVersionHandler {
     }
 }
 
-/// Generic version handler that transitions to a configurable next state
+/// Handler that transitions to a specified next state
 pub struct NextStateVersionHandler {
     pub next_state: State,
 }
@@ -264,33 +270,28 @@ impl NextStateVersionHandler {
 #[async_trait]
 impl StateHandler for NextStateVersionHandler {
     async fn enter(&self, _context: &mut StateContext) -> Result<State> {
-        println!("Getting server version...");
-        Ok(State::GettingVersion)
+        Ok(State::Initial)
     }
 
     async fn execute(&self, context: &mut StateContext) -> Result<State> {
         if let Some(ref mut conn) = context.connection {
-            let query = "SELECT VERSION() as version";
-            let result: std::result::Result<Vec<Row>, Error> = conn.exec(query, ());
-            match result {
-                Ok(rows) => {
-                    if let Some(row) = rows.first() {
-                        if let Some(version) = row.get::<String, _>("version") {
-                            context.server_version = Some(version.clone());
-                            println!("✓ Server version: {version}");
-                            Ok(self.next_state.clone())
-                        } else {
-                            context.set_error("Could not extract version from result".to_string());
-                            Err("Could not extract version from result".into())
-                        }
-                    } else {
-                        context.set_error("No version information returned".to_string());
-                        Err("No version information returned".into())
-                    }
+            let version_query = "SELECT VERSION()";
+            match conn.query_first::<String, _>(version_query) {
+                Ok(Some(version)) => {
+                    context.server_version = Some(version.clone());
+                    info!("Server version: {}", version);
+                    println!("✓ Server version: {}", version);
+                    Ok(self.next_state.clone())
+                }
+                Ok(None) => {
+                    let error_msg = "No version returned from server";
+                    context.set_error(error_msg.to_string());
+                    Err(error_msg.into())
                 }
                 Err(e) => {
-                    context.set_error(format!("Failed to get server version: {e}"));
-                    Err(format!("Failed to get server version: {e}").into())
+                    let error_msg = format!("Failed to get server version: {e}");
+                    context.set_error(error_msg.clone());
+                    Err(error_msg.into())
                 }
             }
         } else {

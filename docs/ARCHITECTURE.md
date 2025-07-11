@@ -8,10 +8,24 @@ This project is a modular, extensible Rust tool for testing TiDB, database state
 ## Key Components
 
 ### 1. State Machine Core
-- **StateMachine**: Drives the workflow for a single connection, transitioning through states such as Initial, ParsingConfig, Connecting, TestingConnection, VerifyingDatabase, GettingVersion, CheckingImportJobs, and ShowingImportJobDetails.
-- **State**: Enum representing each logical step in the workflow.
+The framework provides two complementary state management systems:
+
+#### Core State Machine (`state_machine.rs`)
+- **StateMachine**: Drives standard workflows for single connections, transitioning through predefined states.
+- **State**: Enum representing each logical step in the workflow (`Initial`, `ParsingConfig`, `Connecting`, `TestingConnection`, `VerifyingDatabase`, `GettingVersion`, `Completed`, `Error`).
 - **StateHandler**: Trait implemented by each handler, encapsulating logic for a specific state. Handlers are async and can maintain their own local context.
 - **StateContext**: Minimal global context (connection, credentials, etc.), with support for handler-local context via a type-erased map.
+
+#### Dynamic State Machine (`state_machine_dynamic.rs`)
+- **DynamicStateMachine**: Drives extensible workflows with custom states defined at runtime.
+- **DynamicState**: String-based state representation allowing tests to define their own states.
+- **DynamicStateHandler**: Trait for handlers that work with dynamic states.
+- **DynamicStateContext**: Extended context with custom data storage for test-specific information.
+
+#### Common States (`common_states.rs`)
+- **Shared Definitions**: Common workflow states used across multiple binaries to eliminate code duplication.
+- **Available States**: `parsing_config()`, `connecting()`, `testing_connection()`, `verifying_database()`, `getting_version()`, `completed()`.
+- **Benefits**: Single source of truth, consistent behavior, easier maintenance.
 
 ### 2. Handler Modularity
 - Each state (e.g., Connecting, CheckingImportJobs) has its own handler struct implementing `StateHandler`.
@@ -164,40 +178,80 @@ The multiple state machines with shared state approach provides the best balance
 
 ---
 
-## Example Workflow (Single Connection)
+## Example Workflows
+
+### Core State Machine Workflow (Single Connection)
 1. **Initial**: Start the workflow.
 2. **ParsingConfig**: Parse CLI/config input.
 3. **Connecting**: Establish DB connection.
 4. **TestingConnection**: Run a test query.
 5. **VerifyingDatabase**: Check DB existence.
 6. **GettingVersion**: Query server version.
-7. **CheckingImportJobs**: List active import jobs.
-8. **ShowingImportJobDetails**: Monitor job progress for N seconds.
-9. **Completed/Error**: End state.
+7. **Completed/Error**: End state.
 
-## Example Workflow (Multiple Connections)
-- Each connection runs the above workflow in parallel.
+### Dynamic State Machine Workflow (Extensible)
+1. **Initial**: Start the workflow.
+2. **ParsingConfig**: Parse CLI/config input (from common states).
+3. **Connecting**: Establish DB connection (from common states).
+4. **TestingConnection**: Run a test query (from common states).
+5. **VerifyingDatabase**: Check DB existence (from common states).
+6. **GettingVersion**: Query server version (from common states).
+7. **Custom States**: Test-specific states (e.g., `creating_table`, `populating_data`, `testing_isolation`).
+8. **Completed**: End state (from common states).
+
+### Multi-Connection Workflow
+- Each connection runs either the core or dynamic workflow in parallel.
 - Shared state tracks results, errors, and coordination events.
 - Coordinators can implement custom logic (e.g., wait for all connections to be ready before proceeding).
+
+
 
 ---
 
 ## File Structure
-- `src/main.rs`: CLI entry point for single-connection mode.
-- `src/state_machine.rs`: State machine core, context, and trait definitions.
-- `src/state_handlers.rs`: Handlers for each state.
+- `src/lib.rs`: Main library with shared functionality and exports.
+- `src/state_machine.rs`: Core state machine for standard workflows.
+- `src/state_machine_dynamic.rs`: Dynamic state machine for extensible workflows.
+- `src/common_states.rs`: Shared state definitions for common workflows.
+- `src/state_handlers.rs`: Handlers for core state machine states.
 - `src/import_job_handlers.rs`: Handlers and context for import job monitoring.
 - `src/connection.rs`: Connection utilities.
 - `src/connection_manager.rs`: Shared state and coordination for multi-connection mode.
 - `src/multi_connection_state_machine.rs`: Multi-connection state machine logic.
+- `src/bin/`: Binary executables for different test scenarios.
+  - `basic.rs`: Basic connection test using core state machine.
+  - `isolation.rs`: Isolation test using dynamic state machine.
+  - `job_monitor.rs`: Job monitoring using dynamic state machine.
+  - `simple_multi_connection.rs`: Simple multi-connection test.
+  - `python_demo.rs`: Python plugin demonstration.
 - `examples/`: Example usage for both single and multi-connection workflows.
 
 ---
 
 ## Extending the System
+
+### Adding New States
+
+#### For Core State Machine
 - **Add a new state**: Implement `StateHandler`, add to `State` enum, and register in the state machine.
+
+#### For Dynamic State Machine
+- **Add a new state**: Use `dynamic_state!` macro to create states, implement `DynamicStateHandler`, and register in the dynamic state machine.
+- **Use common states**: Import from `common_states` module to avoid duplication.
+
+### Adding New Workflows
 - **Add a new connection workflow**: Compose new state machines and/or coordinators.
-- **Add new CLI options**: Extend the `Args` struct in `main.rs` and pass to handlers as needed.
+- **Add test-specific states**: Define custom states in your binary's state module, re-exporting common states as needed.
+
+### Adding New CLI Options
+- **Add new CLI options**: Extend the `Args` struct in your binary and pass to handlers as needed.
+- **Use configuration extensions**: Implement `ConfigExtension` trait for reusable CLI options.
+
+### Best Practices
+- **Use common states**: Always use the `common_states` module for standard workflow states.
+- **Keep binaries focused**: Each binary should only define states specific to its test scenario.
+- **Re-export common states**: Use `pub use test_rig::common_states::*` in your state modules.
+- **Document custom states**: Provide clear documentation for any test-specific states you create.
 - **Add new coordination logic**: Extend `ConnectionCoordinator` and `SharedState`.
 
 ---

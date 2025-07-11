@@ -50,6 +50,12 @@ pub mod state_handlers;
 /// Core state machine implementation for TiDB connection workflows
 pub mod state_machine;
 
+/// Dynamic state machine implementation for test-defined states
+pub mod state_machine_dynamic;
+
+/// Common state definitions shared across binaries
+pub mod common_states;
+
 /// Python plugin system using PyO3 for writing state handlers in Python
 #[cfg(feature = "python_plugins")]
 pub mod python_bindings;
@@ -71,6 +77,9 @@ pub use retry::{
 };
 pub use state_handlers::*;
 pub use state_machine::{State, StateContext, StateHandler, StateMachine};
+pub use state_machine_dynamic::{
+    DynamicState, DynamicStateContext, DynamicStateHandler, DynamicStateMachine, states,
+};
 
 #[cfg(feature = "python_plugins")]
 pub use python_bindings::{PyStateHandler, load_python_handlers, register_python_handler};

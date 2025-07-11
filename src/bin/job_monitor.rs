@@ -6,13 +6,10 @@ use mysql::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use test_rig::errors::{ConnectError, Result};
-use test_rig::state_handlers::{
-    ConnectingHandler, InitialHandler, NextStateVersionHandler, ParsingConfigHandler,
-    TestingConnectionHandler, VerifyingDatabaseHandler,
+use test_rig::{
+    CommonArgs, print_error_and_exit, print_success, print_test_header,
+    dynamic_state, register_transitions, DynamicState, DynamicStateContext, DynamicStateHandler, DynamicStateMachine,
 };
-use test_rig::state_machine::{State, StateMachine};
-use test_rig::state_machine::{StateContext, StateHandler};
-use test_rig::{CommonArgs, print_error_and_exit, print_success, print_test_header};
 use tokio::time::sleep;
 
 // Import job types needed for the binary
@@ -72,19 +69,177 @@ impl ImportJobContext {
     }
 }
 
+// Define custom states for the workflow
+mod job_monitor_states {
+    use super::*;
+
+    // Re-export common states
+    pub use test_rig::common_states::{
+        parsing_config, connecting, testing_connection, verifying_database, getting_version, completed,
+    };
+
+    // Test-specific states
+    pub fn checking_import_jobs() -> DynamicState {
+        dynamic_state!("checking_import_jobs", "Checking Import Jobs")
+    }
+    pub fn showing_import_job_details() -> DynamicState {
+        dynamic_state!("showing_import_job_details", "Showing Import Job Details")
+    }
+}
+
+// Adapter for InitialHandler to DynamicStateHandler
+struct InitialHandlerAdapter;
+#[async_trait]
+impl DynamicStateHandler for InitialHandlerAdapter {
+    async fn enter(&self, _context: &mut DynamicStateContext) -> test_rig::Result<DynamicState> {
+        Ok(dynamic_state!("initial", "Initial"))
+    }
+    async fn execute(&self, _context: &mut DynamicStateContext) -> test_rig::Result<DynamicState> {
+        Ok(job_monitor_states::parsing_config())
+    }
+    async fn exit(&self, _context: &mut DynamicStateContext) -> test_rig::Result<()> {
+        Ok(())
+    }
+}
+
+// Adapter for ParsingConfigHandler to DynamicStateHandler
+struct ParsingConfigHandlerAdapter {
+    host: String,
+    user: String,
+    password: String,
+    database: Option<String>,
+}
+#[async_trait]
+impl DynamicStateHandler for ParsingConfigHandlerAdapter {
+    async fn enter(&self, _context: &mut DynamicStateContext) -> test_rig::Result<DynamicState> {
+        Ok(job_monitor_states::parsing_config())
+    }
+    async fn execute(&self, context: &mut DynamicStateContext) -> test_rig::Result<DynamicState> {
+        let (host, port) = test_rig::connection::parse_connection_string(&self.host)?;
+        context.host = host;
+        context.port = port;
+        context.username = self.user.clone();
+        context.password = self.password.clone();
+        context.database = self.database.clone();
+        Ok(job_monitor_states::connecting())
+    }
+    async fn exit(&self, _context: &mut DynamicStateContext) -> test_rig::Result<()> {
+        Ok(())
+    }
+}
+
+// Adapter for ConnectingHandler to DynamicStateHandler
+struct ConnectingHandlerAdapter;
+#[async_trait]
+impl DynamicStateHandler for ConnectingHandlerAdapter {
+    async fn enter(&self, _context: &mut DynamicStateContext) -> test_rig::Result<DynamicState> {
+        Ok(job_monitor_states::connecting())
+    }
+    async fn execute(&self, context: &mut DynamicStateContext) -> test_rig::Result<DynamicState> {
+        let pool = test_rig::connection::create_connection_pool(
+            &context.host,
+            context.port,
+            &context.username,
+            &context.password,
+            context.database.as_deref(),
+        )?;
+        let conn = pool.get_conn()?;
+        context.connection = Some(conn);
+        Ok(job_monitor_states::testing_connection())
+    }
+    async fn exit(&self, _context: &mut DynamicStateContext) -> test_rig::Result<()> {
+        Ok(())
+    }
+}
+
+// Adapter for TestingConnectionHandler to DynamicStateHandler
+struct TestingConnectionHandlerAdapter;
+#[async_trait]
+impl DynamicStateHandler for TestingConnectionHandlerAdapter {
+    async fn enter(&self, _context: &mut DynamicStateContext) -> test_rig::Result<DynamicState> {
+        Ok(job_monitor_states::testing_connection())
+    }
+    async fn execute(&self, context: &mut DynamicStateContext) -> test_rig::Result<DynamicState> {
+        if let Some(ref mut conn) = context.connection {
+            let result: std::result::Result<Vec<mysql::Row>, mysql::Error> = conn.exec("SELECT 1", ());
+            match result {
+                Ok(_) => Ok(job_monitor_states::verifying_database()),
+                Err(e) => Err(format!("Connection test failed: {e}").into()),
+            }
+        } else {
+            Err("No connection available for testing".into())
+        }
+    }
+    async fn exit(&self, _context: &mut DynamicStateContext) -> test_rig::Result<()> {
+        Ok(())
+    }
+}
+
+// Adapter for VerifyingDatabaseHandler to DynamicStateHandler
+struct VerifyingDatabaseHandlerAdapter;
+#[async_trait]
+impl DynamicStateHandler for VerifyingDatabaseHandlerAdapter {
+    async fn enter(&self, _context: &mut DynamicStateContext) -> test_rig::Result<DynamicState> {
+        Ok(job_monitor_states::verifying_database())
+    }
+    async fn execute(&self, context: &mut DynamicStateContext) -> test_rig::Result<DynamicState> {
+        if let Some(ref mut conn) = context.connection {
+            if let Some(ref db_name) = context.database {
+                let query = format!("USE `{db_name}`");
+                match conn.query_drop(query) {
+                    Ok(_) => Ok(job_monitor_states::getting_version()),
+                    Err(e) => Err(format!("Database verification failed: {e}").into()),
+                }
+            } else {
+                Ok(job_monitor_states::getting_version())
+            }
+        } else {
+            Err("No connection available for database verification".into())
+        }
+    }
+    async fn exit(&self, _context: &mut DynamicStateContext) -> test_rig::Result<()> {
+        Ok(())
+    }
+}
+
+// Adapter for GettingVersionHandler to DynamicStateHandler
+struct GettingVersionHandlerAdapter;
+#[async_trait]
+impl DynamicStateHandler for GettingVersionHandlerAdapter {
+    async fn enter(&self, _context: &mut DynamicStateContext) -> test_rig::Result<DynamicState> {
+        Ok(job_monitor_states::getting_version())
+    }
+    async fn execute(&self, context: &mut DynamicStateContext) -> test_rig::Result<DynamicState> {
+        if let Some(ref mut conn) = context.connection {
+            let version_query = "SELECT VERSION()";
+            match conn.query_first::<String, _>(version_query) {
+                Ok(Some(version)) => {
+                    context.server_version = Some(version.clone());
+                    Ok(job_monitor_states::checking_import_jobs())
+                }
+                Ok(None) => Err("No version returned from server".into()),
+                Err(e) => Err(format!("Failed to get server version: {e}").into()),
+            }
+        } else {
+            Err("No connection available for getting version".into())
+        }
+    }
+    async fn exit(&self, _context: &mut DynamicStateContext) -> test_rig::Result<()> {
+        Ok(())
+    }
+}
+
 /// Handler for checking import jobs
 pub struct CheckingImportJobsHandler;
 
 #[async_trait]
-impl StateHandler for CheckingImportJobsHandler {
-    async fn enter(&self, context: &mut StateContext) -> Result<State> {
+impl DynamicStateHandler for CheckingImportJobsHandler {
+    async fn enter(&self, _context: &mut DynamicStateContext) -> test_rig::Result<DynamicState> {
         println!("Checking for active import jobs...");
-        // Initialize import job context
-        context.set_handler_context(State::CheckingImportJobs, ImportJobContext::new(0));
-        Ok(State::CheckingImportJobs)
+        Ok(job_monitor_states::checking_import_jobs())
     }
 
-    async fn execute(&self, context: &mut StateContext) -> Result<State> {
+    async fn execute(&self, context: &mut DynamicStateContext) -> test_rig::Result<DynamicState> {
         if let Some(ref mut conn) = context.connection {
             // Execute SHOW IMPORT JOBS
             let query = "SHOW IMPORT JOBS";
@@ -98,20 +253,16 @@ impl StateHandler for CheckingImportJobsHandler {
                 }
             }
 
-            // Update the import job context
-            if let Some(import_context) =
-                context.get_handler_context_mut::<ImportJobContext>(&State::CheckingImportJobs)
-            {
-                import_context.active_import_jobs = active_jobs.clone();
-            }
+            // Store active jobs in context for next state
+            context.set_custom_data("active_import_jobs".to_string(), active_jobs.clone());
 
             // Check if we have active jobs
             if active_jobs.is_empty() {
                 println!("✓ No active import jobs found");
-                Ok(State::Completed)
+                Ok(job_monitor_states::completed())
             } else {
                 println!("✓ Found {} active import job(s)", active_jobs.len());
-                Ok(State::ShowingImportJobDetails)
+                Ok(job_monitor_states::showing_import_job_details())
             }
         } else {
             return Err(ConnectError::StateMachine(
@@ -120,12 +271,7 @@ impl StateHandler for CheckingImportJobsHandler {
         }
     }
 
-    async fn exit(&self, context: &mut StateContext) -> Result<()> {
-        // Move the context to the next state
-        context.move_handler_context::<ImportJobContext>(
-            &State::CheckingImportJobs,
-            State::ShowingImportJobDetails,
-        );
+    async fn exit(&self, _context: &mut DynamicStateContext) -> test_rig::Result<()> {
         Ok(())
     }
 }
@@ -142,40 +288,26 @@ impl ShowingImportJobDetailsHandler {
 }
 
 #[async_trait]
-impl StateHandler for ShowingImportJobDetailsHandler {
-    async fn enter(&self, context: &mut StateContext) -> Result<State> {
-        // Update the monitor duration in the context
-        if let Some(import_context) =
-            context.get_handler_context_mut::<ImportJobContext>(&State::ShowingImportJobDetails)
-        {
-            import_context.monitor_duration = self.monitor_duration;
-            println!(
-                "Monitoring {} active import job(s) for {} seconds...",
-                import_context.active_import_jobs.len(),
-                import_context.monitor_duration
-            );
-        }
-        Ok(State::ShowingImportJobDetails)
+impl DynamicStateHandler for ShowingImportJobDetailsHandler {
+    async fn enter(&self, _context: &mut DynamicStateContext) -> test_rig::Result<DynamicState> {
+        println!(
+            "Monitoring active import job(s) for {} seconds...",
+            self.monitor_duration
+        );
+        Ok(job_monitor_states::showing_import_job_details())
     }
 
-    async fn execute(&self, context: &mut StateContext) -> Result<State> {
-        // Extract context data first to avoid borrowing conflicts
-        let (monitor_duration, active_jobs) = if let Some(import_context) =
-            context.get_handler_context::<ImportJobContext>(&State::ShowingImportJobDetails)
-        {
-            (
-                import_context.monitor_duration,
-                import_context.active_import_jobs.clone(),
-            )
+    async fn execute(&self, context: &mut DynamicStateContext) -> test_rig::Result<DynamicState> {
+        // Extract active jobs from context
+        let active_jobs: Vec<String> = if let Some(jobs) = context.get_custom_data::<Vec<String>>("active_import_jobs") {
+            jobs.clone()
         } else {
-            return Err(ConnectError::StateMachine(
-                "Import job context not found".to_string(),
-            ));
+            return Err("No active import jobs found in context".into());
         };
 
         if let Some(ref mut conn) = context.connection {
             let start_time = std::time::Instant::now();
-            let duration = Duration::from_secs(monitor_duration);
+            let duration = Duration::from_secs(self.monitor_duration);
 
             while start_time.elapsed() < duration {
                 println!(
@@ -199,35 +331,32 @@ impl StateHandler for ShowingImportJobDetailsHandler {
                                 "Job_ID: {} | Phase: {} | Start_Time: {} | Source_File_Size: {} | Imported_Rows: {} | Time elapsed: {:02}:{:02}:{:02}",
                                 job.Job_ID,
                                 job.Phase,
-                                job.Start_Time
-                                    .map(|t| t.to_string())
-                                    .unwrap_or_else(|| "N/A".to_string()),
+                                job.Start_Time.map(|t| t.format("%Y-%m-%d %H:%M:%S").to_string()).unwrap_or_else(|| "N/A".to_string()),
                                 job.Source_File_Size,
                                 job.Imported_Rows.unwrap_or(0),
-                                elapsed_h,
-                                elapsed_m,
-                                elapsed_s
+                                elapsed_h, elapsed_m, elapsed_s
+                            );
+                        } else {
+                            println!("Job_ID: {} | Status: Completed | End_Time: {}", 
+                                job.Job_ID,
+                                job.End_Time.map(|t| t.format("%Y-%m-%d %H:%M:%S").to_string()).unwrap_or_else(|| "N/A".to_string())
                             );
                         }
                     }
                 }
 
-                // Sleep for 5 seconds before next update
+                // Sleep before next update
                 sleep(Duration::from_secs(5)).await;
             }
 
-            println!("\n✓ Import job monitoring completed after {monitor_duration} seconds");
+            println!("✓ Import job monitoring completed");
+            Ok(job_monitor_states::completed())
         } else {
-            return Err(ConnectError::StateMachine(
-                "No connection available for showing import job details".to_string(),
-            ));
+            Err("No connection available for showing import job details".into())
         }
-        Ok(State::Completed)
     }
 
-    async fn exit(&self, context: &mut StateContext) -> Result<()> {
-        // Clean up the context
-        context.remove_handler_context(&State::ShowingImportJobDetails);
+    async fn exit(&self, _context: &mut DynamicStateContext) -> test_rig::Result<()> {
         Ok(())
     }
 }
@@ -420,12 +549,12 @@ async fn main() {
     println!("  Update Interval: {}s", import_config.update_interval);
     println!("  Show Details: {}", import_config.show_details);
 
-    // Create and configure the state machine
-    let mut state_machine = StateMachine::new();
+    // Create and configure the dynamic state machine
+    let mut machine = DynamicStateMachine::new();
 
     // Register handlers manually to include generic version handler
     register_job_monitor_handlers(
-        &mut state_machine,
+        &mut machine,
         host,
         user,
         password,
@@ -433,8 +562,18 @@ async fn main() {
         import_config.monitor_duration,
     );
 
+    // Register valid transitions
+    register_transitions!(machine, dynamic_state!("initial", "Initial"), [job_monitor_states::parsing_config()]);
+    register_transitions!(machine, job_monitor_states::parsing_config(), [job_monitor_states::connecting()]);
+    register_transitions!(machine, job_monitor_states::connecting(), [job_monitor_states::testing_connection()]);
+    register_transitions!(machine, job_monitor_states::testing_connection(), [job_monitor_states::verifying_database()]);
+    register_transitions!(machine, job_monitor_states::verifying_database(), [job_monitor_states::getting_version()]);
+    register_transitions!(machine, job_monitor_states::getting_version(), [job_monitor_states::checking_import_jobs()]);
+    register_transitions!(machine, job_monitor_states::checking_import_jobs(), [job_monitor_states::showing_import_job_details(), job_monitor_states::completed()]);
+    register_transitions!(machine, job_monitor_states::showing_import_job_details(), [job_monitor_states::completed()]);
+
     // Run the state machine
-    match state_machine.run().await {
+    match machine.run().await {
         Ok(_) => {
             print_success("Job monitoring test completed successfully!");
         }
@@ -446,7 +585,7 @@ async fn main() {
 
 /// Register all handlers for job monitoring test
 fn register_job_monitor_handlers(
-    state_machine: &mut StateMachine,
+    state_machine: &mut DynamicStateMachine,
     host: String,
     user: String,
     password: String,
@@ -454,28 +593,33 @@ fn register_job_monitor_handlers(
     monitor_duration: u64,
 ) {
     // Register standard connection handlers
-    state_machine.register_handler(State::Initial, Box::new(InitialHandler));
+    state_machine.register_handler(dynamic_state!("initial", "Initial"), Box::new(InitialHandlerAdapter));
     state_machine.register_handler(
-        State::ParsingConfig,
-        Box::new(ParsingConfigHandler::new(host, user, password, database)),
+        job_monitor_states::parsing_config(),
+        Box::new(ParsingConfigHandlerAdapter {
+            host,
+            user,
+            password,
+            database,
+        }),
     );
-    state_machine.register_handler(State::Connecting, Box::new(ConnectingHandler));
-    state_machine.register_handler(State::TestingConnection, Box::new(TestingConnectionHandler));
-    state_machine.register_handler(State::VerifyingDatabase, Box::new(VerifyingDatabaseHandler));
+    state_machine.register_handler(job_monitor_states::connecting(), Box::new(ConnectingHandlerAdapter));
+    state_machine.register_handler(job_monitor_states::testing_connection(), Box::new(TestingConnectionHandlerAdapter));
+    state_machine.register_handler(job_monitor_states::verifying_database(), Box::new(VerifyingDatabaseHandlerAdapter));
 
     // Register generic version handler that transitions to job monitoring
     state_machine.register_handler(
-        State::GettingVersion,
-        Box::new(NextStateVersionHandler::new(State::CheckingImportJobs)),
+        job_monitor_states::getting_version(),
+        Box::new(GettingVersionHandlerAdapter),
     );
 
     // Register job monitoring handlers
     state_machine.register_handler(
-        State::CheckingImportJobs,
+        job_monitor_states::checking_import_jobs(),
         Box::new(CheckingImportJobsHandler),
     );
     state_machine.register_handler(
-        State::ShowingImportJobDetails,
+        job_monitor_states::showing_import_job_details(),
         Box::new(ShowingImportJobDetailsHandler::new(monitor_duration)),
     );
 }
@@ -545,7 +689,7 @@ mod tests {
     #[test]
     fn test_handler_registration() {
         // Test that we can create the handlers without errors
-        let _version_handler = NextStateVersionHandler::new(State::CheckingImportJobs);
+        let _version_handler = GettingVersionHandlerAdapter;
         let _checking_handler = CheckingImportJobsHandler;
         let _details_handler = ShowingImportJobDetailsHandler::new(30);
 

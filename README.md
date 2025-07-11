@@ -364,6 +364,8 @@ test_rig/
 │   ├── retry.rs            # Retry strategies and circuit breakers
 │   ├── error_utils.rs      # Error handling utilities
 │   ├── state_machine.rs    # Basic state management for tests
+│   ├── state_machine_dynamic.rs # Dynamic state machine for extensible workflows
+│   ├── common_states.rs    # Shared state definitions for common workflows
 │   ├── state_handlers.rs   # State handlers for different test phases
 │   ├── import_job_handlers.rs # Import job specific handlers
 │   ├── lib_utils.rs        # Utility functions
@@ -379,6 +381,47 @@ test_rig/
 │   └── enhanced_error_handling.rs # Enhanced error handling examples
 ├── Cargo.toml              # Main package configuration (workspace)
 └── README.md               # This file
+```
+
+## State Management Architecture
+
+The framework provides two complementary state management systems:
+
+### Core State Machine (`state_machine.rs`)
+- **Static states**: `Initial`, `ParsingConfig`, `Connecting`, `TestingConnection`, `VerifyingDatabase`, `GettingVersion`, `Completed`, `Error`
+- **Use case**: Standard connection workflows in binaries like `basic.rs`
+- **Benefits**: Type-safe, compile-time validation, simple to use
+
+### Dynamic State Machine (`state_machine_dynamic.rs`)
+- **Dynamic states**: String-based states that can be defined at runtime
+- **Use case**: Extensible workflows with test-specific states (isolation tests, job monitoring, etc.)
+- **Benefits**: Flexible, extensible, supports custom state handlers
+
+### Common States (`common_states.rs`)
+- **Shared definitions**: Common workflow states used across multiple binaries
+- **Benefits**: Eliminates code duplication, single source of truth for common states
+- **Available states**: `parsing_config()`, `connecting()`, `testing_connection()`, `verifying_database()`, `getting_version()`, `completed()`
+
+### Usage Examples
+
+#### Using Core State Machine (Basic Workflows)
+```rust
+use test_rig::{State, StateMachine, state_handlers::*};
+
+let mut machine = StateMachine::new();
+machine.register_handler(State::Initial, Box::new(InitialHandler));
+machine.register_handler(State::ParsingConfig, Box::new(ParsingConfigHandler::new(host, user, password, database)));
+// ... register other handlers
+```
+
+#### Using Dynamic State Machine (Extensible Workflows)
+```rust
+use test_rig::{DynamicStateMachine, common_states::*};
+
+let mut machine = DynamicStateMachine::new();
+machine.register_handler(parsing_config(), Box::new(ParsingConfigHandlerAdapter));
+machine.register_handler(connecting(), Box::new(ConnectingHandlerAdapter));
+// ... register other handlers and test-specific states
 ```
 
 ## Development

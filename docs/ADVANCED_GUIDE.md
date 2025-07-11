@@ -6,10 +6,23 @@ This guide covers advanced usage, design decisions, performance notes, and troub
 
 ## 1. Extending with Custom States and Handlers
 
-The framework uses a state machine pattern. You can add custom states and handlers for new test phases or logic. Handlers can be written in **Rust** or **Python** (see Python Plugin Support below).
+The framework uses a dual state machine pattern with both core and dynamic state systems. You can add custom states and handlers for new test phases or logic. Handlers can be written in **Rust** or **Python** (see Python Plugin Support below).
+
+### State Machine Types
+
+#### Core State Machine (for standard workflows)
+- **Use case**: Basic connection tests, standard workflows
+- **States**: Predefined enum (`Initial`, `ParsingConfig`, `Connecting`, etc.)
+- **Benefits**: Type-safe, compile-time validation
+
+#### Dynamic State Machine (for extensible workflows)
+- **Use case**: Test-specific workflows, custom test phases
+- **States**: String-based, defined at runtime
+- **Benefits**: Flexible, extensible, supports custom data storage
 
 ### Example: Adding a Custom State (Rust)
 
+#### For Core State Machine
 ```rust
 use test_rig::state_machine::{State, StateContext, StateHandler};
 use async_trait::async_trait;
@@ -37,6 +50,52 @@ impl StateHandler for ReportingHandler {
 state_machine.register_handler(State::Reporting, Box::new(ReportingHandler));
 ```
 
+#### For Dynamic State Machine
+```rust
+use test_rig::{
+    DynamicState, DynamicStateContext, DynamicStateHandler, DynamicStateMachine,
+    dynamic_state, common_states::*,
+};
+use async_trait::async_trait;
+
+#[derive(Debug, Clone)]
+pub struct CustomTestHandler;
+
+#[async_trait]
+impl DynamicStateHandler for CustomTestHandler {
+    async fn enter(&self, _context: &mut DynamicStateContext) -> test_rig::errors::Result<DynamicState> {
+        println!("Starting custom test...");
+        Ok(dynamic_state!("custom_test", "Custom Test"))
+    }
+    async fn execute(&self, context: &mut DynamicStateContext) -> test_rig::errors::Result<DynamicState> {
+        // Store custom data in context
+        context.set_custom_data("test_results".to_string(), vec!["result1", "result2"]);
+        println!("✓ Custom test completed");
+        Ok(completed())
+    }
+    async fn exit(&self, _context: &mut DynamicStateContext) -> test_rig::errors::Result<()> {
+        Ok(())
+    }
+}
+
+// Define your state module
+mod my_test_states {
+    use super::*;
+    
+    // Re-export common states
+    pub use test_rig::common_states::*;
+    
+    // Define custom states
+    pub fn custom_test() -> DynamicState {
+        dynamic_state!("custom_test", "Custom Test")
+    }
+}
+
+// Register your custom state and handler:
+let mut machine = DynamicStateMachine::new();
+machine.register_handler(my_test_states::custom_test(), Box::new(CustomTestHandler));
+```
+
 ### Example: Adding a Custom State (Python)
 
 You can also write state handlers in Python and register them with the Rust state machine:
@@ -59,6 +118,27 @@ Register your Python handler using the Rust API:
 ```rust
 use test_rig::python_bindings::register_python_handler;
 register_python_handler(&mut state_machine, State::Reporting, py_handler)?;
+```
+
+### Using Common States
+
+When creating custom states, always use the common states module to avoid duplication:
+
+```rust
+mod my_test_states {
+    use super::*;
+    
+    // Re-export common states to avoid duplication
+    pub use test_rig::common_states::{
+        parsing_config, connecting, testing_connection, 
+        verifying_database, getting_version, completed,
+    };
+    
+    // Define only test-specific states
+    pub fn my_custom_phase() -> DynamicState {
+        dynamic_state!("my_custom_phase", "My Custom Phase")
+    }
+}
 ```
 
 ---
