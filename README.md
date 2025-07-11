@@ -357,30 +357,56 @@ All binaries support these common options:
 ```
 test_rig/
 ├── src/
-│   ├── lib.rs              # Main library with shared functionality
-│   ├── config.rs           # Configuration management
-│   ├── cli.rs              # CLI argument parsing
-│   ├── errors.rs           # Error types and handling
-│   ├── retry.rs            # Retry strategies and circuit breakers
-│   ├── error_utils.rs      # Error handling utilities
-│   ├── state_machine.rs    # Basic state management for tests
-│   ├── state_machine_dynamic.rs # Dynamic state machine for extensible workflows
-│   ├── common_states.rs    # Shared state definitions for common workflows
-│   ├── state_handlers.rs   # State handlers for different test phases
-│   ├── import_job_handlers.rs # Import job specific handlers
-│   ├── lib_utils.rs        # Utility functions
-│   └── bin/                # Binary executables (separate workspace)
-│       ├── Cargo.toml      # Binary package configuration
-│       ├── basic.rs        # Basic connection test
-│       ├── config_gen.rs   # Configuration file generator
-│       ├── isolation.rs    # Transaction isolation test
-│       ├── job_monitor.rs  # Import job monitoring
-│       ├── multi_connection.rs # Multi-connection test
-│       └── simple_multi_connection.rs # Simple multi-connection test
-├── examples/               # Example usage
-│   └── enhanced_error_handling.rs # Enhanced error handling examples
-├── Cargo.toml              # Main package configuration (workspace)
-└── README.md               # This file
+│   ├── lib.rs                           # Main library with shared functionality and exports
+│   ├── cli.rs                           # CLI argument parsing and common arguments
+│   ├── config.rs                        # Configuration management (JSON/TOML)
+│   ├── config_extensions.rs             # Dynamic configuration extensions
+│   ├── errors.rs                        # Error types and handling
+│   ├── error_utils.rs                   # Error handling utilities and context
+│   ├── retry.rs                         # Retry strategies and circuit breakers
+│   ├── connection.rs                    # Low-level database connection utilities
+│   ├── connection_manager.rs            # High-level connection management
+│   ├── logging.rs                       # Structured logging configuration
+│   ├── lib_utils.rs                     # Common utility functions
+│   ├── state_machine.rs                 # Core state machine for standard workflows
+│   ├── state_machine_dynamic.rs         # Dynamic state machine for extensible workflows
+│   ├── common_states.rs                 # Shared state definitions for common workflows
+│   ├── state_handlers.rs                # State handlers for core state machine
+│   ├── multi_connection_state_machine.rs # Multi-connection coordination
+│   └── python_bindings.rs               # Python plugin system (PyO3)
+│
+├── src/bin/                             # Binary executables (separate workspace)
+│   ├── Cargo.toml                       # Binary package configuration
+│   ├── README.md                        # Binary-specific documentation
+│   ├── basic.rs                         # Basic connection test (core state machine)
+│   ├── config_gen.rs                    # Configuration file generator
+│   ├── isolation.rs                     # Transaction isolation test (dynamic states)
+│   ├── job_monitor.rs                   # Import job monitoring (dynamic states)
+│   ├── multi_connection.rs              # Multi-connection test
+│   ├── simple_multi_connection.rs       # Simple multi-connection test
+│   └── python_demo.rs                   # Python plugin demonstration
+│
+├── examples/                            # Example usage and demonstrations
+│   ├── enhanced_error_handling.rs       # Enhanced error handling examples
+│   ├── dynamic_state_example.rs         # Dynamic state machine examples
+│   ├── python_handlers.py               # Python handler examples
+│   ├── run_isolation_test.py            # Standalone Python isolation test
+│   └── test_rig_python.pyi              # Python type stubs for IDE support
+│
+├── docs/                                # Documentation
+│   ├── ARCHITECTURE.md                  # System architecture overview
+│   ├── ADVANCED_GUIDE.md                # Advanced usage and troubleshooting
+│   ├── DYNAMIC_STATES.md                # Dynamic state system guide
+│   └── PYTHON_PLUGINS.md                # Python plugin system documentation
+│
+├── Cargo.toml                           # Main package configuration (workspace)
+├── Cargo.lock                           # Dependency lock file
+├── README.md                            # This file
+├── LICENSE                              # Apache 2.0 license
+├── Makefile                             # Build and development tasks
+├── tidb_config.json                     # Example JSON configuration
+├── tidb_config.toml                     # Example TOML configuration
+└── get-pip.py                           # Python dependency installer
 ```
 
 ## State Management Architecture
