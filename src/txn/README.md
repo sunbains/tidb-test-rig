@@ -25,27 +25,32 @@ This directory contains comprehensive transaction tests for TiDB, organized into
 - **Coverage**: Concurrent read/write operations, lock contention, race conditions
 - **Handlers**: `ConcurrentReadWriteTestHandler`, `LockContentionTestHandler`, `RaceConditionTestHandler`, `ConcurrentTransactionConflictTestHandler`, `TransactionRollbackTestHandler`
 
-### 5. Deadlocks and MVCC (`test_deadlock_mvcc.py`)
-- **Purpose**: Tests deadlock scenarios and MVCC behavior
-- **Coverage**: MVCC deadlocks, phantom reads, deadlock detection, version chains
-- **Handlers**: `MVCCDeadlockTestHandler`, `PhantomReadDeadlockTestHandler`, `DeadlockDetectionTestHandler`, `VersionChainDeadlockTestHandler`, `IsolationLevelDeadlockTestHandler`
+### 5. MVCC and Version Chain (`test_mvcc_version_chain.py`)
+- **Purpose**: Tests MVCC behavior and version chain management
+- **Coverage**: MVCC deadlocks, phantom reads, version chain management, optimistic locking
+- **Handlers**: `MVCCDeadlockTestHandler`, `PhantomReadDeadlockTestHandler`, `VersionChainDeadlockTestHandler`
 
-### 6. Savepoints (`test_savepoints.py`)
+### 6. Deadlock Detection (`test_deadlock_detection.py`)
+- **Purpose**: Tests deadlock detection and isolation level behavior
+- **Coverage**: Deadlock detection, automatic rollback, isolation level interactions
+- **Handlers**: `DeadlockDetectionTestHandler`, `IsolationLevelDeadlockTestHandler`
+
+### 7. Savepoints (`test_savepoints.py`)
 - **Purpose**: Comprehensive savepoint testing
 - **Coverage**: Basic savepoints, nested savepoints, savepoint release, error conditions, isolation interactions, performance
 - **Handlers**: `BasicSavepointTestHandler`, `NestedSavepointTestHandler`, `SavepointReleaseTestHandler`, `SavepointErrorTestHandler`, `SavepointIsolationTestHandler`, `SavepointPerformanceTestHandler`
 
-### 7. Error Handling (`test_transaction_errors.py`)
+### 8. Error Handling (`test_transaction_errors.py`)
 - **Purpose**: Tests transaction error scenarios and recovery
 - **Coverage**: Constraint violations, deadlock recovery, timeouts, rollback recovery, error propagation
 - **Handlers**: `ConstraintViolationTestHandler`, `DeadlockRecoveryTestHandler`, `TransactionTimeoutTestHandler`, `RollbackRecoveryTestHandler`, `ErrorPropagationTestHandler`, `RecoveryMechanismTestHandler`
 
-### 8. Performance (`test_transaction_performance.py`)
+### 9. Performance (`test_transaction_performance.py`)
 - **Purpose**: Tests transaction performance characteristics
 - **Coverage**: Bulk operations, large transactions, performance monitoring, size limits
 - **Handlers**: `BulkInsertTestHandler`, `BulkUpdateTestHandler`, `LargeTransactionTestHandler`, `TransactionPerformanceMonitoringTestHandler`, `TransactionSizeLimitTestHandler`
 
-### 9. Edge Cases (`test_transaction_edge_cases.py`)
+### 10. Edge Cases (`test_transaction_edge_cases.py`)
 - **Purpose**: Tests edge cases requiring multiple concurrent connections
 - **Coverage**: Real deadlock scenarios, nested transactions with multiple connections
 - **Handlers**: `DeadlockTestHandler`, `NestedTransactionTestHandler`
