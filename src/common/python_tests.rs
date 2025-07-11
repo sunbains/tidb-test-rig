@@ -108,17 +108,13 @@ pub trait PythonTestRunner: Send + Sync {
             let test_path = PathBuf::from(&test_dir);
 
             if let Ok(entries) = fs::read_dir(&test_path) {
-                for entry in entries {
-                    if let Ok(entry) = entry {
-                        let path = entry.path();
-                        if let Some(file_name) = path.file_name() {
-                            if let Some(name_str) = file_name.to_str() {
-                                if name_str.starts_with("test_") && name_str.ends_with(".py") {
-                                    test_files.push(path);
-                                }
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if let Some(file_name) = path.file_name()
+                        && let Some(name_str) = file_name.to_str()
+                            && name_str.starts_with("test_") && name_str.ends_with(".py") {
+                                test_files.push(path);
                             }
-                        }
-                    }
                 }
             }
 
@@ -244,23 +240,21 @@ pub static PYTHON_SUITES: &[PythonSuiteConfig] = &[
 ];
 
 impl PythonSuiteConfig {
-    pub fn run_suite(
+    pub async fn run_suite(
         &self,
-    ) -> impl std::future::Future<Output = Result<(), Box<dyn std::error::Error>>> + Send {
-        async move {
-            tracing::info!("Running Python test suite: {}", self.name);
-            // Test database connection (optional, can be customized)
-            // ...
-            // Run all Python tests in the suite
-            let test_files = PythonSuiteConfig::discover_test_files(self.test_dir).await?;
-            tracing::info!("Found {} test files in {}", test_files.len(), self.test_dir);
-            for test_file in test_files {
-                tracing::info!("Running test: {}", test_file.display());
-                PythonSuiteConfig::run_single_python_test(&test_file, self.module_prefix).await?;
-            }
-            tracing::info!("All Python tests completed successfully for {}", self.name);
-            Ok(())
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        tracing::info!("Running Python test suite: {}", self.name);
+        // Test database connection (optional, can be customized)
+        // ...
+        // Run all Python tests in the suite
+        let test_files = PythonSuiteConfig::discover_test_files(self.test_dir).await?;
+        tracing::info!("Found {} test files in {}", test_files.len(), self.test_dir);
+        for test_file in test_files {
+            tracing::info!("Running test: {}", test_file.display());
+            PythonSuiteConfig::run_single_python_test(&test_file, self.module_prefix).await?;
         }
+        tracing::info!("All Python tests completed successfully for {}", self.name);
+        Ok(())
     }
 
     pub async fn discover_test_files(
@@ -271,20 +265,16 @@ impl PythonSuiteConfig {
         let mut test_files = Vec::new();
         let test_path = PathBuf::from(test_dir);
         if let Ok(entries) = fs::read_dir(&test_path) {
-            for entry in entries {
-                if let Ok(entry) = entry {
-                    let path = entry.path();
-                    if let Some(file_name) = path.file_name() {
-                        if let Some(name_str) = file_name.to_str() {
-                            if name_str.starts_with("test_")
-                                && name_str.ends_with(".py")
-                                && name_str != "test_rig_python.py"
-                            {
-                                test_files.push(path);
-                            }
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if let Some(file_name) = path.file_name()
+                    && let Some(name_str) = file_name.to_str()
+                        && name_str.starts_with("test_")
+                            && name_str.ends_with(".py")
+                            && name_str != "test_rig_python.py"
+                        {
+                            test_files.push(path);
                         }
-                    }
-                }
             }
         }
         test_files.sort();
