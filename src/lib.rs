@@ -60,6 +60,9 @@ pub mod common_states;
 #[cfg(feature = "python_plugins")]
 pub mod python_bindings;
 
+/// Common modules shared between workspaces
+pub mod common;
+
 pub use cli::{CommonArgs, get_connection_info, parse_args};
 pub use config::{AppConfig, ConfigBuilder, DatabaseConfig, LoggingConfig, TestConfig};
 pub use config_extensions::{
@@ -83,3 +86,5 @@ pub use state_machine_dynamic::{
 
 #[cfg(feature = "python_plugins")]
 pub use python_bindings::{PyStateHandler, load_python_handlers, register_python_handler};
+
+pub use common::python_tests::PythonTestRunner;

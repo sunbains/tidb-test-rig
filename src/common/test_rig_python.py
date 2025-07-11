@@ -1,11 +1,10 @@
 """
-Python stub module for test_rig_python to support DDL tests.
+Python stub module for test_rig_python to support all Python test suites (DDL, Scale, etc).
 This provides the necessary classes and methods for testing without requiring the full Rust extension.
 """
 
 from typing import Optional, List, Any, Dict
 from dataclasses import dataclass
-
 
 @dataclass
 class PyStateContext:
@@ -17,19 +16,12 @@ class PyStateContext:
     database: Optional[str] = None
     connection: Optional['PyConnection'] = None
 
-
 class PyConnection:
     """Python wrapper for database connection"""
-    
     def __init__(self, connection_info: Dict[str, Any] = None):
         self.connection_info = connection_info or {}
-    
     def execute_query(self, query: str) -> List[Dict[str, Any]]:
-        """Execute a query and return results as a list of dictionaries"""
-        # Mock implementation for testing
         print(f"Mock: Executing query: {query}")
-        
-        # Return mock results based on query type
         if "SHOW TABLES" in query:
             return [{"col_0": "ddl_test"}]
         elif "SHOW DATABASES" in query:
@@ -52,60 +44,14 @@ class PyConnection:
         else:
             return []
 
-
-class PyState:
-    """Python wrapper for State enum"""
-    
-    @staticmethod
-    def initial() -> str:
-        return "Initial"
-    
-    @staticmethod
-    def parsing_config() -> str:
-        return "ParsingConfig"
-    
-    @staticmethod
-    def connecting() -> str:
-        return "Connecting"
-    
-    @staticmethod
-    def testing_connection() -> str:
-        return "TestingConnection"
-    
-    @staticmethod
-    def verifying_database() -> str:
-        return "VerifyingDatabase"
-    
-    @staticmethod
-    def getting_version() -> str:
-        return "GettingVersion"
-    
-    @staticmethod
-    def checking_import_jobs() -> str:
-        return "CheckingImportJobs"
-    
-    @staticmethod
-    def showing_import_job_details() -> str:
-        return "ShowingImportJobDetails"
-    
-    @staticmethod
-    def completed() -> str:
-        return "Completed"
-    
-    @staticmethod
-    def error(message: str) -> str:
-        return f"Error: {message}"
-
-
 class PyStateHandler:
-    """Base class for Python handlers"""
-    
+    """Base class for Python state handlers"""
     def __init__(self):
         pass
     
     def enter(self, context: PyStateContext) -> str:
         """Called when entering the state"""
-        return PyState.initial()
+        return PyState.connecting()
     
     def execute(self, context: PyStateContext) -> str:
         """Called during state execution"""
@@ -115,6 +61,35 @@ class PyStateHandler:
         """Called when exiting the state"""
         pass
 
-
-# Export all classes for easy importing
-__all__ = ['PyStateHandler', 'PyStateContext', 'PyState', 'PyConnection'] 
+class PyState:
+    """Python wrapper for State enum"""
+    @staticmethod
+    def initial() -> str:
+        return "Initial"
+    @staticmethod
+    def parsing_config() -> str:
+        return "ParsingConfig"
+    @staticmethod
+    def connecting() -> str:
+        return "Connecting"
+    @staticmethod
+    def testing_connection() -> str:
+        return "TestingConnection"
+    @staticmethod
+    def verifying_database() -> str:
+        return "VerifyingDatabase"
+    @staticmethod
+    def getting_version() -> str:
+        return "GettingVersion"
+    @staticmethod
+    def checking_import_jobs() -> str:
+        return "CheckingImportJobs"
+    @staticmethod
+    def showing_import_job_details() -> str:
+        return "ShowingImportJobDetails"
+    @staticmethod
+    def completed() -> str:
+        return "Completed"
+    @staticmethod
+    def error(message: str) -> str:
+        return f"Error: {message}" 

@@ -1,5 +1,6 @@
 
-from test_rig_python import PyStateHandler, PyStateContext, PyState
+from src.common import test_rig_python as test_rig_python
+from src.common.test_rig_python import PyStateHandler, PyStateContext, PyState
 
 class CreateTableHandler(PyStateHandler):
     def enter(self, context: PyStateContext) -> str:

@@ -1,17 +1,12 @@
-# Python Plugin System for test_rig
+# Python Plugin System and Test Directory Creation
+
+This guide covers both the Python plugin system for the test_rig framework and how to create new Python test directories by copying the necessary files from `src/ddl`.
+
+## Python Plugin System Overview
 
 The test_rig framework supports writing state handlers in Python, allowing you to leverage Python's rich ecosystem while maintaining the performance and reliability of the Rust-based state machine.
 
-## Overview
-
-The Python plugin system uses PyO3 to provide seamless integration between Rust and Python:
-
-- **Rust Core**: High-performance state machine and database operations
-- **Python Handlers**: Easy-to-write state handlers with access to Python libraries
-- **Automatic Loading**: Python handlers are automatically discovered and loaded
-- **Mixed Execution**: Rust and Python handlers can be used together
-
-## Features
+### Key Features
 
 - ✅ **Async Support**: Python handlers support async/await operations
 - ✅ **Database Access**: Full access to database connections and queries
@@ -20,7 +15,16 @@ The Python plugin system uses PyO3 to provide seamless integration between Rust 
 - ✅ **Hot Reloading**: Python handlers can be modified without restarting
 - ✅ **Type Safety**: Type-safe bindings between Rust and Python
 
-## Quick Start
+### Architecture
+
+The Python plugin system uses PyO3 to provide seamless integration between Rust and Python:
+
+- **Rust Core**: High-performance state machine and database operations
+- **Python Handlers**: Easy-to-write state handlers with access to Python libraries
+- **Automatic Loading**: Python handlers are automatically discovered and loaded
+- **Mixed Execution**: Rust and Python handlers can be used together
+
+## Quick Start with Python Plugins
 
 ### 1. Enable Python Plugins
 
@@ -35,7 +39,7 @@ cargo build --features python_plugins
 Create a Python file with your handlers:
 
 ```python
-from test_rig_python import PyStateHandler, PyStateContext, PyState
+from src.common.test_rig_python import PyStateHandler, PyStateContext, PyState
 
 class MyPythonHandler(PyStateHandler):
     def enter(self, context: PyStateContext) -> str:
@@ -186,7 +190,7 @@ sudo apt install cmake libclang-dev
 All Python handlers must inherit from `PyStateHandler`:
 
 ```python
-from test_rig_python import PyStateHandler
+from src.common.test_rig_python import PyStateHandler
 
 class MyHandler(PyStateHandler):
     def __init__(self):
@@ -235,7 +239,7 @@ def exit(self, context: PyStateContext) -> None:
 Use `PyState` to return state names:
 
 ```python
-from test_rig_python import PyState
+from src.common.test_rig_python import PyState
 
 # Available states:
 PyState.initial()                    # Initial state
@@ -259,7 +263,6 @@ def execute(self, context: PyStateContext) -> str:
     print(f"Port: {context.port}")
     print(f"User: {context.username}")
     print(f"Database: {context.database}")
-    print(f"Version: {context.version}")
 ```
 
 ### Database Operations
@@ -509,34 +512,6 @@ class LoggingHandler(PyStateHandler):
         return PyState.completed()
 ```
 
-## Troubleshooting
-
-### Common Issues
-
-1. **Module Not Found**: Ensure your Python module is in the Python path
-2. **Handler Not Loaded**: Check that your handler class name ends with "Handler"
-3. **Import Errors**: Verify all required Python packages are installed
-4. **State Machine Errors**: Check that your handler returns valid state names
-
-### Debug Mode
-
-Enable debug logging to see detailed information:
-
-```bash
-RUST_LOG=debug cargo run --bin python_demo --features python_plugins
-```
-
-### Python Debugging
-
-Add debug prints to your Python handlers:
-
-```python
-def execute(self, context: PyStateContext) -> str:
-    print(f"DEBUG: Context host = {context.host}")
-    print(f"DEBUG: Context connection = {context.connection is not None}")
-    # Your logic here
-```
-
 ## Integration with Existing Code
 
 ### Mixed Rust and Python Handlers
@@ -571,14 +546,6 @@ machine.register_handler(populating_data(), Box::new(PopulatingDataHandler));
 load_python_handlers(&mut machine, "my_python_handlers")?;
 ```
 
-### Gradual Migration
-
-Start with simple handlers and gradually migrate more complex logic:
-
-1. **Phase 1**: Add Python handlers for simple operations
-2. **Phase 2**: Migrate complex business logic to Python
-3. **Phase 3**: Keep only performance-critical code in Rust
-
 ## Performance Considerations
 
 ### When to Use Python Handlers
@@ -602,6 +569,432 @@ Start with simple handlers and gradually migrate more complex logic:
 2. **Use async**: Leverage Python's async capabilities
 3. **Cache results**: Store frequently accessed data
 4. **Profile**: Monitor performance and optimize bottlenecks
+
+---
+
+# Creating New Python Test Directories
+
+This section shows how to create a new Python test directory by copying the necessary files from `src/ddl` and customizing them for your specific test suite.
+
+## Overview
+
+The `src/ddl` directory serves as a template for creating new Python test suites. This guide walks through the process of creating a new test directory (e.g., `src/my_tests`) with all the necessary infrastructure.
+
+## Step 1: Create the Directory Structure
+
+```bash
+# Create the new test directory
+mkdir -p src/my_tests
+
+# Copy the essential files from DDL
+cp src/ddl/Cargo.toml src/my_tests/
+cp src/ddl/lib.rs src/my_tests/
+cp src/ddl/__init__.py src/my_tests/
+cp src/ddl/README.md src/my_tests/
+```
+
+## Step 2: Customize Cargo.toml
+
+Edit `src/my_tests/Cargo.toml` to update the package name. The test workspaces only need minimal configuration since they inherit dependencies from the main `test_rig` crate:
+
+```toml
+[package]
+name = "my_tests"  # Change this to your test suite name
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "my_tests"  # Change this to match package name
+path = "lib.rs"
+
+[features]
+python_plugins = ["test_rig/python_plugins"]
+
+[dependencies]
+test_rig = { path = "../.." }
+```
+
+**Note**: Test workspaces are intentionally minimal. They inherit all necessary dependencies (tokio, serde, tracing, etc.) from the main `test_rig` crate, so you only need to specify the core `test_rig` dependency.
+
+## Step 3: Update lib.rs
+
+Edit `src/my_tests/lib.rs` to reflect your test suite:
+
+```rust
+// Minimal lib.rs for the my_tests crate
+
+// Re-export common test infrastructure if needed
+// pub use crate::common::python_tests;
+
+// Add any public API or test registration here as needed
+```
+
+## Step 4: Update __init__.py
+
+Edit `src/my_tests/__init__.py` to make it a Python package:
+
+```python
+# My Tests Python Package
+# This makes the directory a Python package for importing test modules
+```
+
+## Step 5: Create Your First Test File
+
+Create a sample test file `src/my_tests/test_my_feature.py`:
+
+```python
+"""
+Sample test for my feature.
+"""
+
+from src.common.test_rig_python import PyStateHandler, PyStateContext, PyState
+
+class MyFeatureHandler(PyStateHandler):
+    def enter(self, context: PyStateContext) -> str:
+        """Setup phase - create test data"""
+        if context.connection:
+            context.connection.execute_query("DROP TABLE IF EXISTS my_test")
+        return PyState.connecting()
+    
+    def execute(self, context: PyStateContext) -> str:
+        """Main test logic"""
+        if context.connection:
+            # Create test table
+            context.connection.execute_query("""
+                CREATE TABLE my_test (
+                    id INT PRIMARY KEY,
+                    name VARCHAR(100),
+                    value INT
+                )
+            """)
+            
+            # Insert test data
+            context.connection.execute_query("INSERT INTO my_test (id, name, value) VALUES (1, 'test', 42)")
+            
+            # Verify the data
+            result = context.connection.execute_query("SELECT COUNT(*) FROM my_test")
+            if result and result[0].get('col_0', 0) > 0:
+                return PyState.completed()
+        
+        return PyState.completed()
+    
+    def exit(self, context: PyStateContext) -> None:
+        """Cleanup phase"""
+        if context.connection:
+            context.connection.execute_query("DROP TABLE IF EXISTS my_test")
+```
+
+## Step 6: Update README.md
+
+Edit `src/my_tests/README.md` to document your test suite:
+
+```markdown
+# My Tests Module
+
+This directory contains Python-based tests for [describe your test suite].
+
+## Quick Start
+
+```bash
+# Run all tests
+cargo test -p my_tests --features python_plugins
+
+# Run standalone Python tests
+cd src/my_tests
+python3 -c "
+import sys
+sys.path.append('../..')
+from src.common.test_rig_python import PyStateHandler, PyStateContext, PyState
+from test_my_feature import MyFeatureHandler
+print('✅ My tests import correctly')
+"
+```
+
+## Documentation
+
+For comprehensive documentation, examples, and usage instructions, see:
+
+**[📖 Running Python Tests Guide](../../docs/RUNNING_PYTHON_TESTS.md)**
+
+## Test Files
+
+- `test_*.py` - Individual test files
+- `__init__.py` - Makes this a Python package
+
+## Available Tests
+
+- **Feature Tests**: [List your test categories]
+- **Integration Tests**: [List integration tests]
+- **Edge Cases**: [List edge case tests]
+
+## Shared Infrastructure
+
+All Python tests use the shared `test_rig_python.py` stub module located in `src/common/`. This provides:
+- Consistent mock database interface across all test suites
+- Unified state management and error handling
+- Easy maintenance and updates
+
+See the [main documentation](../../docs/RUNNING_PYTHON_TESTS.md) for detailed descriptions of each test.
+```
+
+## Step 7: Add to Workspace
+
+Add your new test suite to the root `Cargo.toml` workspace members:
+
+```toml
+[workspace]
+members = [
+    "src/ddl",
+    "src/scale",
+    "src/my_tests",  # Add your new test suite here
+]
+```
+
+## Step 8: Register in Common Infrastructure
+
+Add your test suite to `src/common/python_tests.rs`:
+
+```rust
+/// List all Python test suites here
+pub static PYTHON_SUITES: &[PythonSuiteConfig] = &[
+    PythonSuiteConfig {
+        name: "DDL",
+        test_dir: "src/ddl",
+        module_prefix: "src.ddl",
+    },
+    PythonSuiteConfig {
+        name: "Scale",
+        test_dir: "src/scale",
+        module_prefix: "src.scale",
+    },
+    PythonSuiteConfig {
+        name: "MyTests",  // Add your test suite here
+        test_dir: "src/my_tests",
+        module_prefix: "src.my_tests",
+    },
+    // Add more suites here as needed
+];
+```
+
+## Step 9: Test Your Setup
+
+Verify that your new test suite works:
+
+```bash
+# Test that the crate builds
+cargo check -p my_tests --features python_plugins
+
+# Test that Python imports work
+cd src/my_tests
+python3 -c "
+import sys
+sys.path.append('../..')
+from src.common.test_rig_python import PyStateHandler, PyStateContext, PyState
+from test_my_feature import MyFeatureHandler
+print('✅ My tests setup is working!')
+"
+
+# Test with cargo
+cargo test -p my_tests --features python_plugins
+```
+
+## Step 10: Create Additional Tests
+
+Follow the pattern established in `src/ddl` to create more test files:
+
+```bash
+# Create additional test files
+touch src/my_tests/test_another_feature.py
+touch src/my_tests/test_edge_cases.py
+touch src/my_tests/test_integration.py
+```
+
+## Customization Guidelines
+
+### Test File Naming Convention
+
+- Use `test_<feature>.py` for feature-specific tests
+- Use `test_<operation>_<detail>.py` for detailed operation tests
+- Use `test_concurrent_<scenario>.py` for concurrent operation tests
+- Use `test_error_<condition>.py` for error condition tests
+
+### Handler Class Naming Convention
+
+- Use `<Feature>Handler` for feature-specific handlers
+- Use `<Operation>Handler` for operation-specific handlers
+- Use `<Scenario>Handler` for scenario-specific handlers
+
+### Import Structure
+
+Always import from the shared module:
+
+```python
+from src.common.test_rig_python import PyStateHandler, PyStateContext, PyState
+```
+
+### Test Structure
+
+Follow the established pattern:
+
+```python
+class MyTestHandler(PyStateHandler):
+    def enter(self, context: PyStateContext) -> str:
+        # Setup - create test data, drop existing objects
+        return PyState.connecting()
+    
+    def execute(self, context: PyStateContext) -> str:
+        # Main test logic - perform operations
+        return PyState.completed()
+    
+    def exit(self, context: PyStateContext) -> None:
+        # Cleanup - remove test objects
+        pass
+```
+
+## Advanced Customization
+
+### Custom Mock Responses
+
+If your tests need specific mock responses, you can extend the shared `PyConnection` class:
+
+```python
+from src.common.test_rig_python import PyConnection
+
+class CustomPyConnection(PyConnection):
+    def execute_query(self, query: str):
+        # Add custom mock responses for your specific queries
+        if "MY_CUSTOM_QUERY" in query:
+            return [{"custom_result": "expected_value"}]
+        # Fall back to parent implementation
+        return super().execute_query(query)
+```
+
+### Custom State Transitions
+
+If you need additional state transitions, you can extend the `PyState` class:
+
+```python
+from src.common.test_rig_python import PyState
+
+class CustomPyState(PyState):
+    @staticmethod
+    def my_custom_state() -> str:
+        return "MyCustomState"
+```
+
+### Integration with Rust Framework
+
+To integrate your Python tests with the Rust state machine:
+
+```rust
+use test_rig::load_python_handlers;
+
+let mut state_machine = StateMachine::new();
+load_python_handlers(&mut state_machine, "src.my_tests")?;
+```
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Import errors**: Ensure you're importing from `src.common.test_rig_python`
+2. **Path issues**: Add the project root to `sys.path` when running standalone
+3. **Build errors**: Check that your `Cargo.toml` has the correct package name
+4. **Missing dependencies**: Ensure all required dependencies are listed in `Cargo.toml`
+5. **Module Not Found**: Ensure your Python module is in the Python path
+6. **Handler Not Loaded**: Check that your handler class name ends with "Handler"
+7. **State Machine Errors**: Check that your handler returns valid state names
+
+### Debug Mode
+
+Enable debug logging to see detailed information:
+
+```bash
+RUST_LOG=debug cargo run --bin python_demo --features python_plugins
+```
+
+### Python Debugging
+
+Add debug prints to your Python handlers:
+
+```python
+def execute(self, context: PyStateContext) -> str:
+    print(f"DEBUG: Context host = {context.host}")
+    print(f"DEBUG: Context connection = {context.connection is not None}")
+    # Your logic here
+```
+
+### Verification Checklist
+
+- [ ] Directory structure created
+- [ ] `Cargo.toml` customized with correct package name
+- [ ] `lib.rs` created and minimal
+- [ ] `__init__.py` created
+- [ ] First test file created and working
+- [ ] `README.md` updated
+- [ ] Added to workspace members in root `Cargo.toml`
+- [ ] Registered in `src/common/python_tests.rs`
+- [ ] Tests build successfully with `cargo check`
+- [ ] Python imports work correctly
+- [ ] Tests run successfully with `cargo test`
+
+## Example: Complete Test Suite
+
+Here's a complete example of a new test suite called `src/validation`:
+
+### Directory Structure
+```
+src/validation/
+├── Cargo.toml
+├── lib.rs
+├── __init__.py
+├── README.md
+├── test_data_validation.py
+├── test_constraint_validation.py
+└── test_schema_validation.py
+```
+
+### Cargo.toml
+```toml
+[package]
+name = "validation"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "validation"
+path = "lib.rs"
+
+[features]
+python_plugins = ["test_rig/python_plugins"]
+
+[dependencies]
+test_rig = { path = "../.." }
+```
+
+### test_data_validation.py
+```python
+from src.common.test_rig_python import PyStateHandler, PyStateContext, PyState
+
+class DataValidationHandler(PyStateHandler):
+    def enter(self, context: PyStateContext) -> str:
+        if context.connection:
+            context.connection.execute_query("DROP TABLE IF EXISTS validation_test")
+        return PyState.connecting()
+    
+    def execute(self, context: PyStateContext) -> str:
+        if context.connection:
+            # Test data validation logic here
+            context.connection.execute_query("CREATE TABLE validation_test (id INT CHECK (id > 0))")
+            return PyState.completed()
+        return PyState.completed()
+    
+    def exit(self, context: PyStateContext) -> None:
+        if context.connection:
+            context.connection.execute_query("DROP TABLE IF EXISTS validation_test")
+```
+
+This template provides everything you need to create a new Python test suite that integrates seamlessly with the existing infrastructure.
 
 ## Support
 

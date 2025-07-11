@@ -1,4 +1,9 @@
 #![cfg(feature = "python_plugins")]
+#![allow(non_local_definitions)]
+// Temporary fix: Suppress PyO3 macro unsafe warnings in Rust 2024 edition.
+// Reason: PyO3 macros generate code that triggers `unsafe_op_in_unsafe_fn` warnings due to internal use of unsafe blocks.
+// This is safe in this context and will be resolved in a future PyO3 or Rust release.
+#![allow(unsafe_op_in_unsafe_fn)]
 
 //! # Python Plugin System
 //!
@@ -134,7 +139,9 @@ impl PyConnection {
 #[pymethods]
 impl PyConnection {
     /// Execute a query and return results as a list of dictionaries
+    #[allow(unsafe_op_in_unsafe_fn)]
     pub fn execute_query(&self, query: String) -> PyResult<Vec<PyObject>> {
+        #[allow(unsafe_code)]
         Python::with_gil(|py| {
             let mut conn_guard = self
                 .inner
@@ -240,16 +247,19 @@ impl PyStateHandler {
     }
 
     /// Default enter implementation
+    #[allow(unsafe_op_in_unsafe_fn)]
     pub fn enter(&self, _context: &PyStateContext) -> PyResult<String> {
         Ok(State::Initial.to_string())
     }
 
     /// Default execute implementation
+    #[allow(unsafe_op_in_unsafe_fn)]
     pub fn execute(&self, _context: &PyStateContext) -> PyResult<String> {
         Ok(State::Completed.to_string())
     }
 
     /// Default exit implementation
+    #[allow(unsafe_op_in_unsafe_fn)]
     pub fn exit(&self, _context: &PyStateContext) -> PyResult<()> {
         Ok(())
     }

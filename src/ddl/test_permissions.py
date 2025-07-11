@@ -1,4 +1,4 @@
-from test_rig_python import PyStateHandler, PyStateContext, PyState
+from src.common.test_rig_python import PyStateHandler, PyStateContext, PyState
 
 class PermissionsHandler(PyStateHandler):
     def enter(self, context: PyStateContext) -> str:

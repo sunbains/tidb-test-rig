@@ -1,5 +1,5 @@
 [workspace]
-members = ["src/bin", "src/ddl"]
+members = ["src/bin", "src/ddl", "src/scale"]
 
 [package]
 name = "test_rig"
