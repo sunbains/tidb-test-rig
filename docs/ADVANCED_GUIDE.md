@@ -17,8 +17,8 @@ The framework uses a dual state machine pattern with both core and dynamic state
 
 #### Dynamic State Machine (for extensible workflows)
 - **Use case**: Test-specific workflows, custom test phases
-- **States**: String-based, defined at runtime
-- **Benefits**: Flexible, extensible, supports custom data storage
+- **States**: String-based, defined at compile time for each test
+- **Benefits**: Flexible, extensible, supports custom data storage, no core library changes needed
 
 ### Example: Adding a Custom State (Rust)
 

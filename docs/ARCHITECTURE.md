@@ -17,7 +17,7 @@ The framework provides two complementary state management systems:
 - **StateContext**: Minimal global context (connection, credentials, etc.), with support for handler-local context via a type-erased map.
 
 #### Dynamic State Machine (`state_machine_dynamic.rs`)
-- **DynamicStateMachine**: Drives extensible workflows with custom states defined at runtime.
+- **DynamicStateMachine**: Drives extensible workflows with custom states defined at compile time.
 - **DynamicState**: String-based state representation allowing tests to define their own states.
 - **DynamicStateHandler**: Trait for handlers that work with dynamic states.
 - **DynamicStateContext**: Extended context with custom data storage for test-specific information.

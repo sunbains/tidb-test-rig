@@ -9,8 +9,8 @@ This document explains how to make the state system dynamic, allowing tests to d
 The `state_machine_dynamic` module provides a flexible string-based state system:
 
 **Key Features:**
-- ✅ **Maximum Flexibility**: Tests can define any states they need
-- ✅ **No Core Library Changes**: States are defined in test code
+- ✅ **Maximum Flexibility**: Tests can define any states they need at compile time
+- ✅ **No Core Library Changes**: States are defined in test code, not in the core library
 - ✅ **Type Safety**: Still maintains type safety through the `DynamicState` struct
 - ✅ **Validation**: Optional state transition validation
 - ✅ **Custom Data**: Test-specific data storage in context
@@ -94,7 +94,7 @@ impl StateRegistry {
 
 | Approach | Flexibility | Type Safety | Performance | Complexity |
 |----------|-------------|-------------|-------------|------------|
-| String-Based | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐ |
+| String-Based | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐ |
 | Enum Extension | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ |
 | Plugin Registration | ⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐ |
 
@@ -102,9 +102,9 @@ impl StateRegistry {
 
 The string-based approach is recommended because it provides:
 
-1. **Maximum Flexibility**: Tests can define any states they need
+1. **Maximum Flexibility**: Tests can define any states they need at compile time
 2. **No Breaking Changes**: Doesn't require modifying the core library
-3. **Good Performance**: Minimal overhead compared to enum-based system
+3. **Excellent Performance**: Compile-time state definitions with minimal runtime overhead
 4. **Type Safety**: Still maintains compile-time safety where possible
 5. **Validation**: Optional state transition validation prevents invalid flows
 

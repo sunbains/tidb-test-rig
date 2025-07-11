@@ -419,9 +419,9 @@ The framework provides two complementary state management systems:
 - **Benefits**: Type-safe, compile-time validation, simple to use
 
 ### Dynamic State Machine (`state_machine_dynamic.rs`)
-- **Dynamic states**: String-based states that can be defined at runtime
+- **Dynamic states**: String-based states that can be defined at compile time for each test
 - **Use case**: Extensible workflows with test-specific states (isolation tests, job monitoring, etc.)
-- **Benefits**: Flexible, extensible, supports custom state handlers
+- **Benefits**: Flexible, extensible, supports custom state handlers, no need to modify core library
 
 ### Common States (`common_states.rs`)
 - **Shared definitions**: Common workflow states used across multiple binaries
