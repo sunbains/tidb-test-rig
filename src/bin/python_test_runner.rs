@@ -13,6 +13,9 @@ pub struct Args {
     /// Run all suites
     #[arg(long)]
     all: bool,
+    /// Print all output from test runs (stdout/stderr)
+    #[arg(long)]
+    show_output: bool,
 }
 
 #[tokio::main]
@@ -53,7 +56,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut any_failed = false;
     for suite in suites {
         println!("\n=== Running Python test suite: {} ===", suite.name);
-        match suite.run_suite().await {
+        match suite.run_suite_with_output(args.show_output).await {
             Ok(_) => println!("✅ Suite '{}' completed successfully", suite.name),
             Err(e) => {
                 eprintln!("❌ Suite '{}' failed: {}", suite.name, e);

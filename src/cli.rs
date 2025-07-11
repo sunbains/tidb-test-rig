@@ -40,6 +40,14 @@ pub struct CommonArgs {
     #[arg(long)]
     pub password: Option<String>,
 
+    /// Print all output from test runs (stdout/stderr)
+    #[arg(long)]
+    pub show_output: bool,
+
+    /// Show all SQL queries being sent to the server with connection IDs
+    #[arg(long)]
+    pub show_sql: bool,
+
     // Logging options
     /// Log level (debug, info, warn, error)
     #[arg(long, default_value = "info")]

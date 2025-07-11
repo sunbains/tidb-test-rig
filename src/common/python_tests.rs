@@ -242,16 +242,13 @@ pub static PYTHON_SUITES: &[PythonSuiteConfig] = &[
 ];
 
 impl PythonSuiteConfig {
-    pub async fn run_suite(&self) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn run_suite_with_output(&self, show_output: bool) -> Result<(), Box<dyn std::error::Error>> {
         tracing::info!("Running Python test suite: {}", self.name);
-        // Test database connection (optional, can be customized)
-        // ...
-        // Run all Python tests in the suite
         let test_files = PythonSuiteConfig::discover_test_files(self.test_dir).await?;
         tracing::info!("Found {} test files in {}", test_files.len(), self.test_dir);
         for test_file in test_files {
             tracing::info!("Running test: {}", test_file.display());
-            PythonSuiteConfig::run_single_python_test(&test_file, self.module_prefix).await?;
+            PythonSuiteConfig::run_single_python_test(&test_file, self.module_prefix, show_output).await?;
         }
         tracing::info!("All Python tests completed successfully for {}", self.name);
         Ok(())
@@ -284,6 +281,7 @@ impl PythonSuiteConfig {
     pub async fn run_single_python_test(
         test_path: &std::path::Path,
         _module_prefix: &str,
+        show_output: bool,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let module_name = test_path.file_stem().unwrap().to_str().unwrap();
         let parent_dir = test_path.parent().unwrap();
@@ -330,14 +328,43 @@ try:
 
     print(f"✅ Found handler classes: {{', '.join(handler_classes)}}")
 
-    # Try to instantiate the first handler class
+    # Try to instantiate and execute the first handler class
     try:
         handler_class_name = handler_classes[0]
         handler_class = test_namespace[handler_class_name]
         handler = handler_class()
         print(f"✅ Successfully instantiated {{handler_class_name}} for {module_name}")
+        
+        # Create a mock context for testing
+        from src.common.test_rig_python import PyStateContext
+        context = PyStateContext(
+            host='localhost',
+            port=4000,
+            username='root',
+            password='',
+            database='test',
+            connection=None
+        )
+        
+        # Execute the handler's enter method
+        print(f"🔧 Executing {{handler_class_name}}.enter()...")
+        enter_result = handler.enter(context)
+        print(f"Enter result: {{enter_result}}")
+        
+        # Execute the handler's execute method
+        print(f"🔧 Executing {{handler_class_name}}.execute()...")
+        execute_result = handler.execute(context)
+        print(f"Execute result: {{execute_result}}")
+        
+        # Execute the handler's exit method
+        print(f"🔧 Executing {{handler_class_name}}.exit()...")
+        handler.exit(context)
+        print(f"Exit completed")
+        
     except Exception as e:
-        print(f"❌ Failed to instantiate handler for {module_name}: {{e}}")
+        print(f"❌ Failed to execute handler for {module_name}: {{e}}")
+        import traceback
+        traceback.print_exc()
         sys.exit(1)
 
     print(f"✅ Test passed for {module_name}")
@@ -361,12 +388,16 @@ except Exception as e:
             .current_dir(parent_dir)
             .env("PYTHONPATH", std::env::current_dir().unwrap())
             .output()?;
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        
         if output.status.success() {
             tracing::info!("✅ Test passed: {}", test_path.display());
             println!("✅ Test passed: {}", test_path.display());
+            if show_output && !stdout.is_empty() {
+                println!("Test output:\n{}", stdout);
+            }
         } else {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            let stderr = String::from_utf8_lossy(&output.stderr);
             tracing::error!(
                 "❌ Test failed: {}\nstdout:\n{}\nstderr:\n{}",
                 test_path.display(),

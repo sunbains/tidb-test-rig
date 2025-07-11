@@ -107,19 +107,19 @@ run-python-tests: run-all-python-tests
 
 run-all-python-tests:
 	@echo "Running all Python test suites..."
-	RUST_LOG=$(RUST_LOG) cargo run --bin python_test_runner --features="python_plugins" -- --all
+	RUST_LOG=$(RUST_LOG) cargo run --bin python_test_runner --features="python_plugins" -- --all $(if $(SHOW_OUTPUT),--show-output)
 
 run-ddl-tests:
 	@echo "Running DDL Python test suite..."
-	RUST_LOG=$(RUST_LOG) cargo run --bin python_test_runner --features="python_plugins" -- --suite ddl
+	RUST_LOG=$(RUST_LOG) cargo run --bin python_test_runner --features="python_plugins" -- --suite ddl $(if $(SHOW_OUTPUT),--show-output)
 
 run-scale-tests:
 	@echo "Running Scale Python test suite..."
-	RUST_LOG=$(RUST_LOG) cargo run --bin python_test_runner --features="python_plugins" -- --suite scale
+	RUST_LOG=$(RUST_LOG) cargo run --bin python_test_runner --features="python_plugins" -- --suite scale $(if $(SHOW_OUTPUT),--show-output)
 
 run-txn-tests:
 	@echo "Running Txn Python test suite..."
-	RUST_LOG=$(RUST_LOG) cargo run --bin python_test_runner --features="python_plugins" -- --suite txn
+	RUST_LOG=$(RUST_LOG) cargo run --bin python_test_runner --features="python_plugins" -- --suite txn $(if $(SHOW_OUTPUT),--show-output)
 
 run-python-suite:
 	@if [ -z "$(SUITE)" ]; then \
@@ -128,7 +128,7 @@ run-python-suite:
 		exit 1; \
 	fi
 	@echo "Running Python test suite: $(SUITE)"
-	RUST_LOG=$(RUST_LOG) cargo run --bin python_test_runner --features="python_plugins" -- --suite $(SUITE)
+	RUST_LOG=$(RUST_LOG) cargo run --bin python_test_runner --features="python_plugins" -- --suite $(SUITE) $(if $(SHOW_OUTPUT),--show-output)
 
 # Check if code compiles
 check:
