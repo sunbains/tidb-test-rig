@@ -122,7 +122,7 @@ pip install mysql-connector-python
 
 ```bash
 # Using environment variables
-export TIDB_HOST=tidb.qyruvz1u6xtd.clusters.dev.tidb-cloud.com:4000
+export TIDB_HOST=tidb.a123456z.clusters.dev.tidb-cloud.com:4000
 export TIDB_USER=your_user
 export TIDB_PASSWORD=your_password
 export TIDB_DATABASE=your_database
@@ -130,7 +130,7 @@ python3 examples/run_isolation_test.py
 
 # Using command line arguments
 python3 examples/run_isolation_test.py \
-  --host tidb.qyruvz1u6xtd.clusters.dev.tidb-cloud.com:4000 \
+  --host tidb.a123456z.clusters.dev.tidb-cloud.com:4000 \
   --user your_user \
   --password your_password \
   --database your_database
