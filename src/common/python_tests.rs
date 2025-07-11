@@ -112,9 +112,11 @@ pub trait PythonTestRunner: Send + Sync {
                     let path = entry.path();
                     if let Some(file_name) = path.file_name()
                         && let Some(name_str) = file_name.to_str()
-                            && name_str.starts_with("test_") && name_str.ends_with(".py") {
-                                test_files.push(path);
-                            }
+                        && name_str.starts_with("test_")
+                        && name_str.ends_with(".py")
+                    {
+                        test_files.push(path);
+                    }
                 }
             }
 
@@ -240,9 +242,7 @@ pub static PYTHON_SUITES: &[PythonSuiteConfig] = &[
 ];
 
 impl PythonSuiteConfig {
-    pub async fn run_suite(
-        &self,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn run_suite(&self) -> Result<(), Box<dyn std::error::Error>> {
         tracing::info!("Running Python test suite: {}", self.name);
         // Test database connection (optional, can be customized)
         // ...
@@ -269,12 +269,12 @@ impl PythonSuiteConfig {
                 let path = entry.path();
                 if let Some(file_name) = path.file_name()
                     && let Some(name_str) = file_name.to_str()
-                        && name_str.starts_with("test_")
-                            && name_str.ends_with(".py")
-                            && name_str != "test_rig_python.py"
-                        {
-                            test_files.push(path);
-                        }
+                    && name_str.starts_with("test_")
+                    && name_str.ends_with(".py")
+                    && name_str != "test_rig_python.py"
+                {
+                    test_files.push(path);
+                }
             }
         }
         test_files.sort();

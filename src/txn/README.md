@@ -1,49 +1,130 @@
-# Transaction Tests Module
+# TiDB Transaction Test Suite
 
-This directory contains Python-based tests for TiDB transaction operations.
+This directory contains comprehensive transaction tests for TiDB, organized into meaningful categories to avoid duplication and provide clear test coverage.
 
-## Quick Start
+## Test Structure
 
+### 1. Basic Transactions (`test_basic_transactions.py`)
+- **Purpose**: Tests fundamental transaction operations
+- **Coverage**: Basic START TRANSACTION, COMMIT, ROLLBACK operations
+- **Handlers**: `BasicTransactionHandler`
+
+### 2. Basic Isolation (`test_isolation.py`)
+- **Purpose**: Tests basic transaction isolation behavior
+- **Coverage**: Transaction visibility, uncommitted changes isolation
+- **Handlers**: `IsolationTestHandler`, `ConcurrentIsolationTestHandler`
+- **Note**: For comprehensive isolation level testing, see `test_transaction_isolation_levels.py`
+
+### 3. Isolation Levels (`test_transaction_isolation_levels.py`)
+- **Purpose**: Comprehensive testing of all transaction isolation levels
+- **Coverage**: READ UNCOMMITTED, READ COMMITTED, REPEATABLE READ, SERIALIZABLE
+- **Handlers**: `ReadUncommittedTestHandler`, `ReadCommittedTestHandler`, `RepeatableReadTestHandler`, `SerializableTestHandler`, `IsolationLevelComparisonTestHandler`
+
+### 4. Concurrency (`test_transaction_concurrency.py`)
+- **Purpose**: Tests concurrent transaction behavior
+- **Coverage**: Concurrent read/write operations, lock contention, race conditions
+- **Handlers**: `ConcurrentReadWriteTestHandler`, `LockContentionTestHandler`, `RaceConditionTestHandler`, `ConcurrentTransactionConflictTestHandler`, `TransactionRollbackTestHandler`
+
+### 5. Deadlocks and MVCC (`test_deadlock_mvcc.py`)
+- **Purpose**: Tests deadlock scenarios and MVCC behavior
+- **Coverage**: MVCC deadlocks, phantom reads, deadlock detection, version chains
+- **Handlers**: `MVCCDeadlockTestHandler`, `PhantomReadDeadlockTestHandler`, `DeadlockDetectionTestHandler`, `VersionChainDeadlockTestHandler`, `IsolationLevelDeadlockTestHandler`
+
+### 6. Savepoints (`test_savepoints.py`)
+- **Purpose**: Comprehensive savepoint testing
+- **Coverage**: Basic savepoints, nested savepoints, savepoint release, error conditions, isolation interactions, performance
+- **Handlers**: `BasicSavepointTestHandler`, `NestedSavepointTestHandler`, `SavepointReleaseTestHandler`, `SavepointErrorTestHandler`, `SavepointIsolationTestHandler`, `SavepointPerformanceTestHandler`
+
+### 7. Error Handling (`test_transaction_errors.py`)
+- **Purpose**: Tests transaction error scenarios and recovery
+- **Coverage**: Constraint violations, deadlock recovery, timeouts, rollback recovery, error propagation
+- **Handlers**: `ConstraintViolationTestHandler`, `DeadlockRecoveryTestHandler`, `TransactionTimeoutTestHandler`, `RollbackRecoveryTestHandler`, `ErrorPropagationTestHandler`, `RecoveryMechanismTestHandler`
+
+### 8. Performance (`test_transaction_performance.py`)
+- **Purpose**: Tests transaction performance characteristics
+- **Coverage**: Bulk operations, large transactions, performance monitoring, size limits
+- **Handlers**: `BulkInsertTestHandler`, `BulkUpdateTestHandler`, `LargeTransactionTestHandler`, `TransactionPerformanceMonitoringTestHandler`, `TransactionSizeLimitTestHandler`
+
+### 9. Edge Cases (`test_transaction_edge_cases.py`)
+- **Purpose**: Tests edge cases requiring multiple concurrent connections
+- **Coverage**: Real deadlock scenarios, nested transactions with multiple connections
+- **Handlers**: `DeadlockTestHandler`, `NestedTransactionTestHandler`
+- **Note**: Uses `MultiConnectionTestHandler` infrastructure for true concurrency
+
+## Key Features
+
+### Multi-Connection Infrastructure
+The `test_transaction_edge_cases.py` file uses the `MultiConnectionTestHandler` base class which provides:
+- Multiple concurrent database connections
+- Thread-safe operations
+- Concurrent execution of operations across connections
+- Real-world scenario testing
+
+### Test Categories
+Tests are organized to avoid duplication:
+- **Basic operations** are in dedicated files
+- **Complex scenarios** are split by domain (isolation, concurrency, etc.)
+- **Edge cases** that require multiple connections are isolated
+- **Performance tests** are separate from functional tests
+
+### Comprehensive Coverage
+The test suite covers:
+- ✅ Basic transaction operations
+- ✅ All isolation levels
+- ✅ Concurrent operations
+- ✅ Deadlock scenarios
+- ✅ Savepoint functionality
+- ✅ Error handling and recovery
+- ✅ Performance characteristics
+- ✅ Edge cases with multiple connections
+
+## Running Tests
+
+### Run All Transaction Tests
 ```bash
-# Run all transaction tests
-cargo test -p txn --features python_plugins
-
-# Run standalone Python tests
-cd src/txn
-python3 -c "
-import sys
-sys.path.append('../..')
-from src.common.test_rig_python import PyStateHandler, PyStateContext, PyState
-from test_basic_transactions import BasicTransactionHandler
-print('✅ Transaction tests import correctly')
-"
+make run-txn-tests
 ```
 
-## Documentation
+### Run Specific Test Categories
+```bash
+# Run only basic transactions
+python3 test_basic_transactions.py
 
-For comprehensive documentation, examples, and usage instructions, see:
+# Run only isolation tests
+python3 test_isolation.py
 
-**[📖 Running Python Tests Guide](../../docs/RUNNING_PYTHON_TESTS.md)**
+# Run only savepoint tests
+python3 test_savepoints.py
+```
 
-## Test Files
+### Using the Test Runner
+The test runner automatically discovers and runs all test files:
+```bash
+cargo run --bin python_test_runner --features="python_plugins" -- --suite txn
+```
 
-- `test_*.py` - Individual test files
-- `__init__.py` - Makes this a Python package
+## Test Infrastructure
 
-## Available Tests
+### Handler Base Classes
+- `PyStateHandler`: Base class for single-connection tests
+- `MultiConnectionTestHandler`: Base class for multi-connection tests
 
-- **Basic Transactions**: Test fundamental transaction operations (START, COMMIT, ROLLBACK)
-- **Concurrent Transactions**: Test transaction isolation and concurrency
-- **Transaction Isolation**: Test different isolation levels
-- **Deadlock Detection**: Test deadlock scenarios and resolution
-- **Savepoints**: Test savepoint functionality
-- **Error Handling**: Test transaction error conditions
+### Common Utilities
+- `PyStateContext`: Context for test execution
+- `PyConnection`: Mock database connection with thread safety
+- `PyState`: State management for test workflows
 
-## Shared Infrastructure
+### Test Patterns
+Each test follows a consistent pattern:
+1. **Enter**: Setup test environment (tables, data)
+2. **Execute**: Run the actual test logic
+3. **Exit**: Cleanup test environment
 
-All Python tests use the shared `test_rig_python.py` stub module located in `src/common/`. This provides:
-- Consistent mock database interface across all test suites
-- Unified state management and error handling
-- Easy maintenance and updates
+## Contributing
 
-See the [main documentation](../../docs/RUNNING_PYTHON_TESTS.md) for detailed descriptions of each test. 
+When adding new tests:
+1. **Check for duplicates** in existing files
+2. **Choose the appropriate category** based on test purpose
+3. **Use the right base class** (single vs multi-connection)
+4. **Follow the established patterns** for consistency
+5. **Update this README** if adding new categories 
