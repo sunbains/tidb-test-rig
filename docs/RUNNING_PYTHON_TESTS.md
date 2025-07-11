@@ -1,4 +1,4 @@
-# DDL (Data Definition Language) Testing Guide
+# Running Python tests
 
 This guide covers how to run and develop Python-based DDL tests for TiDB using the Rust `test_rig` framework.
 
