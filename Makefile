@@ -12,7 +12,7 @@ LOG_FILE_PATH ?= logs/tidb_connect.log
 MONITOR_DURATION ?= 60
 
 .PHONY: help build db_tests clean db_tests build-test run-simple run-advanced check format lint \
-	run-simple-connection run-isolation-test run-cli-test run-logging-test \
+	run-cli-test run-logging-test \
 	run-basic-test run-basic-debug-test run-basic-verbose-test run-job-monitor-test \
 	run-python-tests run-all-python-tests run-ddl-tests run-scale-tests run-txn-tests \
 	run-python-suite
@@ -39,9 +39,7 @@ help:
 	@echo "  run-basic-test     - Run basic connection db_tests with env vars"
 	@echo "  run-basic-debug-test - Run basic db_tests with debug logging"
 	@echo "  run-basic-verbose-test - Run basic db_tests with verbose output"
-	@echo "  run-simple             - Run simple multi-connection db_tests"
 	@echo "  run-advanced           - Run advanced multi-connection db_tests"
-	@echo "  run-isolation-test - Run isolation db_tests"
 	@echo "  run-cli-test       - Run CLI db_tests"
 	@echo "  run-logging-test   - Run logging db_tests"
 	@echo "  run-job-monitor-test - Run job monitoring db_tests"
@@ -94,9 +92,6 @@ run-basic-debug-test:
 
 run-basic-verbose-test:
 	RUST_LOG=debug cargo run --bin basic -- -H $(TIDB_HOST) -u $(TIDB_USER) -d $(TIDB_DATABASE) $(if $(TIDB_PASSWORD),--password $(TIDB_PASSWORD),--no-password-prompt) --verbose
-
-run-isolation-test:
-	RUST_LOG=$(RUST_LOG) cargo run --bin isolation -- -H $(TIDB_HOST) -u $(TIDB_USER) -d $(TIDB_DATABASE) $(if $(TIDB_PASSWORD),--password $(TIDB_PASSWORD),--no-password-prompt)
 
 run-cli-test:
 	RUST_LOG=$(RUST_LOG) cargo run --bin cli --features="isolation_test" -- $(ARGS)
