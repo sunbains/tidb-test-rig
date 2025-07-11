@@ -93,10 +93,10 @@
 //! Uses the shared state machine framework from the main library.
 
 use clap::Parser;
+use test_rig::connection_manager::CoordinationMessage;
 use test_rig::{CommonArgs, print_success, print_test_header};
 use test_rig::{ConnectionCoordinator, ConnectionInfo, GlobalConfig, MultiConnectionStateMachine};
 use tokio::sync::mpsc;
-use test_rig::connection_manager::CoordinationMessage;
 
 #[derive(Parser, Debug)]
 #[command(name = "multi-connection-test")]
@@ -202,7 +202,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Check results
     println!("\n=== Final Results ===");
-    println!("Results are available via coordination messages (see integration tests for details).");
+    println!(
+        "Results are available via coordination messages (see integration tests for details)."
+    );
 
     // Shutdown the coordinator
     tx.send(CoordinationMessage::Shutdown).await.ok();

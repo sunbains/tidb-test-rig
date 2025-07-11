@@ -71,14 +71,14 @@ use clap::Parser;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
+use async_trait::async_trait;
+use mysql::prelude::*;
 use test_rig::errors::ConnectError;
 use test_rig::errors::StateError;
 use test_rig::{
-    CommonArgs, print_success, print_test_header,
-    dynamic_state, register_transitions, DynamicState, DynamicStateContext, DynamicStateHandler, DynamicStateMachine,
+    CommonArgs, DynamicState, DynamicStateContext, DynamicStateHandler, DynamicStateMachine,
+    dynamic_state, print_success, print_test_header, register_transitions,
 };
-use async_trait::async_trait;
-use mysql::prelude::*;
 use tokio::task::JoinHandle;
 
 #[derive(Parser, Debug)]
@@ -165,7 +165,8 @@ pub struct ConnectionConfig {
 mod multi_connection_states {
     // Re-export common states
     pub use test_rig::common_states::{
-        parsing_config, connecting, testing_connection, verifying_database, getting_version, completed,
+        completed, connecting, getting_version, parsing_config, testing_connection,
+        verifying_database,
     };
 }
 
@@ -243,7 +244,8 @@ impl DynamicStateHandler for TestingConnectionHandlerAdapter {
     }
     async fn execute(&self, context: &mut DynamicStateContext) -> test_rig::Result<DynamicState> {
         if let Some(ref mut conn) = context.connection {
-            let result: std::result::Result<Vec<mysql::Row>, mysql::Error> = conn.exec("SELECT 1", ());
+            let result: std::result::Result<Vec<mysql::Row>, mysql::Error> =
+                conn.exec("SELECT 1", ());
             match result {
                 Ok(_) => Ok(multi_connection_states::verifying_database()),
                 Err(e) => Err(format!("Connection test failed: {e}").into()),
@@ -362,22 +364,67 @@ impl SimpleMultiConnectionCoordinator {
                 let mut machine = DynamicStateMachine::new();
 
                 // Register handlers
-                machine.register_handler(dynamic_state!("initial", "Initial"), Box::new(InitialHandlerAdapter));
-                machine.register_handler(multi_connection_states::parsing_config(), Box::new(ParsingConfigHandlerAdapter {
-                    host, user: username, password, database,
-                }));
-                machine.register_handler(multi_connection_states::connecting(), Box::new(ConnectingHandlerAdapter));
-                machine.register_handler(multi_connection_states::testing_connection(), Box::new(TestingConnectionHandlerAdapter));
-                machine.register_handler(multi_connection_states::verifying_database(), Box::new(VerifyingDatabaseHandlerAdapter));
-                machine.register_handler(multi_connection_states::getting_version(), Box::new(GettingVersionHandlerAdapter));
+                machine.register_handler(
+                    dynamic_state!("initial", "Initial"),
+                    Box::new(InitialHandlerAdapter),
+                );
+                machine.register_handler(
+                    multi_connection_states::parsing_config(),
+                    Box::new(ParsingConfigHandlerAdapter {
+                        host,
+                        user: username,
+                        password,
+                        database,
+                    }),
+                );
+                machine.register_handler(
+                    multi_connection_states::connecting(),
+                    Box::new(ConnectingHandlerAdapter),
+                );
+                machine.register_handler(
+                    multi_connection_states::testing_connection(),
+                    Box::new(TestingConnectionHandlerAdapter),
+                );
+                machine.register_handler(
+                    multi_connection_states::verifying_database(),
+                    Box::new(VerifyingDatabaseHandlerAdapter),
+                );
+                machine.register_handler(
+                    multi_connection_states::getting_version(),
+                    Box::new(GettingVersionHandlerAdapter),
+                );
 
                 // Register valid transitions
-                register_transitions!(machine, dynamic_state!("initial", "Initial"), [multi_connection_states::parsing_config()]);
-                register_transitions!(machine, multi_connection_states::parsing_config(), [multi_connection_states::connecting()]);
-                register_transitions!(machine, multi_connection_states::connecting(), [multi_connection_states::testing_connection()]);
-                register_transitions!(machine, multi_connection_states::testing_connection(), [multi_connection_states::verifying_database()]);
-                register_transitions!(machine, multi_connection_states::verifying_database(), [multi_connection_states::getting_version()]);
-                register_transitions!(machine, multi_connection_states::getting_version(), [multi_connection_states::completed()]);
+                register_transitions!(
+                    machine,
+                    dynamic_state!("initial", "Initial"),
+                    [multi_connection_states::parsing_config()]
+                );
+                register_transitions!(
+                    machine,
+                    multi_connection_states::parsing_config(),
+                    [multi_connection_states::connecting()]
+                );
+                register_transitions!(
+                    machine,
+                    multi_connection_states::connecting(),
+                    [multi_connection_states::testing_connection()]
+                );
+                register_transitions!(
+                    machine,
+                    multi_connection_states::testing_connection(),
+                    [multi_connection_states::verifying_database()]
+                );
+                register_transitions!(
+                    machine,
+                    multi_connection_states::verifying_database(),
+                    [multi_connection_states::getting_version()]
+                );
+                register_transitions!(
+                    machine,
+                    multi_connection_states::getting_version(),
+                    [multi_connection_states::completed()]
+                );
 
                 // Update status to connecting
                 if let Ok(mut state) = shared_state.lock()

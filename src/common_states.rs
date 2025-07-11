@@ -3,8 +3,8 @@
 //! Shared state definitions for common workflow states used across multiple binaries.
 //! This module provides reusable state functions to eliminate code duplication.
 
-use crate::state_machine_dynamic::DynamicState;
 use crate::dynamic_state;
+use crate::state_machine_dynamic::DynamicState;
 
 /// Parsing configuration state
 pub fn parsing_config() -> DynamicState {
@@ -34,4 +34,4 @@ pub fn getting_version() -> DynamicState {
 /// Completed state
 pub fn completed() -> DynamicState {
     dynamic_state!("completed", "Completed")
-} 
+}

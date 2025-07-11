@@ -7,8 +7,8 @@ use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use test_rig::errors::{ConnectError, Result};
 use test_rig::{
-    CommonArgs, print_error_and_exit, print_success, print_test_header,
-    dynamic_state, register_transitions, DynamicState, DynamicStateContext, DynamicStateHandler, DynamicStateMachine,
+    CommonArgs, DynamicState, DynamicStateContext, DynamicStateHandler, DynamicStateMachine,
+    dynamic_state, print_error_and_exit, print_success, print_test_header, register_transitions,
 };
 use tokio::time::sleep;
 
@@ -75,7 +75,8 @@ mod job_monitor_states {
 
     // Re-export common states
     pub use test_rig::common_states::{
-        parsing_config, connecting, testing_connection, verifying_database, getting_version, completed,
+        completed, connecting, getting_version, parsing_config, testing_connection,
+        verifying_database,
     };
 
     // Test-specific states
@@ -161,7 +162,8 @@ impl DynamicStateHandler for TestingConnectionHandlerAdapter {
     }
     async fn execute(&self, context: &mut DynamicStateContext) -> test_rig::Result<DynamicState> {
         if let Some(ref mut conn) = context.connection {
-            let result: std::result::Result<Vec<mysql::Row>, mysql::Error> = conn.exec("SELECT 1", ());
+            let result: std::result::Result<Vec<mysql::Row>, mysql::Error> =
+                conn.exec("SELECT 1", ());
             match result {
                 Ok(_) => Ok(job_monitor_states::verifying_database()),
                 Err(e) => Err(format!("Connection test failed: {e}").into()),
@@ -299,11 +301,12 @@ impl DynamicStateHandler for ShowingImportJobDetailsHandler {
 
     async fn execute(&self, context: &mut DynamicStateContext) -> test_rig::Result<DynamicState> {
         // Extract active jobs from context
-        let active_jobs: Vec<String> = if let Some(jobs) = context.get_custom_data::<Vec<String>>("active_import_jobs") {
-            jobs.clone()
-        } else {
-            return Err("No active import jobs found in context".into());
-        };
+        let active_jobs: Vec<String> =
+            if let Some(jobs) = context.get_custom_data::<Vec<String>>("active_import_jobs") {
+                jobs.clone()
+            } else {
+                return Err("No active import jobs found in context".into());
+            };
 
         if let Some(ref mut conn) = context.connection {
             let start_time = std::time::Instant::now();
@@ -331,15 +334,22 @@ impl DynamicStateHandler for ShowingImportJobDetailsHandler {
                                 "Job_ID: {} | Phase: {} | Start_Time: {} | Source_File_Size: {} | Imported_Rows: {} | Time elapsed: {:02}:{:02}:{:02}",
                                 job.Job_ID,
                                 job.Phase,
-                                job.Start_Time.map(|t| t.format("%Y-%m-%d %H:%M:%S").to_string()).unwrap_or_else(|| "N/A".to_string()),
+                                job.Start_Time
+                                    .map(|t| t.format("%Y-%m-%d %H:%M:%S").to_string())
+                                    .unwrap_or_else(|| "N/A".to_string()),
                                 job.Source_File_Size,
                                 job.Imported_Rows.unwrap_or(0),
-                                elapsed_h, elapsed_m, elapsed_s
+                                elapsed_h,
+                                elapsed_m,
+                                elapsed_s
                             );
                         } else {
-                            println!("Job_ID: {} | Status: Completed | End_Time: {}", 
+                            println!(
+                                "Job_ID: {} | Status: Completed | End_Time: {}",
                                 job.Job_ID,
-                                job.End_Time.map(|t| t.format("%Y-%m-%d %H:%M:%S").to_string()).unwrap_or_else(|| "N/A".to_string())
+                                job.End_Time
+                                    .map(|t| t.format("%Y-%m-%d %H:%M:%S").to_string())
+                                    .unwrap_or_else(|| "N/A".to_string())
                             );
                         }
                     }
@@ -563,14 +573,49 @@ async fn main() {
     );
 
     // Register valid transitions
-    register_transitions!(machine, dynamic_state!("initial", "Initial"), [job_monitor_states::parsing_config()]);
-    register_transitions!(machine, job_monitor_states::parsing_config(), [job_monitor_states::connecting()]);
-    register_transitions!(machine, job_monitor_states::connecting(), [job_monitor_states::testing_connection()]);
-    register_transitions!(machine, job_monitor_states::testing_connection(), [job_monitor_states::verifying_database()]);
-    register_transitions!(machine, job_monitor_states::verifying_database(), [job_monitor_states::getting_version()]);
-    register_transitions!(machine, job_monitor_states::getting_version(), [job_monitor_states::checking_import_jobs()]);
-    register_transitions!(machine, job_monitor_states::checking_import_jobs(), [job_monitor_states::showing_import_job_details(), job_monitor_states::completed()]);
-    register_transitions!(machine, job_monitor_states::showing_import_job_details(), [job_monitor_states::completed()]);
+    register_transitions!(
+        machine,
+        dynamic_state!("initial", "Initial"),
+        [job_monitor_states::parsing_config()]
+    );
+    register_transitions!(
+        machine,
+        job_monitor_states::parsing_config(),
+        [job_monitor_states::connecting()]
+    );
+    register_transitions!(
+        machine,
+        job_monitor_states::connecting(),
+        [job_monitor_states::testing_connection()]
+    );
+    register_transitions!(
+        machine,
+        job_monitor_states::testing_connection(),
+        [job_monitor_states::verifying_database()]
+    );
+    register_transitions!(
+        machine,
+        job_monitor_states::verifying_database(),
+        [job_monitor_states::getting_version()]
+    );
+    register_transitions!(
+        machine,
+        job_monitor_states::getting_version(),
+        [job_monitor_states::checking_import_jobs()]
+    );
+    register_transitions!(
+        machine,
+        job_monitor_states::checking_import_jobs(),
+        [
+            job_monitor_states::showing_import_job_details(),
+            job_monitor_states::completed()
+        ]
+    );
+    register_transitions!(
+        machine,
+        job_monitor_states::showing_import_job_details(),
+        [job_monitor_states::completed()]
+    );
 
     // Run the state machine
     match machine.run().await {
@@ -593,7 +638,10 @@ fn register_job_monitor_handlers(
     monitor_duration: u64,
 ) {
     // Register standard connection handlers
-    state_machine.register_handler(dynamic_state!("initial", "Initial"), Box::new(InitialHandlerAdapter));
+    state_machine.register_handler(
+        dynamic_state!("initial", "Initial"),
+        Box::new(InitialHandlerAdapter),
+    );
     state_machine.register_handler(
         job_monitor_states::parsing_config(),
         Box::new(ParsingConfigHandlerAdapter {
@@ -603,9 +651,18 @@ fn register_job_monitor_handlers(
             database,
         }),
     );
-    state_machine.register_handler(job_monitor_states::connecting(), Box::new(ConnectingHandlerAdapter));
-    state_machine.register_handler(job_monitor_states::testing_connection(), Box::new(TestingConnectionHandlerAdapter));
-    state_machine.register_handler(job_monitor_states::verifying_database(), Box::new(VerifyingDatabaseHandlerAdapter));
+    state_machine.register_handler(
+        job_monitor_states::connecting(),
+        Box::new(ConnectingHandlerAdapter),
+    );
+    state_machine.register_handler(
+        job_monitor_states::testing_connection(),
+        Box::new(TestingConnectionHandlerAdapter),
+    );
+    state_machine.register_handler(
+        job_monitor_states::verifying_database(),
+        Box::new(VerifyingDatabaseHandlerAdapter),
+    );
 
     // Register generic version handler that transitions to job monitoring
     state_machine.register_handler(

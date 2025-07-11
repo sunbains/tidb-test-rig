@@ -166,11 +166,17 @@ impl ConnectionCoordinator {
                         state.coordination_events.push(event.clone());
                     }
                     // Forward the broadcast event to the test's receiver
-                    let _ = self.tx.send(CoordinationMessage::BroadcastEvent(event)).await;
+                    let _ = self
+                        .tx
+                        .send(CoordinationMessage::BroadcastEvent(event))
+                        .await;
                 }
                 CoordinationMessage::RequestGlobalState => {
                     let state = self.shared_state.lock().unwrap().clone();
-                    let _ = self.tx.send(CoordinationMessage::ResponseGlobalState(state)).await;
+                    let _ = self
+                        .tx
+                        .send(CoordinationMessage::ResponseGlobalState(state))
+                        .await;
                 }
                 CoordinationMessage::Shutdown => break,
                 _ => {}

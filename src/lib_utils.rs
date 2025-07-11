@@ -5,8 +5,8 @@
 
 use crate::cli::CommonArgs;
 use crate::errors::{ConnectError, Result};
-use crate::state_machine::{State, StateMachine};
 use crate::state_handlers::InitialHandler;
+use crate::state_machine::{State, StateMachine};
 use clap::Parser;
 use std::process;
 

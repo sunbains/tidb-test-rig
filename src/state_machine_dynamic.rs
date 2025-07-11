@@ -1,5 +1,5 @@
 //! # Dynamic State Machine
-//! 
+//!
 //! Dynamic state machine implementation that allows tests to define their own states.
 //! Uses string-based states instead of enums for maximum flexibility.
 
@@ -191,7 +191,10 @@ impl DynamicStateContext {
 #[async_trait::async_trait]
 pub trait DynamicStateHandler {
     async fn enter(&self, context: &mut DynamicStateContext) -> Result<DynamicState, ConnectError>;
-    async fn execute(&self, context: &mut DynamicStateContext) -> Result<DynamicState, ConnectError>;
+    async fn execute(
+        &self,
+        context: &mut DynamicStateContext,
+    ) -> Result<DynamicState, ConnectError>;
     async fn exit(&self, context: &mut DynamicStateContext) -> Result<(), ConnectError>;
 }
 
@@ -367,14 +370,8 @@ mod tests {
         );
 
         // Register transitions
-        machine.register_transitions(
-            states::initial(),
-            vec![states::connecting()],
-        );
-        machine.register_transitions(
-            states::connecting(),
-            vec![states::completed()],
-        );
+        machine.register_transitions(states::initial(), vec![states::connecting()]);
+        machine.register_transitions(states::connecting(), vec![states::completed()]);
 
         // Run the machine
         let result = machine.run().await;
@@ -387,4 +384,4 @@ mod tests {
         assert_eq!(state.name(), "custom_test_state");
         assert_eq!(state.display_name(), "Custom Test State");
     }
-} 
+}

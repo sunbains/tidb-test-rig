@@ -1,10 +1,10 @@
-use clap::Parser;
-use test_rig::{
-    CommonArgs, print_error_and_exit, print_success, print_test_header,
-    dynamic_state, register_transitions, DynamicState, DynamicStateContext, DynamicStateHandler, DynamicStateMachine,
-};
 use async_trait::async_trait;
+use clap::Parser;
 use mysql::prelude::*;
+use test_rig::{
+    CommonArgs, State, StateContext, StateHandler, StateMachine, print_error_and_exit,
+    print_success, print_test_header,
+};
 
 #[cfg(feature = "python_plugins")]
 use test_rig::load_python_handlers;
@@ -31,30 +31,22 @@ impl Args {
     }
 }
 
-// Define custom states for the workflow
-mod demo_states {
-    // Re-export common states
-    pub use test_rig::common_states::{
-        parsing_config, connecting, testing_connection, verifying_database, getting_version, completed,
-    };
-}
-
-// Adapter for InitialHandler to DynamicStateHandler
+// Adapter for InitialHandler to StateHandler
 struct InitialHandlerAdapter;
 #[async_trait]
-impl DynamicStateHandler for InitialHandlerAdapter {
-    async fn enter(&self, _context: &mut DynamicStateContext) -> test_rig::Result<DynamicState> {
-        Ok(dynamic_state!("initial", "Initial"))
+impl StateHandler for InitialHandlerAdapter {
+    async fn enter(&self, _context: &mut StateContext) -> test_rig::Result<State> {
+        Ok(State::Initial)
     }
-    async fn execute(&self, _context: &mut DynamicStateContext) -> test_rig::Result<DynamicState> {
-        Ok(demo_states::parsing_config())
+    async fn execute(&self, _context: &mut StateContext) -> test_rig::Result<State> {
+        Ok(State::ParsingConfig)
     }
-    async fn exit(&self, _context: &mut DynamicStateContext) -> test_rig::Result<()> {
+    async fn exit(&self, _context: &mut StateContext) -> test_rig::Result<()> {
         Ok(())
     }
 }
 
-// Adapter for ParsingConfigHandler to DynamicStateHandler
+// Adapter for ParsingConfigHandler to StateHandler
 struct ParsingConfigHandlerAdapter {
     host: String,
     user: String,
@@ -62,32 +54,32 @@ struct ParsingConfigHandlerAdapter {
     database: Option<String>,
 }
 #[async_trait]
-impl DynamicStateHandler for ParsingConfigHandlerAdapter {
-    async fn enter(&self, _context: &mut DynamicStateContext) -> test_rig::Result<DynamicState> {
-        Ok(demo_states::parsing_config())
+impl StateHandler for ParsingConfigHandlerAdapter {
+    async fn enter(&self, _context: &mut StateContext) -> test_rig::Result<State> {
+        Ok(State::ParsingConfig)
     }
-    async fn execute(&self, context: &mut DynamicStateContext) -> test_rig::Result<DynamicState> {
+    async fn execute(&self, context: &mut StateContext) -> test_rig::Result<State> {
         let (host, port) = test_rig::connection::parse_connection_string(&self.host)?;
         context.host = host;
         context.port = port;
         context.username = self.user.clone();
         context.password = self.password.clone();
         context.database = self.database.clone();
-        Ok(demo_states::connecting())
+        Ok(State::Connecting)
     }
-    async fn exit(&self, _context: &mut DynamicStateContext) -> test_rig::Result<()> {
+    async fn exit(&self, _context: &mut StateContext) -> test_rig::Result<()> {
         Ok(())
     }
 }
 
-// Adapter for ConnectingHandler to DynamicStateHandler
+// Adapter for ConnectingHandler to StateHandler
 struct ConnectingHandlerAdapter;
 #[async_trait]
-impl DynamicStateHandler for ConnectingHandlerAdapter {
-    async fn enter(&self, _context: &mut DynamicStateContext) -> test_rig::Result<DynamicState> {
-        Ok(demo_states::connecting())
+impl StateHandler for ConnectingHandlerAdapter {
+    async fn enter(&self, _context: &mut StateContext) -> test_rig::Result<State> {
+        Ok(State::Connecting)
     }
-    async fn execute(&self, context: &mut DynamicStateContext) -> test_rig::Result<DynamicState> {
+    async fn execute(&self, context: &mut StateContext) -> test_rig::Result<State> {
         let pool = test_rig::connection::create_connection_pool(
             &context.host,
             context.port,
@@ -97,77 +89,78 @@ impl DynamicStateHandler for ConnectingHandlerAdapter {
         )?;
         let conn = pool.get_conn()?;
         context.connection = Some(conn);
-        Ok(demo_states::testing_connection())
+        Ok(State::TestingConnection)
     }
-    async fn exit(&self, _context: &mut DynamicStateContext) -> test_rig::Result<()> {
+    async fn exit(&self, _context: &mut StateContext) -> test_rig::Result<()> {
         Ok(())
     }
 }
 
-// Adapter for TestingConnectionHandler to DynamicStateHandler
+// Adapter for TestingConnectionHandler to StateHandler
 struct TestingConnectionHandlerAdapter;
 #[async_trait]
-impl DynamicStateHandler for TestingConnectionHandlerAdapter {
-    async fn enter(&self, _context: &mut DynamicStateContext) -> test_rig::Result<DynamicState> {
-        Ok(demo_states::testing_connection())
+impl StateHandler for TestingConnectionHandlerAdapter {
+    async fn enter(&self, _context: &mut StateContext) -> test_rig::Result<State> {
+        Ok(State::TestingConnection)
     }
-    async fn execute(&self, context: &mut DynamicStateContext) -> test_rig::Result<DynamicState> {
+    async fn execute(&self, context: &mut StateContext) -> test_rig::Result<State> {
         if let Some(ref mut conn) = context.connection {
-            let result: std::result::Result<Vec<mysql::Row>, mysql::Error> = conn.exec("SELECT 1", ());
+            let result: std::result::Result<Vec<mysql::Row>, mysql::Error> =
+                conn.exec("SELECT 1", ());
             match result {
-                Ok(_) => Ok(demo_states::verifying_database()),
+                Ok(_) => Ok(State::VerifyingDatabase),
                 Err(e) => Err(format!("Connection test failed: {e}").into()),
             }
         } else {
             Err("No connection available for testing".into())
         }
     }
-    async fn exit(&self, _context: &mut DynamicStateContext) -> test_rig::Result<()> {
+    async fn exit(&self, _context: &mut StateContext) -> test_rig::Result<()> {
         Ok(())
     }
 }
 
-// Adapter for VerifyingDatabaseHandler to DynamicStateHandler
+// Adapter for VerifyingDatabaseHandler to StateHandler
 struct VerifyingDatabaseHandlerAdapter;
 #[async_trait]
-impl DynamicStateHandler for VerifyingDatabaseHandlerAdapter {
-    async fn enter(&self, _context: &mut DynamicStateContext) -> test_rig::Result<DynamicState> {
-        Ok(demo_states::verifying_database())
+impl StateHandler for VerifyingDatabaseHandlerAdapter {
+    async fn enter(&self, _context: &mut StateContext) -> test_rig::Result<State> {
+        Ok(State::VerifyingDatabase)
     }
-    async fn execute(&self, context: &mut DynamicStateContext) -> test_rig::Result<DynamicState> {
+    async fn execute(&self, context: &mut StateContext) -> test_rig::Result<State> {
         if let Some(ref mut conn) = context.connection {
             if let Some(ref db_name) = context.database {
                 let query = format!("USE `{db_name}`");
                 match conn.query_drop(query) {
-                    Ok(_) => Ok(demo_states::getting_version()),
+                    Ok(_) => Ok(State::GettingVersion),
                     Err(e) => Err(format!("Database verification failed: {e}").into()),
                 }
             } else {
-                Ok(demo_states::getting_version())
+                Ok(State::GettingVersion)
             }
         } else {
             Err("No connection available for database verification".into())
         }
     }
-    async fn exit(&self, _context: &mut DynamicStateContext) -> test_rig::Result<()> {
+    async fn exit(&self, _context: &mut StateContext) -> test_rig::Result<()> {
         Ok(())
     }
 }
 
-// Adapter for GettingVersionHandler to DynamicStateHandler
+// Adapter for GettingVersionHandler to StateHandler
 struct GettingVersionHandlerAdapter;
 #[async_trait]
-impl DynamicStateHandler for GettingVersionHandlerAdapter {
-    async fn enter(&self, _context: &mut DynamicStateContext) -> test_rig::Result<DynamicState> {
-        Ok(demo_states::getting_version())
+impl StateHandler for GettingVersionHandlerAdapter {
+    async fn enter(&self, _context: &mut StateContext) -> test_rig::Result<State> {
+        Ok(State::GettingVersion)
     }
-    async fn execute(&self, context: &mut DynamicStateContext) -> test_rig::Result<DynamicState> {
+    async fn execute(&self, context: &mut StateContext) -> test_rig::Result<State> {
         if let Some(ref mut conn) = context.connection {
             let version_query = "SELECT VERSION()";
             match conn.query_first::<String, _>(version_query) {
                 Ok(Some(version)) => {
                     context.server_version = Some(version.clone());
-                    Ok(demo_states::completed())
+                    Ok(State::Completed)
                 }
                 Ok(None) => Err("No version returned from server".into()),
                 Err(e) => Err(format!("Failed to get server version: {e}").into()),
@@ -176,7 +169,7 @@ impl DynamicStateHandler for GettingVersionHandlerAdapter {
             Err("No connection available for getting version".into())
         }
     }
-    async fn exit(&self, _context: &mut DynamicStateContext) -> test_rig::Result<()> {
+    async fn exit(&self, _context: &mut StateContext) -> test_rig::Result<()> {
         Ok(())
     }
 }
@@ -199,24 +192,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  User: {user}");
     println!("  Database: {database:?}");
 
-    // Create and configure the dynamic state machine
-    let mut machine = DynamicStateMachine::new();
-    machine.register_handler(dynamic_state!("initial", "Initial"), Box::new(InitialHandlerAdapter));
-    machine.register_handler(demo_states::parsing_config(), Box::new(ParsingConfigHandlerAdapter {
-        host, user, password, database,
-    }));
-    machine.register_handler(demo_states::connecting(), Box::new(ConnectingHandlerAdapter));
-    machine.register_handler(demo_states::testing_connection(), Box::new(TestingConnectionHandlerAdapter));
-    machine.register_handler(demo_states::verifying_database(), Box::new(VerifyingDatabaseHandlerAdapter));
-    machine.register_handler(demo_states::getting_version(), Box::new(GettingVersionHandlerAdapter));
-
-    // Register valid transitions
-    register_transitions!(machine, dynamic_state!("initial", "Initial"), [demo_states::parsing_config()]);
-    register_transitions!(machine, demo_states::parsing_config(), [demo_states::connecting()]);
-    register_transitions!(machine, demo_states::connecting(), [demo_states::testing_connection()]);
-    register_transitions!(machine, demo_states::testing_connection(), [demo_states::verifying_database()]);
-    register_transitions!(machine, demo_states::verifying_database(), [demo_states::getting_version()]);
-    register_transitions!(machine, demo_states::getting_version(), [demo_states::completed()]);
+    // Create and configure the state machine
+    let mut machine = StateMachine::new();
+    machine.register_handler(State::Initial, Box::new(InitialHandlerAdapter));
+    machine.register_handler(
+        State::ParsingConfig,
+        Box::new(ParsingConfigHandlerAdapter {
+            host,
+            user,
+            password,
+            database,
+        }),
+    );
+    machine.register_handler(State::Connecting, Box::new(ConnectingHandlerAdapter));
+    machine.register_handler(
+        State::TestingConnection,
+        Box::new(TestingConnectionHandlerAdapter),
+    );
+    machine.register_handler(
+        State::VerifyingDatabase,
+        Box::new(VerifyingDatabaseHandlerAdapter),
+    );
+    machine.register_handler(
+        State::GettingVersion,
+        Box::new(GettingVersionHandlerAdapter),
+    );
 
     // Load Python handlers (if enabled)
     #[cfg(feature = "python_plugins")]

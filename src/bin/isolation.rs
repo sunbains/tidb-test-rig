@@ -76,8 +76,9 @@ use std::time::Duration;
 use test_rig::ConfigExtension;
 use test_rig::errors::Result;
 use test_rig::{
-    CommonArgs, ConnectError, print_error_and_exit, print_success, print_test_header,
-    dynamic_state, register_transitions, DynamicState, DynamicStateContext, DynamicStateHandler, DynamicStateMachine,
+    CommonArgs, ConnectError, DynamicState, DynamicStateContext, DynamicStateHandler,
+    DynamicStateMachine, dynamic_state, print_error_and_exit, print_success, print_test_header,
+    register_transitions,
 };
 use thiserror::Error;
 
@@ -224,7 +225,8 @@ mod isolation_states {
 
     // Re-export common states
     pub use test_rig::common_states::{
-        parsing_config, connecting, testing_connection, verifying_database, getting_version, completed,
+        completed, connecting, getting_version, parsing_config, testing_connection,
+        verifying_database,
     };
 
     // Test-specific states
@@ -316,7 +318,8 @@ impl DynamicStateHandler for TestingConnectionHandlerAdapter {
     }
     async fn execute(&self, context: &mut DynamicStateContext) -> test_rig::Result<DynamicState> {
         if let Some(ref mut conn) = context.connection {
-            let result: std::result::Result<Vec<mysql::Row>, mysql::Error> = conn.exec("SELECT 1", ());
+            let result: std::result::Result<Vec<mysql::Row>, mysql::Error> =
+                conn.exec("SELECT 1", ());
             match result {
                 Ok(_) => Ok(isolation_states::verifying_database()),
                 Err(e) => Err(format!("Connection test failed: {e}").into()),
@@ -398,7 +401,7 @@ impl DynamicStateHandler for CreatingTableHandler {
         // Initialize isolation test context first
         let test_context = IsolationTestContext::new();
         let table_name = test_context.test_table_name.clone();
-        
+
         // Store test context in dynamic context
         context.set_custom_data("isolation_test_context".to_string(), test_context);
 
@@ -447,12 +450,14 @@ impl DynamicStateHandler for PopulatingDataHandler {
 
     async fn execute(&self, context: &mut DynamicStateContext) -> Result<DynamicState> {
         // Get test context first
-        let table_name = if let Some(ctx) = context.get_custom_data::<IsolationTestContext>("isolation_test_context") {
+        let table_name = if let Some(ctx) =
+            context.get_custom_data::<IsolationTestContext>("isolation_test_context")
+        {
             ctx.test_table_name.clone()
         } else {
             return Err("Isolation test context not found".into());
         };
-        
+
         if let Some(ref mut conn) = context.connection {
             // Insert 10 test rows
             for i in 1..=10 {
@@ -466,7 +471,9 @@ impl DynamicStateHandler for PopulatingDataHandler {
             let count: i64 = conn.exec_first(&count_sql, ())?.unwrap_or(0);
 
             // Update test context after database operations
-            if let Some(ctx) = context.get_custom_data_mut::<IsolationTestContext>("isolation_test_context") {
+            if let Some(ctx) =
+                context.get_custom_data_mut::<IsolationTestContext>("isolation_test_context")
+            {
                 ctx.add_result(&format!("✓ Inserted {count} rows into test table"));
                 ctx.phase = IsolationTestPhase::PopulatingData;
             }
@@ -496,7 +503,9 @@ impl DynamicStateHandler for TestingIsolationHandler {
 
     async fn execute(&self, context: &mut DynamicStateContext) -> Result<DynamicState> {
         // Get test context first
-        let table_name = if let Some(ctx) = context.get_custom_data::<IsolationTestContext>("isolation_test_context") {
+        let table_name = if let Some(ctx) =
+            context.get_custom_data::<IsolationTestContext>("isolation_test_context")
+        {
             ctx.test_table_name.clone()
         } else {
             return Err("Isolation test context not found".into());
@@ -523,7 +532,9 @@ impl DynamicStateHandler for TestingIsolationHandler {
             conn.query_drop("COMMIT")?;
 
             // Update test context after database operations
-            if let Some(ctx) = context.get_custom_data_mut::<IsolationTestContext>("isolation_test_context") {
+            if let Some(ctx) =
+                context.get_custom_data_mut::<IsolationTestContext>("isolation_test_context")
+            {
                 ctx.add_result(&format!("✓ Initial read: {} rows", initial_rows.len()));
                 ctx.add_result("✓ Updated row with id = 1");
                 ctx.add_result(&format!("✓ Final read: {} rows", final_rows.len()));
@@ -562,7 +573,9 @@ impl DynamicStateHandler for VerifyingResultsHandler {
 
     async fn execute(&self, context: &mut DynamicStateContext) -> Result<DynamicState> {
         // Get test context
-        let test_context = if let Some(ctx) = context.get_custom_data_mut::<IsolationTestContext>("isolation_test_context") {
+        let test_context = if let Some(ctx) =
+            context.get_custom_data_mut::<IsolationTestContext>("isolation_test_context")
+        {
             ctx
         } else {
             return Err("Isolation test context not found".into());
@@ -610,25 +623,65 @@ async fn main() -> test_rig::errors::Result<()> {
     args.print_connection_info();
     let (host, user, password, _database) = args.get_connection_info()?;
     let database = args.get_database().unwrap_or_else(|| "test".to_string());
-    
+
     // Create and configure the dynamic state machine
     let mut machine = DynamicStateMachine::new();
-    
+
     // Register handlers manually to include custom version handler
     register_isolation_handlers(&mut machine, host, user, password, Some(database));
-    
+
     // Register valid transitions
-    register_transitions!(machine, dynamic_state!("initial", "Initial"), [isolation_states::parsing_config()]);
-    register_transitions!(machine, isolation_states::parsing_config(), [isolation_states::connecting()]);
-    register_transitions!(machine, isolation_states::connecting(), [isolation_states::testing_connection()]);
-    register_transitions!(machine, isolation_states::testing_connection(), [isolation_states::verifying_database()]);
-    register_transitions!(machine, isolation_states::verifying_database(), [isolation_states::getting_version()]);
-    register_transitions!(machine, isolation_states::getting_version(), [isolation_states::creating_table()]);
-    register_transitions!(machine, isolation_states::creating_table(), [isolation_states::populating_data()]);
-    register_transitions!(machine, isolation_states::populating_data(), [isolation_states::testing_isolation()]);
-    register_transitions!(machine, isolation_states::testing_isolation(), [isolation_states::verifying_results()]);
-    register_transitions!(machine, isolation_states::verifying_results(), [isolation_states::completed()]);
-    
+    register_transitions!(
+        machine,
+        dynamic_state!("initial", "Initial"),
+        [isolation_states::parsing_config()]
+    );
+    register_transitions!(
+        machine,
+        isolation_states::parsing_config(),
+        [isolation_states::connecting()]
+    );
+    register_transitions!(
+        machine,
+        isolation_states::connecting(),
+        [isolation_states::testing_connection()]
+    );
+    register_transitions!(
+        machine,
+        isolation_states::testing_connection(),
+        [isolation_states::verifying_database()]
+    );
+    register_transitions!(
+        machine,
+        isolation_states::verifying_database(),
+        [isolation_states::getting_version()]
+    );
+    register_transitions!(
+        machine,
+        isolation_states::getting_version(),
+        [isolation_states::creating_table()]
+    );
+    register_transitions!(
+        machine,
+        isolation_states::creating_table(),
+        [isolation_states::populating_data()]
+    );
+    register_transitions!(
+        machine,
+        isolation_states::populating_data(),
+        [isolation_states::testing_isolation()]
+    );
+    register_transitions!(
+        machine,
+        isolation_states::testing_isolation(),
+        [isolation_states::verifying_results()]
+    );
+    register_transitions!(
+        machine,
+        isolation_states::verifying_results(),
+        [isolation_states::completed()]
+    );
+
     // Run the state machine
     match machine.run().await {
         Ok(_) => {
@@ -650,20 +703,53 @@ fn register_isolation_handlers(
     database: Option<String>,
 ) {
     // Register standard connection handlers
-    state_machine.register_handler(dynamic_state!("initial", "Initial"), Box::new(InitialHandlerAdapter));
-    state_machine.register_handler(isolation_states::parsing_config(), Box::new(ParsingConfigHandlerAdapter {
-        host, user, password, database,
-    }));
-    state_machine.register_handler(isolation_states::connecting(), Box::new(ConnectingHandlerAdapter));
-    state_machine.register_handler(isolation_states::testing_connection(), Box::new(TestingConnectionHandlerAdapter));
-    state_machine.register_handler(isolation_states::verifying_database(), Box::new(VerifyingDatabaseHandlerAdapter));
-    state_machine.register_handler(isolation_states::getting_version(), Box::new(GettingVersionHandlerAdapter));
+    state_machine.register_handler(
+        dynamic_state!("initial", "Initial"),
+        Box::new(InitialHandlerAdapter),
+    );
+    state_machine.register_handler(
+        isolation_states::parsing_config(),
+        Box::new(ParsingConfigHandlerAdapter {
+            host,
+            user,
+            password,
+            database,
+        }),
+    );
+    state_machine.register_handler(
+        isolation_states::connecting(),
+        Box::new(ConnectingHandlerAdapter),
+    );
+    state_machine.register_handler(
+        isolation_states::testing_connection(),
+        Box::new(TestingConnectionHandlerAdapter),
+    );
+    state_machine.register_handler(
+        isolation_states::verifying_database(),
+        Box::new(VerifyingDatabaseHandlerAdapter),
+    );
+    state_machine.register_handler(
+        isolation_states::getting_version(),
+        Box::new(GettingVersionHandlerAdapter),
+    );
 
     // Register isolation test handlers
-    state_machine.register_handler(isolation_states::creating_table(), Box::new(CreatingTableHandler));
-    state_machine.register_handler(isolation_states::populating_data(), Box::new(PopulatingDataHandler));
-    state_machine.register_handler(isolation_states::testing_isolation(), Box::new(TestingIsolationHandler));
-    state_machine.register_handler(isolation_states::verifying_results(), Box::new(VerifyingResultsHandler));
+    state_machine.register_handler(
+        isolation_states::creating_table(),
+        Box::new(CreatingTableHandler),
+    );
+    state_machine.register_handler(
+        isolation_states::populating_data(),
+        Box::new(PopulatingDataHandler),
+    );
+    state_machine.register_handler(
+        isolation_states::testing_isolation(),
+        Box::new(TestingIsolationHandler),
+    );
+    state_machine.register_handler(
+        isolation_states::verifying_results(),
+        Box::new(VerifyingResultsHandler),
+    );
 }
 
 #[cfg(test)]

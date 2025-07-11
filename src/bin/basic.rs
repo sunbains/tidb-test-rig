@@ -1,8 +1,11 @@
 use clap::Parser;
 // No specific handlers needed for basic binary
+use test_rig::state_handlers::{
+    ConnectingHandler, GettingVersionHandler, InitialHandler, ParsingConfigHandler,
+    TestingConnectionHandler, VerifyingDatabaseHandler,
+};
 use test_rig::{CommonArgs, print_error_and_exit, print_success, print_test_header};
 use test_rig::{State, StateMachine};
-use test_rig::state_handlers::{InitialHandler, ParsingConfigHandler, ConnectingHandler, TestingConnectionHandler, VerifyingDatabaseHandler, GettingVersionHandler};
 
 #[derive(Parser, Debug)]
 #[command(name = "basic-test")]
@@ -37,10 +40,13 @@ async fn main() {
         .expect("Failed to get connection info");
 
     let mut machine = StateMachine::new();
-    
+
     // Register core state handlers
     machine.register_handler(State::Initial, Box::new(InitialHandler));
-    machine.register_handler(State::ParsingConfig, Box::new(ParsingConfigHandler::new(host, user, password, database)));
+    machine.register_handler(
+        State::ParsingConfig,
+        Box::new(ParsingConfigHandler::new(host, user, password, database)),
+    );
     machine.register_handler(State::Connecting, Box::new(ConnectingHandler));
     machine.register_handler(State::TestingConnection, Box::new(TestingConnectionHandler));
     machine.register_handler(State::VerifyingDatabase, Box::new(VerifyingDatabaseHandler));

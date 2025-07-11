@@ -1,8 +1,8 @@
 //! # State Handlers
-//! 
+//!
 //! Built-in state handler implementations for common TiDB operations.
 //! Provides handlers for connection, testing, verification, and monitoring workflows.
-//! 
+//!
 //! Note: For extensible state handling, use the dynamic state machine system.
 //! The core StateMachine now only supports Initial, Completed, and Error states.
 
@@ -75,7 +75,7 @@ impl StateHandler for ParsingConfigHandler {
 
         info!("Configuration parsed: {}:{}", context.host, context.port);
         println!("✓ Configuration parsed: {}:{}", context.host, context.port);
-        
+
         // For extensible workflows, use DynamicStateMachine
         // This handler completes the basic workflow
         Ok(State::Completed)
@@ -120,7 +120,7 @@ impl StateHandler for ConnectingHandler {
             context.host, context.port
         );
         println!("✓ Connection established successfully");
-        
+
         // For extensible workflows, use DynamicStateMachine
         // This handler completes the basic workflow
         Ok(State::Completed)

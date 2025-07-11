@@ -1,14 +1,14 @@
 //! Example demonstrating dynamic state machine usage
-//! 
+//!
 //! This example shows how tests can define their own states without
 //! modifying the core library.
 
-use test_rig::{
-    dynamic_state, register_transitions, DynamicState, DynamicStateContext, DynamicStateHandler,
-    DynamicStateMachine, states,
-};
 use async_trait::async_trait;
 use test_rig::errors::Result;
+use test_rig::{
+    DynamicState, DynamicStateContext, DynamicStateHandler, DynamicStateMachine, dynamic_state,
+    register_transitions, states,
+};
 
 // Custom states for a specific test
 mod custom_states {
@@ -43,14 +43,14 @@ impl DynamicStateHandler for SetupTestDataHandler {
 
     async fn execute(&self, context: &mut DynamicStateContext) -> Result<DynamicState> {
         println!("Setting up test data...");
-        
+
         // Store test-specific data in context
         context.set_custom_data("test_rows".to_string(), 1000u32);
         context.set_custom_data("test_table".to_string(), "performance_test".to_string());
-        
+
         // Simulate some work
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-        
+
         println!("✓ Test data setup completed");
         Ok(custom_states::run_performance_test())
     }
@@ -68,27 +68,27 @@ struct PerformanceTestHandler;
 impl DynamicStateHandler for PerformanceTestHandler {
     async fn enter(&self, context: &mut DynamicStateContext) -> Result<DynamicState> {
         println!("Entering performance test state...");
-        
+
         // Retrieve test-specific data
         if let Some(test_rows) = context.get_custom_data::<u32>("test_rows") {
             println!("Will test with {} rows", test_rows);
         }
-        
+
         Ok(custom_states::run_performance_test())
     }
 
     async fn execute(&self, context: &mut DynamicStateContext) -> Result<DynamicState> {
         println!("Running performance test...");
-        
+
         // Simulate performance test
         let start = std::time::Instant::now();
         tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
         let duration = start.elapsed();
-        
+
         // Store results
         context.set_custom_data("test_duration".to_string(), duration);
         context.set_custom_data("test_success".to_string(), true);
-        
+
         println!("✓ Performance test completed in {:?}", duration);
         Ok(custom_states::validate_results())
     }
@@ -111,10 +111,11 @@ impl DynamicStateHandler for ValidateResultsHandler {
 
     async fn execute(&self, context: &mut DynamicStateContext) -> Result<DynamicState> {
         println!("Validating test results...");
-        
+
         // Retrieve and validate results
         if let Some(success) = context.get_custom_data::<bool>("test_success") {
-            if let Some(duration) = context.get_custom_data::<std::time::Duration>("test_duration") {
+            if let Some(duration) = context.get_custom_data::<std::time::Duration>("test_duration")
+            {
                 if *success && duration.as_millis() < 1000 {
                     println!("✓ Test validation passed");
                     Ok(custom_states::cleanup_test_data())
@@ -148,15 +149,15 @@ impl DynamicStateHandler for CleanupHandler {
 
     async fn execute(&self, context: &mut DynamicStateContext) -> Result<DynamicState> {
         println!("Cleaning up test data...");
-        
+
         // Retrieve test table name
         if let Some(table_name) = context.get_custom_data::<String>("test_table") {
             println!("Cleaning up table: {}", table_name);
         }
-        
+
         // Simulate cleanup
         tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
-        
+
         println!("✓ Cleanup completed");
         Ok(states::completed())
     }
@@ -187,10 +188,7 @@ async fn main() -> Result<()> {
         custom_states::validate_results(),
         Box::new(ValidateResultsHandler),
     );
-    machine.register_handler(
-        custom_states::cleanup_test_data(),
-        Box::new(CleanupHandler),
-    );
+    machine.register_handler(custom_states::cleanup_test_data(), Box::new(CleanupHandler));
 
     // Register valid state transitions
     register_transitions!(
@@ -223,10 +221,11 @@ async fn main() -> Result<()> {
     match machine.run().await {
         Ok(_) => {
             println!("\n✅ Dynamic state machine completed successfully!");
-            
+
             // Print final context data
             let context = machine.get_context();
-            if let Some(duration) = context.get_custom_data::<std::time::Duration>("test_duration") {
+            if let Some(duration) = context.get_custom_data::<std::time::Duration>("test_duration")
+            {
                 println!("Final test duration: {:?}", duration);
             }
         }
@@ -266,10 +265,7 @@ mod tests {
         let mut machine = DynamicStateMachine::new();
 
         // Register handlers for all states
-        machine.register_handler(
-            states::initial(),
-            Box::new(InitialHandler),
-        );
+        machine.register_handler(states::initial(), Box::new(InitialHandler));
         machine.register_handler(
             custom_states::setup_test_data(),
             Box::new(SetupTestDataHandler),
@@ -282,10 +278,7 @@ mod tests {
             custom_states::validate_results(),
             Box::new(ValidateResultsHandler),
         );
-        machine.register_handler(
-            custom_states::cleanup_test_data(),
-            Box::new(CleanupHandler),
-        );
+        machine.register_handler(custom_states::cleanup_test_data(), Box::new(CleanupHandler));
 
         // Register transitions
         register_transitions!(
@@ -323,6 +316,10 @@ mod tests {
         assert!(context.get_custom_data::<u32>("test_rows").is_some());
         assert!(context.get_custom_data::<String>("test_table").is_some());
         assert!(context.get_custom_data::<bool>("test_success").is_some());
-        assert!(context.get_custom_data::<std::time::Duration>("test_duration").is_some());
+        assert!(
+            context
+                .get_custom_data::<std::time::Duration>("test_duration")
+                .is_some()
+        );
     }
-} 
+}
