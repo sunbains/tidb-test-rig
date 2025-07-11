@@ -214,7 +214,7 @@ impl IsolationTestContext {
 
     fn add_result(&mut self, result: &str) {
         self.test_results.push(result.to_string());
-        println!("{}", result);
+        println!("{result}");
     }
 }
 
@@ -415,12 +415,12 @@ impl DynamicStateHandler for CreatingTableHandler {
 
             match conn.query_drop(&create_table_sql) {
                 Ok(_) => {
-                    println!("✓ Test table '{}' created successfully", table_name);
+                    println!("✓ Test table '{table_name}' created successfully");
                     Ok(isolation_states::populating_data())
                 }
                 Err(e) => {
-                    let error_msg = format!("Failed to create test table: {}", e);
-                    Err(format!("Failed to create test table {}: {}", table_name, error_msg).into())
+                    let error_msg = format!("Failed to create test table: {e}");
+                    Err(format!("Failed to create test table {table_name}: {error_msg}").into())
                 }
             }
         } else {
@@ -571,7 +571,7 @@ impl DynamicStateHandler for VerifyingResultsHandler {
         // Print all results
         println!("\n=== Isolation Test Results ===");
         for result in &test_context.test_results {
-            println!("{}", result);
+            println!("{result}");
         }
 
         // Determine overall success

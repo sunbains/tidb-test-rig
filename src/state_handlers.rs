@@ -230,7 +230,7 @@ impl StateHandler for GettingVersionHandler {
                 Ok(Some(version)) => {
                     context.server_version = Some(version.clone());
                     info!("Server version: {}", version);
-                    println!("✓ Server version: {}", version);
+                    println!("✓ Server version: {version}");
                     Ok(State::Completed)
                 }
                 Ok(None) => {
@@ -280,7 +280,7 @@ impl StateHandler for NextStateVersionHandler {
                 Ok(Some(version)) => {
                     context.server_version = Some(version.clone());
                     info!("Server version: {}", version);
-                    println!("✓ Server version: {}", version);
+                    println!("✓ Server version: {version}");
                     Ok(self.next_state.clone())
                 }
                 Ok(None) => {
