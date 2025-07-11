@@ -95,6 +95,8 @@
 use clap::Parser;
 use test_rig::{CommonArgs, print_success, print_test_header};
 use test_rig::{ConnectionCoordinator, ConnectionInfo, GlobalConfig, MultiConnectionStateMachine};
+use tokio::sync::mpsc;
+use test_rig::connection_manager::CoordinationMessage;
 
 #[derive(Parser, Debug)]
 #[command(name = "multi-connection-test")]
@@ -134,9 +136,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         max_connections: 3,       // Max 3 connections
     };
 
-    // Create coordinator
-    let coordinator = ConnectionCoordinator::new(config);
-    let mut multi_sm = MultiConnectionStateMachine::new(coordinator);
+    // Create channel for coordination
+    let (tx, rx) = mpsc::channel::<CoordinationMessage>(32);
+
+    // Create coordinator and spawn its message loop
+    let mut coordinator = ConnectionCoordinator::new(config);
+    coordinator.tx = tx.clone();
+    coordinator.rx = rx;
+    let handle = tokio::spawn(async move {
+        coordinator.process_messages().await;
+    });
+
+    // Create multi-connection state machine with the sender
+    let mut multi_sm = MultiConnectionStateMachine::new(tx.clone());
 
     // Define multiple connections
     let connections = vec![
@@ -190,33 +202,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Check results
     println!("\n=== Final Results ===");
+    println!("Results are available via coordination messages (see integration tests for details).");
 
-    let shared_state = multi_sm.get_shared_state();
-    if let Ok(state) = shared_state.lock() {
-        println!("Connection Status:");
-        for (conn_id, status) in &state.connection_status {
-            println!("  {}: {:?} - {}", conn_id, status.status, status.host);
-            if let Some(error) = &status.error_message {
-                println!("    Error: {error}");
-            }
-        }
-
-        // Removed: Active Import Jobs reporting
-        // println!("\nActive Import Jobs:");
-        // for job in &state.import_jobs {
-        //     if job.end_time.is_none() {
-        //         println!(
-        //             "  Job {} on {}: {} - {}",
-        //             job.job_id, job.connection_id, job.phase, job.status
-        //         );
-        //     }
-        // }
-
-        println!("\nCoordination Events:");
-        for event in &state.coordination_events {
-            println!("  {event:?}");
-        }
-    }
+    // Shutdown the coordinator
+    tx.send(CoordinationMessage::Shutdown).await.ok();
+    let _ = handle.await;
 
     print_success("Advanced multi-connection testing completed!");
     Ok(())
