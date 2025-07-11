@@ -1,3 +1,8 @@
+//! # Error Handling
+//!
+//! Comprehensive error types and retry mechanisms for the TiDB connection framework.
+//! Provides specific error variants, retry strategies, and circuit breaker patterns.
+
 use crate::state_machine::State;
 use std::future::Future;
 use std::pin::Pin;

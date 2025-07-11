@@ -1,3 +1,8 @@
+//! # Connection Management
+//!
+//! Low-level database connection utilities and parsing functions.
+//! Provides connection pool creation, connection testing, and host/port parsing.
+
 use crate::errors::{ConnectionError, Result};
 use mysql::prelude::*;
 use mysql::{OptsBuilder, Pool, PooledConn};

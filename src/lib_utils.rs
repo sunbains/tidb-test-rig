@@ -1,3 +1,8 @@
+//! # Library Utilities
+//!
+//! Common utility functions and helpers for the test_rig framework.
+//! Provides error reporting, success reporting, and test output formatting.
+
 use crate::cli::CommonArgs;
 use crate::errors::{ConnectError, Result};
 use crate::state_handlers::GettingVersionHandler;

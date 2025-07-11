@@ -1,3 +1,8 @@
+//! # Retry Logic
+//!
+//! Retry mechanisms with circuit breaker pattern for resilient database operations.
+//! Provides exponential backoff, circuit breaker state management, and configurable retry strategies.
+
 use crate::errors::{ConnectError, RetryConfig};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};

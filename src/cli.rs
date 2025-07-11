@@ -1,3 +1,8 @@
+//! # Command-Line Interface
+//!
+//! Command-line argument parsing and common CLI utilities.
+//! Provides standardized argument handling for database connections and configuration.
+
 use crate::config::AppConfig;
 use crate::errors::Result;
 use clap::Parser;

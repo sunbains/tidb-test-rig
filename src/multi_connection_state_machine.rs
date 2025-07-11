@@ -1,3 +1,8 @@
+//! # Multi-Connection State Machine
+//!
+//! State machine for managing multiple database connections.
+//! Provides connection coordination, load balancing, and parallel execution support.
+
 use crate::connection_manager::{
     ConnectionCoordinator, ConnectionInfo, ConnectionState, ConnectionStatus, CoordinationMessage,
 };

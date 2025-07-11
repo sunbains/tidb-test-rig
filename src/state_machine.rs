@@ -1,3 +1,9 @@
+//! # State Machine
+//!
+//! Core state machine implementation for managing TiDB connection workflows.
+//! Provides a flexible framework for defining and executing state-based operations
+//! with support for async handlers and context management.
+
 use crate::errors::ConnectError;
 use mysql::PooledConn;
 use std::any::Any;

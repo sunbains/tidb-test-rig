@@ -1,5 +1,11 @@
 #![cfg(feature = "python_plugins")]
 
+//! # Python Plugin System
+//!
+//! Python plugin system using PyO3 for writing state handlers in Python.
+//! Provides seamless integration between Rust state machine and Python handlers
+//! with support for async operations, database queries, and error propagation.
+
 use crate::errors::{ConnectError, Result};
 use crate::state_machine::{State, StateContext, StateHandler};
 use async_trait::async_trait;

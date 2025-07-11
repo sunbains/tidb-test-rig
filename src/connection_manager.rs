@@ -1,3 +1,8 @@
+//! # Connection Manager
+//!
+//! High-level connection management and coordination for multiple database connections.
+//! Provides connection pooling, load balancing, and shared state management.
+
 use mysql::PooledConn;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

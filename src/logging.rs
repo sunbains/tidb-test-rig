@@ -1,3 +1,8 @@
+//! # Logging
+//!
+//! Structured logging configuration and utilities.
+//! Provides multiple log formats, file and console output, and configurable log levels.
+
 use std::fs;
 use std::path::PathBuf;
 use tracing::Level;

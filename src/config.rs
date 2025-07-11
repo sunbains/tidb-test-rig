@@ -1,3 +1,8 @@
+//! # Configuration Management
+//!
+//! Configuration management with support for files (JSON/TOML), environment variables,
+//! and programmatic setup. Provides validation, defaults, and builder patterns.
+
 use crate::errors::{ConnectError, Result};
 use serde::{Deserialize, Serialize};
 use std::path::Path;

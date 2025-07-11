@@ -1,3 +1,8 @@
+//! # Error Utilities
+//!
+//! Enhanced error utilities and context management for resilient database operations.
+//! Provides error classification, recovery strategies, and enhanced error context building.
+
 use crate::errors::RetryConfig;
 use crate::errors::{ConnectError, EnhancedError, ErrorContext};
 use crate::retry::{CircuitBreaker, CircuitBreakerConfig, retry_with_circuit_breaker};

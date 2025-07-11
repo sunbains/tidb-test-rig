@@ -1,3 +1,8 @@
+//! # Configuration Extensions
+//!
+//! Dynamic configuration extensions for test-specific options.
+//! Provides a plugin system for extending CLI arguments and configuration building.
+
 use crate::config::AppConfig;
 use clap::{ArgMatches, Command};
 use std::collections::HashMap;

@@ -1,17 +1,56 @@
+//! # test_rig - TiDB Connection and Testing Framework
+//!
+//! A Rust framework for testing TiDB connections with state machine-based workflows,
+//! Python plugin support, and comprehensive error handling.
+//!
+//! ## Core Features
+//! - State machine for managing database connection workflows
+//! - Python plugin system for custom state handlers
+//! - Multi-connection support with load balancing
+//! - Comprehensive error handling and retry mechanisms
+//! - Configuration management with file and environment support
+//! - CLI utilities for common operations
+
+/// Command-line interface support and argument parsing
 pub mod cli;
+
+/// Configuration management with file, environment, and programmatic support
 pub mod config;
+
+/// Configuration extensions for dynamic configuration
 pub mod config_extensions;
+
+/// Low-level database connection utilities and parsing
 pub mod connection;
+
+/// High-level connection management and coordination
 pub mod connection_manager;
+
+/// Enhanced error utilities and context management
 pub mod error_utils;
+
+/// Comprehensive error types and retry mechanisms
 pub mod errors;
+
+/// Common utility functions and helpers
 pub mod lib_utils;
+
+/// Structured logging configuration and utilities
 pub mod logging;
+
+/// State machine for managing multiple database connections
 pub mod multi_connection_state_machine;
+
+/// Retry mechanisms with circuit breaker pattern
 pub mod retry;
+
+/// Built-in state handler implementations
 pub mod state_handlers;
+
+/// Core state machine implementation for TiDB connection workflows
 pub mod state_machine;
 
+/// Python plugin system using PyO3 for writing state handlers in Python
 #[cfg(feature = "python_plugins")]
 pub mod python_bindings;
 

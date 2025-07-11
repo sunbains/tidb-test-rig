@@ -1,3 +1,8 @@
+//! # State Handlers
+//!
+//! Built-in state handler implementations for common TiDB operations.
+//! Provides handlers for connection, testing, verification, and monitoring workflows.
+
 use crate::connection::{create_connection_pool, parse_connection_string};
 use crate::errors::Result;
 use crate::state_machine::{State, StateContext, StateHandler};
