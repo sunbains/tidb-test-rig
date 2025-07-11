@@ -563,6 +563,10 @@ let mut machine = DynamicStateMachine::new();
 machine.register_handler(parsing_config(), Box::new(ParsingConfigHandlerAdapter));
 machine.register_handler(connecting(), Box::new(ConnectingHandlerAdapter));
 
+// Register test-specific states
+machine.register_handler(creating_table(), Box::new(CreatingTableHandler));
+machine.register_handler(populating_data(), Box::new(PopulatingDataHandler));
+
 // Load Python handlers for custom states
 load_python_handlers(&mut machine, "my_python_handlers")?;
 ```

@@ -447,6 +447,7 @@ use test_rig::{DynamicStateMachine, common_states::*};
 let mut machine = DynamicStateMachine::new();
 machine.register_handler(parsing_config(), Box::new(ParsingConfigHandlerAdapter));
 machine.register_handler(connecting(), Box::new(ConnectingHandlerAdapter));
+machine.register_handler(creating_table(), Box::new(CreatingTableHandler));
 // ... register other handlers and test-specific states
 ```
 
