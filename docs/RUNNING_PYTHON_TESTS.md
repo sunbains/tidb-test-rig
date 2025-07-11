@@ -1,6 +1,6 @@
 # Running Python tests
 
-This guide covers how to run and develop Python-based DDL tests for TiDB using the Rust `test_rig` framework.
+This guide covers how to run and develop Python-based tests for TiDB using the Rust `test_rig` framework.
 
 ## Overview
 
@@ -49,35 +49,6 @@ print(f'Test result: {result}')
 "
 ```
 
-## Test Structure
-
-Each DDL test follows a consistent pattern using the `PyStateHandler` interface:
-
-```python
-from src.common.test_rig_python import PyStateHandler, PyStateContext, PyState
-
-class MyDDLHandler(PyStateHandler):
-    def enter(self, context: PyStateContext) -> str:
-        """Setup phase - create test data, drop existing objects"""
-        if context.connection:
-            context.connection.execute_query("DROP TABLE IF EXISTS test_table")
-        return PyState.connecting()
-    
-    def execute(self, context: PyStateContext) -> str:
-        """Main test logic - perform DDL operations"""
-        if context.connection:
-            # Perform your DDL operations here
-            context.connection.execute_query("CREATE TABLE test_table (id INT)")
-            context.connection.execute_query("ALTER TABLE test_table ADD COLUMN name VARCHAR(100)")
-            return PyState.completed()
-        return PyState.error("No connection available")
-    
-    def exit(self, context: PyStateContext) -> None:
-        """Cleanup phase - remove test objects"""
-        if context.connection:
-            context.connection.execute_query("DROP TABLE IF EXISTS test_table")
-```
-
 ## Available Test Categories
 
 ### Basic DDL Operations
@@ -116,88 +87,22 @@ class MyDDLHandler(PyStateHandler):
 - **`test_error_conditions.py`** - Error handling and edge cases
 - **`test_permissions.py`** - Permission-related tests
 
-## Example Test Walkthrough
+## Creating and Customizing Python Test Suites
 
-Let's examine a typical DDL test - `test_create_table.py`:
+For instructions on how to create new Python test directories, set up test files, and customize your test infrastructure, see:
 
-```python
-from src.common.test_rig_python import PyStateHandler, PyStateContext, PyState
+**[How to Create Python Test Directories and Suites](./CREATING_PYTHON_TEST_DIRECTORIES.md)**
 
-class CreateTableHandler(PyStateHandler):
-    def enter(self, context: PyStateContext) -> str:
-        # Clean up any existing test table
-        if context.connection:
-            context.connection.execute_query("DROP TABLE IF EXISTS ddl_test")
-        return PyState.connecting()
-
-    def execute(self, context: PyStateContext) -> str:
-        if context.connection:
-            # Create a test table with various data types
-            context.connection.execute_query("""
-                CREATE TABLE ddl_test (
-                    id INT PRIMARY KEY AUTO_INCREMENT,
-                    name VARCHAR(100) NOT NULL,
-                    email VARCHAR(255) UNIQUE,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
-            
-            # Verify the table was created
-            result = context.connection.execute_query("SHOW TABLES LIKE 'ddl_test'")
-            if result and any('ddl_test' in str(row) for row in result):
-                return PyState.completed()
-        
-        return PyState.completed()
-
-    def exit(self, context: PyStateContext) -> None:
-        # Clean up the test table
-        if context.connection:
-            context.connection.execute_query("DROP TABLE IF EXISTS ddl_test")
-```
-
-## Advanced Example: ALTER TABLE Operations
-
-The `test_alter_table.py` demonstrates comprehensive ALTER TABLE testing:
-
-```python
-class AlterTableHandler(PyStateHandler):
-    def execute(self, context: PyStateContext) -> str:
-        if context.connection:
-            conn = context.connection
-            
-            # Add columns
-            conn.execute_query("ALTER TABLE ddl_test ADD COLUMN phone VARCHAR(20)")
-            conn.execute_query("ALTER TABLE ddl_test ADD COLUMN address TEXT AFTER name")
-            
-            # Modify columns
-            conn.execute_query("ALTER TABLE ddl_test MODIFY COLUMN name VARCHAR(200)")
-            conn.execute_query("ALTER TABLE ddl_test MODIFY COLUMN age INT NOT NULL")
-            
-            # Add indexes
-            conn.execute_query("ALTER TABLE ddl_test ADD INDEX idx_name (name)")
-            conn.execute_query("ALTER TABLE ddl_test ADD UNIQUE INDEX idx_email (email)")
-            
-            # Table attributes
-            conn.execute_query("ALTER TABLE ddl_test ENGINE = InnoDB")
-            conn.execute_query("ALTER TABLE ddl_test CONVERT TO CHARACTER SET utf8mb4")
-            
-            return PyState.completed()
-        
-        return PyState.completed()
-```
-
-## State Management
-
-DDL tests use a simple state management system:
-
-- **`PyState.connecting()`** - Move to connecting state (typically used in `enter()`)
-- **`PyState.completed()`** - Complete successfully
-- **`PyState.error(message)`** - Complete with error
+This includes:
+- Directory structure and setup
+- Sample `Cargo.toml` and `lib.rs`
+- Test file and handler conventions
+- Customization guidelines
+- Integration with the Rust framework
 
 ## Shared Mock Implementation
 
 The `src/common/test_rig_python.py` stub module provides a shared mock database implementation that:
-
 - Simulates SQL operations without requiring a real database
 - Returns appropriate mock results based on query patterns
 - Provides debugging output for executed queries
@@ -214,27 +119,8 @@ use test_rig::StateMachine;
 
 let mut state_machine = StateMachine::new();
 load_python_handlers(&mut state_machine, "src.ddl")?;
-
 // The state machine will now include all DDL test handlers
 ```
-
-## Development Guidelines
-
-### Creating New DDL Tests
-
-1. **Follow the naming convention**: `test_<operation>.py`
-2. **Inherit from `PyStateHandler`**: All tests must implement the interface
-3. **Use proper cleanup**: Always clean up test objects in the `exit()` method
-4. **Handle errors gracefully**: Use try-catch blocks for operations that might fail
-5. **Test edge cases**: Include tests for error conditions and boundary cases
-
-### Best Practices
-
-- **Isolation**: Each test should be independent and not rely on other tests
-- **Cleanup**: Always clean up test objects to avoid interference
-- **Verification**: Verify that operations completed successfully
-- **Documentation**: Include docstrings explaining what the test covers
-- **Error handling**: Test both success and failure scenarios
 
 ## Troubleshooting
 
@@ -274,6 +160,6 @@ When adding new DDL tests:
 
 ## Related Documentation
 
-- [Python Plugins Guide](../PYTHON_PLUGINS.md) - General Python plugin system
-- [Architecture Guide](../ARCHITECTURE.md) - Overall system architecture
-- [Advanced Guide](../ADVANCED_GUIDE.md) - Advanced usage patterns 
+- [How to Create Python Test Directories and Suites](./CREATING_PYTHON_TEST_DIRECTORIES.md)
+- [Architecture Guide](./ARCHITECTURE.md)
+- [Advanced Guide](./ADVANCED_GUIDE.md) 
