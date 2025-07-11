@@ -42,7 +42,7 @@ The framework provides two complementary state management systems:
 - **ConnectionCoordinator**: Shared state and event/message passing for coordination between connections.
 - **SharedState**: Tracks global test status, connection results, import jobs, and coordination events.
 - **Tokio Tasks**: Each connection runs in its own async task for true concurrency.
-- **Examples**: See `examples/simple_multi_connection.rs` and `examples/multi_connection_example.rs` for usage patterns.
+- **Examples**: See `src/bin/simple_multi_connection.rs` and `src/bin/multi_connection.rs` for usage patterns.
 
 ## Multi-Connection Architecture (In-Depth)
 
@@ -92,14 +92,14 @@ let handle = tokio::spawn(async move {
 ## Implementation Examples
 
 ### Simple Approach (Recommended for most use cases)
-See `examples/simple_multi_connection.rs` for a straightforward implementation that:
+See `src/bin/simple_multi_connection.rs` for a straightforward implementation that:
 - Creates multiple state machines
 - Runs them concurrently
 - Shares results through a simple coordinator
 - Provides easy status tracking
 
 ### Advanced Approach (For complex coordination)
-See `examples/multi_connection_example.rs` for a more sophisticated implementation with:
+See `src/bin/multi_connection.rs` for a more sophisticated implementation with:
 - Message-passing coordination
 - Event-driven architecture
 - Complex state synchronization
@@ -214,7 +214,7 @@ The multiple state machines with shared state approach provides the best balance
 - `src/state_machine_dynamic.rs`: Dynamic state machine for extensible workflows.
 - `src/common_states.rs`: Shared state definitions for common workflows.
 - `src/state_handlers.rs`: Handlers for core state machine states.
-- `src/import_job_handlers.rs`: Handlers and context for import job monitoring.
+- `src/bin/job_monitor.rs`: Import job monitoring with dynamic state handlers.
 - `src/connection.rs`: Connection utilities.
 - `src/connection_manager.rs`: Shared state and coordination for multi-connection mode.
 - `src/multi_connection_state_machine.rs`: Multi-connection state machine logic.
@@ -224,7 +224,7 @@ The multiple state machines with shared state approach provides the best balance
   - `job_monitor.rs`: Job monitoring using dynamic state machine.
   - `simple_multi_connection.rs`: Simple multi-connection test.
   - `python_demo.rs`: Python plugin demonstration.
-- `examples/`: Example usage for both single and multi-connection workflows.
+- `src/bin/`: Binary executables demonstrating both single and multi-connection workflows.
 
 ---
 
