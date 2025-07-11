@@ -1,37 +1,15 @@
 # Advanced Guide
 
-This guide covers advanced features and usage patterns for the test_rig framework.
+This guide covers advanced features and usage patterns for the test_rig framework. For basic usage, see the other documentation files in this directory.
+
+## Related Documentation
+
+- **[Architecture](ARCHITECTURE.md)** - System architecture and design overview
+- **[Running Python Tests](RUNNING_PYTHON_TESTS.md)** - How to run Python test suites
+- **[Creating Python Test Directories](CREATING_PYTHON_TEST_DIRECTORIES.md)** - How to create new test suites
+- **[Dynamic States](DYNAMIC_STATES.md)** - Using the dynamic state system
 
 ## Advanced State Machine Usage
-
-### Dynamic State Machine
-
-The dynamic state machine allows you to define custom states at compile time for extensible workflows:
-
-```rust
-use test_rig::{DynamicStateMachine, DynamicStateHandler, DynamicStateContext, common_states::*};
-
-// Define custom states
-dynamic_state!(creating_table);
-dynamic_state!(populating_data);
-dynamic_state!(testing_isolation);
-
-// Create dynamic state machine
-let mut machine = DynamicStateMachine::new();
-
-// Register handlers for common states
-machine.register_handler(parsing_config(), Box::new(ParsingConfigHandlerAdapter));
-machine.register_handler(connecting(), Box::new(ConnectingHandlerAdapter));
-machine.register_handler(testing_connection(), Box::new(TestingConnectionHandlerAdapter));
-
-// Register handlers for custom states
-machine.register_handler(creating_table(), Box::new(CreatingTableHandler));
-machine.register_handler(populating_data(), Box::new(PopulatingDataHandler));
-machine.register_handler(testing_isolation(), Box::new(TestingIsolationHandler));
-
-// Run the machine
-machine.run().await?;
-```
 
 ### Custom State Handlers
 
@@ -40,20 +18,21 @@ Create custom state handlers for your specific testing needs:
 ```rust
 use test_rig::{DynamicStateHandler, DynamicStateContext, ConnectError};
 
-pub struct CreatingTableHandler;
+pub struct CustomTestHandler {
+    test_config: TestConfig,
+}
 
 #[async_trait]
-impl DynamicStateHandler for CreatingTableHandler {
+impl DynamicStateHandler for CustomTestHandler {
     async fn execute(&self, context: &mut DynamicStateContext) -> Result<String, ConnectError> {
         if let Some(conn) = &mut context.connection {
-            // Create test table
-            conn.query_drop("DROP TABLE IF EXISTS test_table").await?;
-            conn.query_drop("CREATE TABLE test_table (id INT, name VARCHAR(50))").await?;
+            // Your custom test logic here
+            self.run_custom_test(conn).await?;
             
-            // Store table info in context for other handlers
-            context.set_data("table_name", "test_table");
+            // Store results in context for other handlers
+            context.set_data("test_results", self.get_results());
             
-            Ok("populating_data".to_string())
+            Ok("next_state".to_string())
         } else {
             Err(ConnectError::Connection("No database connection".into()))
         }
@@ -61,264 +40,245 @@ impl DynamicStateHandler for CreatingTableHandler {
 }
 ```
 
-## Multi-Connection Testing
+### Advanced Context Management
 
-### Simple Multi-Connection
-
-For basic multi-connection testing:
+Use the dynamic context for complex data sharing:
 
 ```rust
-use test_rig::{SimpleMultiConnectionCoordinator, ConnectionConfig};
+use test_rig::DynamicStateContext;
+use serde::{Serialize, Deserialize};
 
-let mut coordinator = SimpleMultiConnectionCoordinator::new();
+#[derive(Clone, Serialize, Deserialize)]
+struct TestResults {
+    success_count: u32,
+    failure_count: u32,
+    duration: Duration,
+    errors: Vec<String>,
+}
 
-// Add connections
-coordinator.add_connection(ConnectionConfig {
-    id: "primary".to_string(),
-    host: "tidb-primary:4000".to_string(),
-    port: 4000,
-    username: "root".to_string(),
-    password: "".to_string(),
-    database: Some("test".to_string()),
+// Store complex data in context
+context.set_data("test_results", TestResults {
+    success_count: 10,
+    failure_count: 2,
+    duration: Duration::from_secs(30),
+    errors: vec!["Connection timeout".to_string()],
 });
 
-coordinator.add_connection(ConnectionConfig {
-    id: "secondary".to_string(),
-    host: "tidb-secondary:4000".to_string(),
-    port: 4000,
-    username: "root".to_string(),
-    password: "".to_string(),
-    database: Some("test".to_string()),
-});
-
-// Run all connections concurrently
-coordinator.run_all_connections().await?;
-
-// Get results
-coordinator.print_results();
+// Retrieve and use data
+if let Some(results) = context.get_data::<TestResults>("test_results") {
+    println!("Test completed: {} successes, {} failures", 
+             results.success_count, results.failure_count);
+}
 ```
 
-### Advanced Multi-Connection
+## Advanced Multi-Connection Testing
 
-For complex coordination scenarios:
+### Custom Coordination Logic
+
+Implement custom coordination between multiple connections:
 
 ```rust
 use test_rig::{MultiConnectionStateMachine, ConnectionCoordinator, SharedState};
+use tokio::sync::mpsc;
 
-let shared_state = Arc::new(Mutex::new(SharedState::new()));
-let coordinator = Arc::new(ConnectionCoordinator::new(shared_state.clone()));
+struct CustomCoordinator {
+    shared_state: Arc<Mutex<SharedState>>,
+    event_sender: mpsc::Sender<CoordinationEvent>,
+    event_receiver: mpsc::Receiver<CoordinationEvent>,
+}
 
-let mut machine = MultiConnectionStateMachine::new(coordinator);
-
-// Add connections with custom handlers
-machine.add_connection("primary", Box::new(PrimaryConnectionHandler));
-machine.add_connection("secondary", Box::new(SecondaryConnectionHandler));
-
-// Run with coordination
-machine.run_with_coordination().await?;
-```
-
-## Python Plugin System
-
-### Advanced Python Handlers
-
-Create sophisticated Python handlers with custom logic:
-
-```python
-from src.common.test_rig_python import PyStateHandler, PyStateContext, PyState
-import time
-import random
-
-class AdvancedTransactionHandler(PyStateHandler):
-    def __init__(self):
-        super().__init__()
-        self.attempt_count = 0
-        self.max_attempts = 3
-    
-    def enter(self, context: PyStateContext) -> str:
-        print(f"Starting advanced transaction test on {context.host}")
-        return PyState.connecting()
-    
-    def execute(self, context: PyStateContext) -> str:
-        if not context.connection:
-            return PyState.connecting()
+impl CustomCoordinator {
+    async fn coordinate_operations(&mut self) -> Result<(), ConnectError> {
+        // Wait for all connections to be ready
+        self.wait_for_all_connections().await?;
         
-        self.attempt_count += 1
+        // Send coordination signals
+        self.broadcast_event(CoordinationEvent::StartTest).await?;
         
-        try:
-            # Create test environment
-            context.connection.execute_query("DROP TABLE IF EXISTS advanced_test")
-            context.connection.execute_query("""
-                CREATE TABLE advanced_test (
-                    id INT PRIMARY KEY,
-                    name VARCHAR(50),
-                    value DECIMAL(10,2),
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
-            
-            # Simulate complex transaction scenario
-            context.connection.start_transaction()
-            
-            # Insert initial data
-            for i in range(5):
-                context.connection.execute_query(
-                    f"INSERT INTO advanced_test (id, name, value) VALUES ({i}, 'Item{i}', {i * 10.5})"
-                )
-            
-            # Simulate some processing time
-            time.sleep(0.1)
-            
-            # Update some records
-            context.connection.execute_query("UPDATE advanced_test SET value = value * 1.1 WHERE id % 2 = 0")
-            
-            # Simulate potential conflict
-            if random.random() < 0.3:  # 30% chance of rollback
-                print("Simulating transaction rollback")
-                context.connection.rollback()
-                if self.attempt_count < self.max_attempts:
-                    return PyState.connecting()  # Retry
-            else:
-                context.connection.commit()
-            
-            # Verify results
-            results = context.connection.execute_query("SELECT COUNT(*) FROM advanced_test")
-            print(f"Final record count: {results[0]['col_0']}")
-            
-            return PyState.completed()
-            
-        except Exception as e:
-            print(f"Error in attempt {self.attempt_count}: {e}")
-            if self.attempt_count < self.max_attempts:
-                return PyState.connecting()  # Retry
-            else:
-                return PyState.completed()  # Give up
-    
-    def exit(self, context: PyStateContext) -> None:
-        print(f"Advanced transaction test completed after {self.attempt_count} attempts")
-```
-
-### Multi-Connection Python Handlers
-
-Create Python handlers that work with multiple concurrent connections:
-
-```python
-from src.common.test_rig_python import MultiConnectionTestHandler, PyStateContext, PyState
-import threading
-import time
-
-class ConcurrentLoadTestHandler(MultiConnectionTestHandler):
-    def __init__(self):
-        super().__init__(connection_count=5)  # Use 5 concurrent connections
-    
-    def execute(self, context: PyStateContext) -> str:
-        # Create test table
-        if context.connection:
-            context.connection.execute_query("DROP TABLE IF EXISTS load_test")
-            context.connection.execute_query("""
-                CREATE TABLE load_test (
-                    id INT PRIMARY KEY,
-                    connection_id INT,
-                    operation_type VARCHAR(20),
-                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
+        // Monitor progress
+        while let Some(event) = self.event_receiver.recv().await {
+            match event {
+                CoordinationEvent::TestCompleted { connection_id } => {
+                    println!("Connection {} completed test", connection_id);
+                }
+                CoordinationEvent::ConnectionFailed { connection_id, error } => {
+                    println!("Connection {} failed: {}", connection_id, error);
+                }
+                _ => {}
+            }
+        }
         
-        # Define concurrent operations
-        operations = []
-        
-        # Each connection performs different operations
-        for conn_id in range(self.connection_count):
-            operations.extend([
-                {'connection_id': conn_id, 'operation': 'start_transaction'},
-                {'connection_id': conn_id, 'operation': 'query', 'query': f'INSERT INTO load_test (id, connection_id, operation_type) VALUES ({conn_id * 100 + 1}, {conn_id}, "INSERT")'},
-                {'connection_id': conn_id, 'operation': 'query', 'query': f'INSERT INTO load_test (id, connection_id, operation_type) VALUES ({conn_id * 100 + 2}, {conn_id}, "INSERT")'},
-                {'connection_id': conn_id, 'operation': 'query', 'query': f'UPDATE load_test SET operation_type = "UPDATED" WHERE connection_id = {conn_id}'},
-                {'connection_id': conn_id, 'operation': 'query', 'query': f'SELECT COUNT(*) FROM load_test WHERE connection_id = {conn_id}'},
-                {'connection_id': conn_id, 'operation': 'commit'},
-            ])
-        
-        # Execute operations concurrently
-        results = self.execute_concurrent_operations(operations)
-        
-        # Analyze results
-        if context.connection:
-            final_results = context.connection.execute_query("SELECT COUNT(*) FROM load_test")
-            print(f"Total records created: {final_results[0]['col_0']}")
-            
-            # Check for conflicts or issues
-            conflict_results = context.connection.execute_query("SELECT COUNT(*) FROM load_test WHERE operation_type = 'UPDATED'")
-            print(f"Records updated: {conflict_results[0]['col_0']}")
-        
-        return PyState.completed()
-```
-
-## Error Handling and Resilience
-
-### Retry Strategies
-
-Implement custom retry logic in your handlers:
-
-```rust
-use test_rig::{retry::RetryConfig, error_utils::classify_error};
-
-let retry_config = RetryConfig {
-    max_attempts: 5,
-    base_delay: Duration::from_secs(1),
-    max_delay: Duration::from_secs(30),
-    jitter: true,
-};
-
-let result = retry_config.execute("database_operation", || async {
-    // Your database operation here
-    perform_database_operation().await
-}).await;
-```
-
-### Circuit Breaker Pattern
-
-Use circuit breakers for system protection:
-
-```rust
-use test_rig::{retry::CircuitBreakerConfig, error_utils::classify_error};
-
-let circuit_config = CircuitBreakerConfig {
-    failure_threshold: 5,
-    recovery_timeout: Duration::from_secs(60),
-    success_threshold: 2,
-};
-
-let result = circuit_config.execute("critical_operation", || async {
-    // Your critical operation here
-    perform_critical_operation().await
-}).await;
-```
-
-### Error Classification
-
-Classify errors for appropriate handling:
-
-```rust
-use test_rig::error_utils::{classify_error, ErrorCategory};
-
-let error = ConnectError::Connection(mysql::Error::server_disconnected());
-match classify_error(&error) {
-    ErrorCategory::Transient => {
-        // Will be retried automatically
-        println!("Transient error, retrying...");
-    }
-    ErrorCategory::Permanent => {
-        // Fail fast
-        println!("Permanent error, failing immediately");
-    }
-    ErrorCategory::Unknown => {
-        // Retry with limits
-        println!("Unknown error, retrying with limits");
+        Ok(())
     }
 }
 ```
 
-## Configuration Management
+### Load Testing Patterns
+
+Implement sophisticated load testing scenarios:
+
+```rust
+use test_rig::{DynamicStateMachine, DynamicStateHandler, DynamicStateContext};
+use tokio::time::{sleep, Duration};
+
+struct LoadTestHandler {
+    concurrent_users: u32,
+    test_duration: Duration,
+    ramp_up_time: Duration,
+}
+
+#[async_trait]
+impl DynamicStateHandler for LoadTestHandler {
+    async fn execute(&self, context: &mut DynamicStateContext) -> Result<String, ConnectError> {
+        let start_time = Instant::now();
+        let mut tasks = JoinSet::new();
+        
+        // Ramp up connections gradually
+        for user_id in 0..self.concurrent_users {
+            let delay = self.ramp_up_time * user_id / self.concurrent_users;
+            sleep(delay).await;
+            
+            let mut conn = context.connection_pool.get_connection().await?;
+            tasks.spawn(async move {
+                self.simulate_user_workload(&mut conn, user_id).await
+            });
+        }
+        
+        // Monitor tasks until test duration expires
+        while start_time.elapsed() < self.test_duration {
+            while let Some(result) = tasks.join_next().await {
+                match result {
+                    Ok(Ok(_)) => println!("User task completed successfully"),
+                    Ok(Err(e)) => println!("User task failed: {}", e),
+                    Err(e) => println!("User task panicked: {}", e),
+                }
+            }
+        }
+        
+        Ok("completed".to_string())
+    }
+}
+```
+
+## Advanced Error Handling and Resilience
+
+### Custom Retry Strategies
+
+Implement domain-specific retry logic:
+
+```rust
+use test_rig::{retry::RetryConfig, error_utils::classify_error};
+use std::time::Duration;
+
+struct DatabaseRetryStrategy {
+    max_attempts: u32,
+    base_delay: Duration,
+    max_delay: Duration,
+    backoff_multiplier: f64,
+}
+
+impl DatabaseRetryStrategy {
+    async fn execute_with_retry<F, Fut, T>(&self, operation: F) -> Result<T, ConnectError>
+    where
+        F: Fn() -> Fut,
+        Fut: Future<Output = Result<T, ConnectError>>,
+    {
+        let mut attempt = 0;
+        let mut delay = self.base_delay;
+        
+        loop {
+            attempt += 1;
+            
+            match operation().await {
+                Ok(result) => return Ok(result),
+                Err(error) => {
+                    if attempt >= self.max_attempts {
+                        return Err(error);
+                    }
+                    
+                    match classify_error(&error) {
+                        ErrorCategory::Transient => {
+                            // Retry with exponential backoff
+                            sleep(delay).await;
+                            delay = Duration::from_secs_f64(
+                                delay.as_secs_f64() * self.backoff_multiplier
+                            ).min(self.max_delay);
+                        }
+                        ErrorCategory::Permanent => {
+                            // Don't retry permanent errors
+                            return Err(error);
+                        }
+                        ErrorCategory::Unknown => {
+                            // Retry with limits for unknown errors
+                            if attempt < 3 {
+                                sleep(delay).await;
+                            } else {
+                                return Err(error);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+```
+
+### Circuit Breaker with Custom Logic
+
+Implement domain-specific circuit breaker patterns:
+
+```rust
+use test_rig::retry::CircuitBreakerConfig;
+use std::sync::atomic::{AtomicU32, Ordering};
+
+struct DatabaseCircuitBreaker {
+    failure_count: AtomicU32,
+    success_count: AtomicU32,
+    failure_threshold: u32,
+    success_threshold: u32,
+    recovery_timeout: Duration,
+    last_failure_time: Mutex<Option<Instant>>,
+}
+
+impl DatabaseCircuitBreaker {
+    async fn execute<F, Fut, T>(&self, operation: F) -> Result<T, ConnectError>
+    where
+        F: Fn() -> Fut,
+        Fut: Future<Output = Result<T, ConnectError>>,
+    {
+        // Check if circuit is open
+        if let Some(last_failure) = *self.last_failure_time.lock().unwrap() {
+            if last_failure.elapsed() < self.recovery_timeout {
+                return Err(ConnectError::Connection("Circuit breaker open".into()));
+            }
+        }
+        
+        // Execute operation
+        match operation().await {
+            Ok(result) => {
+                self.success_count.fetch_add(1, Ordering::Relaxed);
+                if self.success_count.load(Ordering::Relaxed) >= self.success_threshold {
+                    self.reset_circuit();
+                }
+                Ok(result)
+            }
+            Err(error) => {
+                self.failure_count.fetch_add(1, Ordering::Relaxed);
+                *self.last_failure_time.lock().unwrap() = Some(Instant::now());
+                
+                if self.failure_count.load(Ordering::Relaxed) >= self.failure_threshold {
+                    self.open_circuit();
+                }
+                
+                Err(error)
+            }
+        }
+    }
+}
+```
+
+## Advanced Configuration Management
 
 ### Custom Configuration Extensions
 
@@ -328,261 +288,324 @@ Add test-specific configuration options:
 use test_rig::{ConfigExtension, register_config_extension};
 use clap::Command;
 
-struct MyTestConfigExtension;
+struct PerformanceTestConfigExtension;
 
-impl ConfigExtension for MyTestConfigExtension {
+impl ConfigExtension for PerformanceTestConfigExtension {
     fn add_cli_args(&self, app: Command) -> Command {
         app.arg(
-            clap::Arg::new("test-rows")
-                .long("test-rows")
-                .help("Number of test rows to create")
-                .default_value("1000")
-        )
-        .arg(
             clap::Arg::new("concurrent-users")
                 .long("concurrent-users")
                 .help("Number of concurrent users to simulate")
                 .default_value("10")
         )
+        .arg(
+            clap::Arg::new("test-duration")
+                .long("test-duration")
+                .help("Test duration in seconds")
+                .default_value("300")
+        )
+        .arg(
+            clap::Arg::new("ramp-up-time")
+                .long("ramp-up-time")
+                .help("Ramp up time in seconds")
+                .default_value("60")
+        )
+        .arg(
+            clap::Arg::new("think-time")
+                .long("think-time")
+                .help("Think time between requests in milliseconds")
+                .default_value("1000")
+        )
     }
     
     fn build_config(&self, args: &clap::ArgMatches, config: &mut test_rig::config::AppConfig) -> Result<(), Box<dyn std::error::Error>> {
-        if let Some(test_rows) = args.get_one::<String>("test-rows") {
-            if let Ok(rows) = test_rows.parse::<u32>() {
-                config.test.rows = rows;
-            }
+        if let Some(users) = args.get_one::<String>("concurrent-users") {
+            config.test.concurrent_users = users.parse::<u32>()?;
         }
         
-        if let Some(users) = args.get_one::<String>("concurrent-users") {
-            if let Ok(user_count) = users.parse::<u32>() {
-                config.test.concurrent_users = user_count;
-            }
+        if let Some(duration) = args.get_one::<String>("test-duration") {
+            config.test.duration_secs = duration.parse::<u32>()?;
+        }
+        
+        if let Some(ramp_up) = args.get_one::<String>("ramp-up-time") {
+            config.test.ramp_up_secs = ramp_up.parse::<u32>()?;
+        }
+        
+        if let Some(think_time) = args.get_one::<String>("think-time") {
+            config.test.think_time_ms = think_time.parse::<u32>()?;
         }
         
         Ok(())
     }
     
-    fn get_extension_name(&self) -> &'static str { "my_test" }
-    fn get_help_text(&self) -> &'static str { "Adds test-specific options" }
-}
-
-// Register the extension
-fn register_extensions() {
-    register_config_extension(Box::new(MyTestConfigExtension));
+    fn get_extension_name(&self) -> &'static str { "performance_test" }
+    fn get_help_text(&self) -> &'static str { "Adds performance testing options" }
 }
 ```
 
-### Dynamic Configuration
+### Dynamic Configuration Loading
 
-Load configuration dynamically based on environment:
+Load configuration based on environment and conditions:
 
 ```rust
 use test_rig::config::AppConfig;
+use std::collections::HashMap;
 
-let config = AppConfig::load_with_priority(&[
-    "config/production.toml",
-    "config/development.toml",
-    "config/default.toml",
-])?;
+struct DynamicConfigLoader {
+    environment: String,
+    config_overrides: HashMap<String, String>,
+}
 
-// Override with environment variables
-let config = config.with_env_overrides()?;
+impl DynamicConfigLoader {
+    async fn load_config(&self) -> Result<AppConfig, Box<dyn std::error::Error>> {
+        let mut config = AppConfig::default();
+        
+        // Load base configuration
+        match self.environment.as_str() {
+            "development" => {
+                config.merge_from_file("config/development.toml")?;
+            }
+            "staging" => {
+                config.merge_from_file("config/staging.toml")?;
+            }
+            "production" => {
+                config.merge_from_file("config/production.toml")?;
+            }
+            _ => {
+                config.merge_from_file("config/default.toml")?;
+            }
+        }
+        
+        // Apply environment-specific overrides
+        for (key, value) in &self.config_overrides {
+            config.set_value(key, value)?;
+        }
+        
+        // Apply environment variables
+        config.with_env_overrides()?;
+        
+        Ok(config)
+    }
+}
 ```
 
 ## Performance Optimization
 
-### Connection Pooling
+### Connection Pool Optimization
 
-Optimize connection usage with pooling:
+Optimize connection usage for high-performance scenarios:
 
 ```rust
 use test_rig::connection_manager::ConnectionPool;
+use std::time::Duration;
 
-let pool = ConnectionPool::new(
-    pool_config,
-    connection_config,
-)?;
-
-// Use pooled connections
-let conn = pool.get_connection().await?;
-// ... use connection
-pool.return_connection(conn).await;
-```
-
-### Batch Operations
-
-Optimize database operations with batching:
-
-```rust
-// Batch inserts
-let mut batch = Vec::new();
-for i in 0..1000 {
-    batch.push(format!("({}, 'item{}', {})", i, i, i * 10.5));
+struct OptimizedConnectionPool {
+    pool: ConnectionPool,
+    metrics: PoolMetrics,
 }
 
-let query = format!(
-    "INSERT INTO test_table (id, name, value) VALUES {}",
-    batch.join(",")
-);
-
-conn.query_drop(&query).await?;
+impl OptimizedConnectionPool {
+    async fn get_optimized_connection(&mut self) -> Result<PooledConnection, ConnectError> {
+        let start_time = Instant::now();
+        
+        // Try to get connection with timeout
+        let conn = tokio::time::timeout(
+            Duration::from_secs(5),
+            self.pool.get_connection()
+        ).await
+        .map_err(|_| ConnectError::Connection("Connection timeout".into()))??;
+        
+        // Update metrics
+        self.metrics.connection_wait_time = start_time.elapsed();
+        self.metrics.total_connections += 1;
+        
+        Ok(conn)
+    }
+    
+    async fn return_connection(&mut self, conn: PooledConnection) {
+        // Update metrics before returning
+        self.metrics.active_connections = self.metrics.active_connections.saturating_sub(1);
+        
+        self.pool.return_connection(conn).await;
+    }
+}
 ```
 
-### Async Operations
+### Batch Operation Optimization
 
-Leverage async/await for better performance:
+Optimize database operations with intelligent batching:
 
 ```rust
-use tokio::join;
+use std::collections::VecDeque;
 
-// Execute operations concurrently
-let (result1, result2, result3) = join!(
-    async_operation_1(),
-    async_operation_2(),
-    async_operation_3(),
-);
+struct BatchProcessor {
+    batch_size: usize,
+    batch_timeout: Duration,
+    pending_operations: VecDeque<DatabaseOperation>,
+    last_batch_time: Instant,
+}
+
+impl BatchProcessor {
+    async fn add_operation(&mut self, operation: DatabaseOperation) -> Result<(), ConnectError> {
+        self.pending_operations.push_back(operation);
+        
+        // Flush batch if it's full or timeout has elapsed
+        if self.pending_operations.len() >= self.batch_size || 
+           self.last_batch_time.elapsed() >= self.batch_timeout {
+            self.flush_batch().await?;
+        }
+        
+        Ok(())
+    }
+    
+    async fn flush_batch(&mut self) -> Result<(), ConnectError> {
+        if self.pending_operations.is_empty() {
+            return Ok(());
+        }
+        
+        let operations = std::mem::take(&mut self.pending_operations);
+        let batch_query = self.build_batch_query(operations);
+        
+        // Execute batch operation
+        self.execute_batch(batch_query).await?;
+        
+        self.last_batch_time = Instant::now();
+        Ok(())
+    }
+}
 ```
 
 ## Monitoring and Observability
 
-### Structured Logging
+### Custom Metrics Collection
 
-Use structured logging for better debugging:
+Implement domain-specific metrics:
 
 ```rust
-use tracing::{info, warn, error, instrument};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Instant;
 
-#[instrument(skip(connection))]
-async fn perform_operation(connection: &mut mysql::Conn) -> Result<(), ConnectError> {
-    info!("Starting database operation");
+#[derive(Default)]
+struct TestMetrics {
+    total_operations: AtomicU64,
+    successful_operations: AtomicU64,
+    failed_operations: AtomicU64,
+    total_duration: AtomicU64, // in nanoseconds
+    operation_durations: Mutex<Vec<Duration>>,
+}
+
+impl TestMetrics {
+    fn record_operation(&self, duration: Duration, success: bool) {
+        self.total_operations.fetch_add(1, Ordering::Relaxed);
+        
+        if success {
+            self.successful_operations.fetch_add(1, Ordering::Relaxed);
+        } else {
+            self.failed_operations.fetch_add(1, Ordering::Relaxed);
+        }
+        
+        self.total_duration.fetch_add(duration.as_nanos() as u64, Ordering::Relaxed);
+        
+        self.operation_durations.lock().unwrap().push(duration);
+    }
     
-    match connection.query_drop("SELECT 1").await {
+    fn get_statistics(&self) -> TestStatistics {
+        let total = self.total_operations.load(Ordering::Relaxed);
+        let successful = self.successful_operations.load(Ordering::Relaxed);
+        let failed = self.failed_operations.load(Ordering::Relaxed);
+        let total_duration = Duration::from_nanos(self.total_duration.load(Ordering::Relaxed));
+        
+        let durations = self.operation_durations.lock().unwrap();
+        let avg_duration = if !durations.is_empty() {
+            durations.iter().sum::<Duration>() / durations.len() as u32
+        } else {
+            Duration::ZERO
+        };
+        
+        TestStatistics {
+            total_operations: total,
+            success_rate: if total > 0 { successful as f64 / total as f64 } else { 0.0 },
+            average_duration: avg_duration,
+            total_duration,
+        }
+    }
+}
+```
+
+### Structured Logging with Context
+
+Implement rich logging with context:
+
+```rust
+use tracing::{info, warn, error, instrument, Span};
+use tracing_subscriber::fmt::format::FmtSpan;
+
+#[instrument(skip(connection), fields(operation = %operation_name))]
+async fn perform_operation_with_logging(
+    connection: &mut mysql::Conn,
+    operation_name: &str,
+    operation_data: &str,
+) -> Result<(), ConnectError> {
+    let span = Span::current();
+    span.record("operation_data", &operation_data);
+    
+    let start_time = Instant::now();
+    
+    info!("Starting database operation: {}", operation_name);
+    
+    match connection.query_drop(operation_data).await {
         Ok(_) => {
-            info!("Operation completed successfully");
+            let duration = start_time.elapsed();
+            info!(
+                operation = %operation_name,
+                duration_ms = duration.as_millis(),
+                status = "success",
+                "Database operation completed successfully"
+            );
             Ok(())
         }
         Err(e) => {
-            error!(error = %e, "Operation failed");
+            let duration = start_time.elapsed();
+            error!(
+                operation = %operation_name,
+                duration_ms = duration.as_millis(),
+                error = %e,
+                status = "failed",
+                "Database operation failed"
+            );
             Err(ConnectError::Database(e))
         }
     }
 }
 ```
 
-### Metrics Collection
-
-Collect metrics for performance monitoring:
-
-```rust
-use std::time::Instant;
-
-let start_time = Instant::now();
-let result = perform_operation().await;
-let duration = start_time.elapsed();
-
-info!(
-    operation = "database_query",
-    duration_ms = duration.as_millis(),
-    success = result.is_ok(),
-);
-```
-
-## Testing Strategies
-
-### Test Isolation
-
-Ensure tests are isolated and don't affect each other:
-
-```rust
-// Use unique table names
-let table_name = format!("test_{}", uuid::Uuid::new_v4().simple());
-conn.query_drop(&format!("CREATE TABLE {} (id INT)", table_name)).await?;
-
-// Clean up after test
-conn.query_drop(&format!("DROP TABLE {}", table_name)).await?;
-```
-
-### Test Data Management
-
-Manage test data effectively:
-
-```rust
-// Create test data factory
-struct TestDataFactory {
-    connection: mysql::Conn,
-}
-
-impl TestDataFactory {
-    async fn create_test_user(&mut self, name: &str) -> Result<i32, ConnectError> {
-        self.connection.query_drop(&format!(
-            "INSERT INTO users (name) VALUES ('{}')",
-            name
-        )).await?;
-        
-        let result: Vec<mysql::Row> = self.connection.query("SELECT LAST_INSERT_ID()").await?;
-        Ok(result[0].get(0).unwrap())
-    }
-    
-    async fn cleanup(&mut self) -> Result<(), ConnectError> {
-        self.connection.query_drop("DELETE FROM users WHERE name LIKE 'test_%'").await?;
-        Ok(())
-    }
-}
-```
-
-### Concurrent Testing
-
-Test concurrent scenarios effectively:
-
-```rust
-use tokio::task::JoinSet;
-
-let mut tasks = JoinSet::new();
-
-// Spawn multiple concurrent operations
-for i in 0..10 {
-    let mut conn = pool.get_connection().await?;
-    tasks.spawn(async move {
-        perform_concurrent_operation(&mut conn, i).await
-    });
-}
-
-// Wait for all tasks to complete
-while let Some(result) = tasks.join_next().await {
-    match result {
-        Ok(Ok(_)) => println!("Task completed successfully"),
-        Ok(Err(e)) => println!("Task failed: {}", e),
-        Err(e) => println!("Task panicked: {}", e),
-    }
-}
-```
-
 ## Best Practices
 
-### Code Organization
+### Performance Optimization
 
-1. **Separate concerns**: Keep state handlers focused on single responsibilities
-2. **Use common states**: Leverage the `common_states` module for standard workflows
-3. **Handler-local context**: Use handler-local context for state-specific data
-4. **Error propagation**: Properly propagate errors through the state machine
-
-### Performance
-
-1. **Connection pooling**: Use connection pools for efficiency
+1. **Connection pooling**: Use connection pools for high-concurrency scenarios
 2. **Batch operations**: Batch database operations when possible
-3. **Async operations**: Use async/await for I/O operations
-4. **Resource cleanup**: Clean up resources in the `exit` method
-
-### Testing
-
-1. **Test isolation**: Ensure tests don't interfere with each other
-2. **Mock connections**: Use mock connections for unit testing
-3. **Real database testing**: Test with real databases for integration testing
-4. **Concurrent testing**: Test concurrent scenarios thoroughly
+3. **Async operations**: Leverage async/await for I/O operations
+4. **Resource management**: Properly manage database connections and other resources
+5. **Metrics collection**: Collect and monitor performance metrics
 
 ### Error Handling
 
-1. **Error classification**: Classify errors appropriately
+1. **Error classification**: Distinguish between transient and permanent errors
 2. **Retry strategies**: Implement retry strategies for transient errors
 3. **Circuit breakers**: Use circuit breakers for system protection
-4. **Error context**: Preserve error context for debugging 
+4. **Error context**: Preserve error context for debugging
+
+### Testing Strategy
+
+1. **Test isolation**: Ensure tests don't interfere with each other
+2. **Load testing**: Test with realistic load patterns
+3. **Failure injection**: Test error handling and recovery
+4. **Monitoring**: Monitor test execution and performance
+
+### Code Organization
+
+1. **Separation of concerns**: Keep handlers focused on single responsibilities
+2. **Configuration management**: Use configuration extensions for test-specific options
+3. **Metrics and logging**: Implement comprehensive monitoring
+4. **Error handling**: Implement robust error handling throughout 
