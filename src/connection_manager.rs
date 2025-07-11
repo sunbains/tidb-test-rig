@@ -54,14 +54,6 @@ pub enum CoordinationEvent {
         connection_id: String,
         error: String,
     },
-    ImportJobStarted {
-        job_id: String,
-        connection_id: String,
-    },
-    ImportJobCompleted {
-        job_id: String,
-        connection_id: String,
-    },
     AllConnectionsReady,
     TestCompleted,
 }

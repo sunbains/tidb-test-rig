@@ -66,6 +66,9 @@ help:
 	@echo "  make run-ddl-tests                       # Run only DDL tests"
 	@echo "  make run-python-suite SUITE=txn          # Run specific suite"
 	@echo "  make run-python-suite SUITE=scale        # Run specific suite"
+	@echo "  SHOW_OUTPUT         - Print all output from test runs (stdout/stderr) [default: unset]"
+	@echo "  SHOW_SQL            - Print all SQL queries sent to the server [default: unset]"
+	@echo "  REAL_DB             - Use a real database connection instead of mock [default: unset]"
 
 # Build the main application
 build:
@@ -107,19 +110,19 @@ run-python-tests: run-all-python-tests
 
 run-all-python-tests:
 	@echo "Running all Python test suites..."
-	RUST_LOG=$(RUST_LOG) cargo run --bin python_test_runner --features="python_plugins" -- --all $(if $(SHOW_OUTPUT),--show-output)
+	RUST_LOG=$(RUST_LOG) cargo run --bin python_test_runner --features="python_plugins" -- --all $(if $(SHOW_OUTPUT),--show-output) $(if $(SHOW_SQL),--show-sql) $(if $(REAL_DB),--real-db)
 
 run-ddl-tests:
 	@echo "Running DDL Python test suite..."
-	RUST_LOG=$(RUST_LOG) cargo run --bin python_test_runner --features="python_plugins" -- --suite ddl $(if $(SHOW_OUTPUT),--show-output)
+	RUST_LOG=$(RUST_LOG) cargo run --bin python_test_runner --features="python_plugins" -- --suite ddl $(if $(SHOW_OUTPUT),--show-output) $(if $(SHOW_SQL),--show-sql) $(if $(REAL_DB),--real-db)
 
 run-scale-tests:
 	@echo "Running Scale Python test suite..."
-	RUST_LOG=$(RUST_LOG) cargo run --bin python_test_runner --features="python_plugins" -- --suite scale $(if $(SHOW_OUTPUT),--show-output)
+	RUST_LOG=$(RUST_LOG) cargo run --bin python_test_runner --features="python_plugins" -- --suite scale $(if $(SHOW_OUTPUT),--show-output) $(if $(SHOW_SQL),--show-sql) $(if $(REAL_DB),--real-db)
 
 run-txn-tests:
 	@echo "Running Txn Python test suite..."
-	RUST_LOG=$(RUST_LOG) cargo run --bin python_test_runner --features="python_plugins" -- --suite txn $(if $(SHOW_OUTPUT),--show-output)
+	RUST_LOG=$(RUST_LOG) cargo run --bin python_test_runner --features="python_plugins" -- --suite txn $(if $(SHOW_OUTPUT),--show-output) $(if $(SHOW_SQL),--show-sql) $(if $(REAL_DB),--real-db)
 
 run-python-suite:
 	@if [ -z "$(SUITE)" ]; then \
@@ -128,7 +131,7 @@ run-python-suite:
 		exit 1; \
 	fi
 	@echo "Running Python test suite: $(SUITE)"
-	RUST_LOG=$(RUST_LOG) cargo run --bin python_test_runner --features="python_plugins" -- --suite $(SUITE) $(if $(SHOW_OUTPUT),--show-output)
+	RUST_LOG=$(RUST_LOG) cargo run --bin python_test_runner --features="python_plugins" -- --suite $(SUITE) $(if $(SHOW_OUTPUT),--show-output) $(if $(SHOW_SQL),--show-sql) $(if $(REAL_DB),--real-db)
 
 # Check if code compiles
 check:

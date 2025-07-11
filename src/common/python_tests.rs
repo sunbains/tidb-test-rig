@@ -242,13 +242,25 @@ pub static PYTHON_SUITES: &[PythonSuiteConfig] = &[
 ];
 
 impl PythonSuiteConfig {
-    pub async fn run_suite_with_output(&self, show_output: bool) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn run_suite_with_output(
+        &self,
+        show_output: bool,
+        show_sql: bool,
+        real_db: bool,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         tracing::info!("Running Python test suite: {}", self.name);
         let test_files = PythonSuiteConfig::discover_test_files(self.test_dir).await?;
         tracing::info!("Found {} test files in {}", test_files.len(), self.test_dir);
         for test_file in test_files {
             tracing::info!("Running test: {}", test_file.display());
-            PythonSuiteConfig::run_single_python_test(&test_file, self.module_prefix, show_output).await?;
+            PythonSuiteConfig::run_single_python_test(
+                &test_file,
+                self.module_prefix,
+                show_output,
+                show_sql,
+                real_db,
+            )
+            .await?;
         }
         tracing::info!("All Python tests completed successfully for {}", self.name);
         Ok(())
@@ -282,6 +294,8 @@ impl PythonSuiteConfig {
         test_path: &std::path::Path,
         _module_prefix: &str,
         show_output: bool,
+        show_sql: bool,
+        real_db: bool,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let module_name = test_path.file_stem().unwrap().to_str().unwrap();
         let parent_dir = test_path.parent().unwrap();
@@ -295,6 +309,9 @@ import os
 # Add the project root to Python path so imports work correctly
 project_root = os.path.abspath('.')
 sys.path.insert(0, project_root)
+
+SHOW_SQL = os.environ.get('SHOW_SQL', 'false').lower() == 'true'
+REAL_DB = os.environ.get('REAL_DB', 'false').lower() == 'true'
 
 try:
     # Execute the test file directly
@@ -335,16 +352,43 @@ try:
         handler = handler_class()
         print(f"✅ Successfully instantiated {{handler_class_name}} for {module_name}")
         
-        # Create a mock context for testing
-        from src.common.test_rig_python import PyStateContext
-        context = PyStateContext(
-            host='localhost',
-            port=4000,
-            username='root',
-            password='',
-            database='test',
-            connection=None
-        )
+        # Create a context for testing
+        if REAL_DB:
+            from src.common.test_rig_python import PyStateContext, RealPyConnection
+            # Get connection parameters from environment or use defaults
+            import os
+            host = os.environ.get('TIDB_HOST', 'localhost:4000')
+            username = os.environ.get('TIDB_USER', 'root')
+            password = os.environ.get('TIDB_PASSWORD', '')
+            database = os.environ.get('TIDB_DATABASE', 'test')
+            
+            real_connection = RealPyConnection(
+                connection_info={{'id': 'test_conn'}}, 
+                connection_id='test_conn',
+                host=host,
+                username=username,
+                password=password,
+                database=database
+            )
+            context = PyStateContext(
+                host=host,
+                port=4000,  # Will be parsed from host if it contains port
+                username=username,
+                password=password,
+                database=database,
+                connection=real_connection
+            )
+        else:
+            from src.common.test_rig_python import PyStateContext, PyConnection
+            mock_connection = PyConnection(connection_info={{'id': 'test_conn'}}, connection_id='test_conn')
+            context = PyStateContext(
+                host='localhost',
+                port=4000,
+                username='root',
+                password='',
+                database='test',
+                connection=mock_connection
+            )
         
         # Execute the handler's enter method
         print(f"🔧 Executing {{handler_class_name}}.enter()...")
@@ -383,19 +427,39 @@ except Exception as e:
             test_path.file_stem().unwrap().to_str().unwrap()
         ));
         std::fs::write(&temp_script, test_content)?;
-        let output = std::process::Command::new("python3")
+
+        let mut command = std::process::Command::new("python3");
+        command
             .arg(&temp_script)
             .current_dir(parent_dir)
-            .env("PYTHONPATH", std::env::current_dir().unwrap())
-            .output()?;
+            .env("PYTHONPATH", std::env::current_dir().unwrap());
+
+        // Set SQL logging environment variable
+        if show_sql {
+            command.env("SHOW_SQL", "true");
+        }
+        // Set real DB environment variable
+        if real_db {
+            command.env("REAL_DB", "true");
+        }
+
+        let output = command.output()?;
         let stdout = String::from_utf8_lossy(&output.stdout);
         let stderr = String::from_utf8_lossy(&output.stderr);
-        
+
         if output.status.success() {
             tracing::info!("✅ Test passed: {}", test_path.display());
             println!("✅ Test passed: {}", test_path.display());
             if show_output && !stdout.is_empty() {
-                println!("Test output:\n{}", stdout);
+                println!("Test output:\n{stdout}");
+            }
+            // Always print SQL logs if show_sql is set, even if show_output is not
+            if show_sql && !stdout.is_empty() {
+                for line in stdout.lines() {
+                    if line.contains("SQL [") || line.contains("🔍 SQL [") {
+                        println!("{line}");
+                    }
+                }
             }
         } else {
             tracing::error!(

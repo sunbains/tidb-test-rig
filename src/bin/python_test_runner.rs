@@ -16,6 +16,12 @@ pub struct Args {
     /// Print all output from test runs (stdout/stderr)
     #[arg(long)]
     show_output: bool,
+    /// Show all SQL queries being sent to the server with connection IDs
+    #[arg(long)]
+    show_sql: bool,
+    /// Use a real database connection instead of mock
+    #[arg(long)]
+    real_db: bool,
 }
 
 #[tokio::main]
@@ -56,7 +62,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut any_failed = false;
     for suite in suites {
         println!("\n=== Running Python test suite: {} ===", suite.name);
-        match suite.run_suite_with_output(args.show_output).await {
+        match suite
+            .run_suite_with_output(args.show_output, args.show_sql, args.real_db)
+            .await
+        {
             Ok(_) => println!("✅ Suite '{}' completed successfully", suite.name),
             Err(e) => {
                 eprintln!("❌ Suite '{}' failed: {}", suite.name, e);

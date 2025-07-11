@@ -81,8 +81,6 @@ fn parse_state_string(state_str: &str) -> State {
         "testing_connection" => State::TestingConnection,
         "verifying_database" => State::VerifyingDatabase,
         "getting_version" => State::GettingVersion,
-        "checking_import_jobs" => State::CheckingImportJobs,
-        "showing_import_job_details" => State::ShowingImportJobDetails,
         "completed" => State::Completed,
         _ => State::Completed, // Default to completed for unknown states
     }
@@ -217,16 +215,6 @@ impl PyState {
     #[staticmethod]
     pub fn getting_version() -> String {
         State::GettingVersion.to_string()
-    }
-
-    #[staticmethod]
-    pub fn checking_import_jobs() -> String {
-        State::CheckingImportJobs.to_string()
-    }
-
-    #[staticmethod]
-    pub fn showing_import_job_details() -> String {
-        State::ShowingImportJobDetails.to_string()
     }
 
     #[staticmethod]
@@ -402,11 +390,6 @@ mod tests {
             assert_eq!(PyState::testing_connection(), "TestingConnection");
             assert_eq!(PyState::verifying_database(), "VerifyingDatabase");
             assert_eq!(PyState::getting_version(), "GettingVersion");
-            assert_eq!(PyState::checking_import_jobs(), "CheckingImportJobs");
-            assert_eq!(
-                PyState::showing_import_job_details(),
-                "ShowingImportJobDetails"
-            );
             assert_eq!(PyState::completed(), "Completed");
         });
     }

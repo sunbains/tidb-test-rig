@@ -7,6 +7,16 @@ from typing import Optional, List, Any, Dict
 from dataclasses import dataclass
 import threading
 import time
+import os
+
+# Check if SQL logging is enabled
+SHOW_SQL = os.environ.get('SHOW_SQL', 'false').lower() == 'true'
+REAL_DB = os.environ.get('REAL_DB', 'false').lower() == 'true'
+
+try:
+    import mysql.connector
+except ImportError:
+    mysql = None
 
 @dataclass
 class PyStateContext:
@@ -29,7 +39,10 @@ class PyConnection:
     
     def execute_query(self, query: str) -> List[Dict[str, Any]]:
         with self._lock:
-            print(f"Mock: [{self.connection_id}] Executing query: {query}")
+            if SHOW_SQL:
+                print(f"🔍 SQL [{self.connection_id}]: {query}")
+            else:
+                print(f"Mock: [{self.connection_id}] Executing query: {query}")
             if "SHOW TABLES" in query:
                 return [{"col_0": "ddl_test"}]
             elif "SHOW DATABASES" in query:
@@ -55,17 +68,110 @@ class PyConnection:
     def start_transaction(self) -> None:
         """Start a new transaction"""
         with self._lock:
-            print(f"Mock: [{self.connection_id}] Starting transaction")
+            if SHOW_SQL:
+                print(f"🔍 SQL [{self.connection_id}]: START TRANSACTION")
+            else:
+                print(f"Mock: [{self.connection_id}] Starting transaction")
     
     def commit(self) -> None:
         """Commit the current transaction"""
         with self._lock:
-            print(f"Mock: [{self.connection_id}] Committing transaction")
+            if SHOW_SQL:
+                print(f"🔍 SQL [{self.connection_id}]: COMMIT")
+            else:
+                print(f"Mock: [{self.connection_id}] Committing transaction")
     
     def rollback(self) -> None:
         """Rollback the current transaction"""
         with self._lock:
-            print(f"Mock: [{self.connection_id}] Rolling back transaction")
+            if SHOW_SQL:
+                print(f"🔍 SQL [{self.connection_id}]: ROLLBACK")
+            else:
+                print(f"Mock: [{self.connection_id}] Rolling back transaction")
+
+class RealPyConnection:
+    """Real database connection using mysql-connector-python"""
+    def __init__(self, connection_info: dict = None, connection_id: str = "default", host: str = None, port: int = None, username: str = None, password: str = None, database: str = None):
+        self.connection_info = connection_info or {}
+        self.connection_id = connection_id
+        self._lock = threading.Lock()
+        self._conn = None
+        self._server_type = None
+        
+        # Parse host and port if host contains port
+        if host and ':' in host:
+            host_parts = host.split(':')
+            self._host = host_parts[0]
+            self._port = int(host_parts[1]) if len(host_parts) > 1 else (port or 4000)
+        else:
+            self._host = host or os.environ.get('TIDB_HOST', 'localhost')
+            self._port = port or int(os.environ.get('TIDB_PORT', '4000'))
+        
+        self._username = username or os.environ.get('TIDB_USER', 'root')
+        self._password = password or os.environ.get('TIDB_PASSWORD', '')
+        self._database = database or os.environ.get('TIDB_DATABASE', 'test')
+        
+        self._connect()
+
+    def _connect(self):
+        if mysql is None:
+            raise ImportError("mysql-connector-python is not installed. Please install it with 'pip install mysql-connector-python'.")
+        
+        print(f"[RealPyConnection] Connecting to {self._host}:{self._port} as {self._username}")
+        
+        self._conn = mysql.connector.connect(
+            host=self._host,
+            port=self._port,
+            user=self._username,
+            password=self._password,
+            database=self._database,
+            autocommit=True
+        )
+        # Detect server type
+        cursor = self._conn.cursor()
+        cursor.execute("SELECT VERSION()")
+        version = cursor.fetchone()[0]
+        if 'tidb' in version.lower():
+            self._server_type = 'TiDB'
+        elif 'mysql' in version.lower():
+            self._server_type = 'MySQL'
+        else:
+            self._server_type = 'Unknown'
+        print(f"[RealPyConnection] Connected to server type: {self._server_type} (version: {version})")
+        cursor.close()
+
+    def execute_query(self, query: str):
+        with self._lock:
+            if SHOW_SQL:
+                print(f"🔍 SQL [{self.connection_id}]: {query}")
+            cursor = self._conn.cursor(dictionary=True)
+            try:
+                cursor.execute(query)
+                if cursor.with_rows:
+                    result = cursor.fetchall()
+                else:
+                    result = []
+                return result
+            finally:
+                cursor.close()
+
+    def start_transaction(self):
+        with self._lock:
+            if SHOW_SQL:
+                print(f"🔍 SQL [{self.connection_id}]: START TRANSACTION")
+            self._conn.start_transaction()
+
+    def commit(self):
+        with self._lock:
+            if SHOW_SQL:
+                print(f"🔍 SQL [{self.connection_id}]: COMMIT")
+            self._conn.commit()
+
+    def rollback(self):
+        with self._lock:
+            if SHOW_SQL:
+                print(f"🔍 SQL [{self.connection_id}]: ROLLBACK")
+            self._conn.rollback()
 
 class PyStateHandler:
     """Base class for Python state handlers"""
@@ -97,10 +203,22 @@ class MultiConnectionTestHandler(PyStateHandler):
         # Create multiple connections for concurrent testing
         self.connections = []
         for i in range(self.connection_count):
-            conn = PyConnection(
-                connection_info={"id": f"conn_{i}"},
-                connection_id=f"conn_{i}"
-            )
+            if REAL_DB:
+                # Use real connections when REAL_DB is enabled
+                conn = RealPyConnection(
+                    connection_info={"id": f"conn_{i}"},
+                    connection_id=f"conn_{i}",
+                    host=context.host,
+                    username=context.username,
+                    password=context.password,
+                    database=context.database
+                )
+            else:
+                # Use mock connections
+                conn = PyConnection(
+                    connection_info={"id": f"conn_{i}"},
+                    connection_id=f"conn_{i}"
+                )
             self.connections.append(conn)
         
         # Store connections in context for access by other methods

@@ -27,9 +27,6 @@ pub enum ConnectError {
     #[error("Database error: {0}")]
     Database(String),
 
-    #[error("Import job error: {0}")]
-    ImportJob(String),
-
     #[error("Isolation test error: {0}")]
     IsolationTest(String),
 

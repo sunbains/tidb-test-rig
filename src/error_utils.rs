@@ -152,7 +152,6 @@ pub fn classify_error(error: &ConnectError) -> ErrorCategory {
         ConnectError::Validation(_) => ErrorCategory::Permanent,
         ConnectError::Parse(_) => ErrorCategory::Permanent,
         ConnectError::Database(_) => ErrorCategory::Transient,
-        ConnectError::ImportJob(_) => ErrorCategory::Transient,
         ConnectError::IsolationTest(_) => ErrorCategory::Transient,
         ConnectError::StateMachine(_) => ErrorCategory::Transient,
         ConnectError::CliArgument(_) => ErrorCategory::Permanent,
