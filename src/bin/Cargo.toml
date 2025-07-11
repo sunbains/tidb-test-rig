@@ -59,6 +59,11 @@ name = "python_demo"
 path = "python_demo.rs"
 required-features = ["python_plugins"]
 
+[[bin]]
+name = "python_test_runner"
+path = "python_test_runner.rs"
+required-features = ["python_plugins"]
+
 [features]
 default = []
 import_jobs = []

@@ -235,6 +235,11 @@ pub static PYTHON_SUITES: &[PythonSuiteConfig] = &[
         test_dir: "src/scale",
         module_prefix: "src.scale",
     },
+    PythonSuiteConfig {
+        name: "Txn",
+        test_dir: "src/txn",
+        module_prefix: "src.txn",
+    },
     // Add more suites here as needed
 ];
 
@@ -298,7 +303,10 @@ impl PythonSuiteConfig {
             r#"
 import sys
 import os
-sys.path.insert(0, '.')
+
+# Add the project root to Python path so imports work correctly
+project_root = os.path.abspath('.')
+sys.path.insert(0, project_root)
 
 try:
     # Execute the test file directly
@@ -346,6 +354,8 @@ try:
     
 except Exception as e:
     print(f"❌ Failed to execute {module_name}: {{e}}")
+    import traceback
+    traceback.print_exc()
     sys.exit(1)
 "#,
             test_path.file_name().unwrap().to_str().unwrap(),
@@ -359,6 +369,7 @@ except Exception as e:
         let output = std::process::Command::new("python3")
             .arg(&temp_script)
             .current_dir(parent_dir)
+            .env("PYTHONPATH", std::env::current_dir().unwrap())
             .output()?;
         if output.status.success() {
             tracing::info!("✅ Test passed: {}", test_path.display());

@@ -13,7 +13,9 @@ MONITOR_DURATION ?= 60
 
 .PHONY: help build db_tests clean db_tests build-test run-simple run-advanced check format lint \
 	run-simple-connection run-isolation-test run-cli-test run-logging-test \
-	run-basic-test run-basic-debug-test run-basic-verbose-test run-job-monitor-test
+	run-basic-test run-basic-debug-test run-basic-verbose-test run-job-monitor-test \
+	run-python-tests run-all-python-tests run-ddl-tests run-scale-tests run-txn-tests \
+	run-python-suite
 
 # Default target
 help:
@@ -39,11 +41,20 @@ help:
 	@echo "  run-basic-verbose-test - Run basic db_tests with verbose output"
 	@echo "  run-simple             - Run simple multi-connection db_tests"
 	@echo "  run-advanced           - Run advanced multi-connection db_tests"
-
 	@echo "  run-isolation-test - Run isolation db_tests"
 	@echo "  run-cli-test       - Run CLI db_tests"
 	@echo "  run-logging-test   - Run logging db_tests"
 	@echo "  run-job-monitor-test - Run job monitoring db_tests"
+	@echo ""
+	@echo "Python Test Suite Targets:"
+	@echo "  run-python-tests       - Run all Python test suites (DDL, Scale, Txn)"
+	@echo "  run-all-python-tests   - Alias for run-python-tests"
+	@echo "  run-ddl-tests          - Run DDL Python test suite only"
+	@echo "  run-scale-tests        - Run Scale Python test suite only"
+	@echo "  run-txn-tests          - Run Txn Python test suite only"
+	@echo "  run-python-suite       - Run a specific Python test suite (use SUITE=name)"
+	@echo ""
+	@echo "Utility targets:"
 	@echo "  check                  - Check if code compiles without building"
 	@echo "  format                 - Format code with rustfmt"
 	@echo "  lint                   - Run clippy linter"
@@ -53,6 +64,10 @@ help:
 	@echo "  RUST_LOG=debug make run-basic-test"
 	@echo "  TIDB_HOST=myhost:4000 TIDB_USER=admin make run-basic-test"
 	@echo "  LOG_LEVEL=debug LOG_FILE=true make run-logging-test"
+	@echo "  make run-python-tests                    # Run all Python test suites"
+	@echo "  make run-ddl-tests                       # Run only DDL tests"
+	@echo "  make run-python-suite SUITE=txn          # Run specific suite"
+	@echo "  make run-python-suite SUITE=scale        # Run specific suite"
 
 # Build the main application
 build:
@@ -80,8 +95,6 @@ run-basic-debug-test:
 run-basic-verbose-test:
 	RUST_LOG=debug cargo run --bin basic -- -H $(TIDB_HOST) -u $(TIDB_USER) -d $(TIDB_DATABASE) $(if $(TIDB_PASSWORD),--password $(TIDB_PASSWORD),--no-password-prompt) --verbose
 
-
-
 run-isolation-test:
 	RUST_LOG=$(RUST_LOG) cargo run --bin isolation -- -H $(TIDB_HOST) -u $(TIDB_USER) -d $(TIDB_DATABASE) $(if $(TIDB_PASSWORD),--password $(TIDB_PASSWORD),--no-password-prompt)
 
@@ -93,6 +106,34 @@ run-logging-test:
 
 run-job-monitor-test:
 	RUST_LOG=$(RUST_LOG) cargo run --bin job_monitor --features="import_jobs" -- -H $(TIDB_HOST) -u $(TIDB_USER) -d $(TIDB_DATABASE) $(if $(TIDB_PASSWORD),--password $(TIDB_PASSWORD),--no-password-prompt) --monitor-duration $(MONITOR_DURATION)
+
+# Python Test Suite Targets
+run-python-tests: run-all-python-tests
+
+run-all-python-tests:
+	@echo "Running all Python test suites..."
+	RUST_LOG=$(RUST_LOG) cargo run --bin python_test_runner --features="python_plugins" -- --all
+
+run-ddl-tests:
+	@echo "Running DDL Python test suite..."
+	RUST_LOG=$(RUST_LOG) cargo run --bin python_test_runner --features="python_plugins" -- --suite ddl
+
+run-scale-tests:
+	@echo "Running Scale Python test suite..."
+	RUST_LOG=$(RUST_LOG) cargo run --bin python_test_runner --features="python_plugins" -- --suite scale
+
+run-txn-tests:
+	@echo "Running Txn Python test suite..."
+	RUST_LOG=$(RUST_LOG) cargo run --bin python_test_runner --features="python_plugins" -- --suite txn
+
+run-python-suite:
+	@if [ -z "$(SUITE)" ]; then \
+		echo "Error: SUITE variable is required. Usage: make run-python-suite SUITE=<suite_name>"; \
+		echo "Available suites: ddl, scale, txn"; \
+		exit 1; \
+	fi
+	@echo "Running Python test suite: $(SUITE)"
+	RUST_LOG=$(RUST_LOG) cargo run --bin python_test_runner --features="python_plugins" -- --suite $(SUITE)
 
 # Check if code compiles
 check:
