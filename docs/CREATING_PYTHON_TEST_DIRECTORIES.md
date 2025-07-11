@@ -714,7 +714,7 @@ print('✅ My tests import correctly')
 
 For comprehensive documentation, examples, and usage instructions, see:
 
-**[📖 Running Python Tests Guide](../../docs/RUNNING_PYTHON_TESTS.md)**
+**[📖 Running Python Tests Guide](./RUNNING_PYTHON_TESTS.md)**
 
 ## Test Files
 
@@ -734,7 +734,7 @@ All Python tests use the shared `test_rig_python.py` stub module located in `src
 - Unified state management and error handling
 - Easy maintenance and updates
 
-See the [main documentation](../../docs/RUNNING_PYTHON_TESTS.md) for detailed descriptions of each test.
+See the [main documentation](./RUNNING_PYTHON_TESTS.md) for detailed descriptions of each test.
 ```
 
 ## Step 7: Add to Workspace
