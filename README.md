@@ -2,236 +2,161 @@
 
 # TiDB Testing Framework
 
-A Rust library framework for testing TiDB database functionality. It should be possible to use it for MySQL too.
+A Rust library framework for testing TiDB database functionality with Python plugin support. The framework provides comprehensive testing capabilities for database operations, transactions, and DDL operations.
 
 ## Overview
 
-This framework provides examples for different TiDB testing scenarios:
-- Basic connection testing
-- Multi-connection testing
-- Transaction isolation testing
-- Import job monitoring
-- Configuration file generation
+This framework provides a comprehensive testing solution for TiDB with the following capabilities:
 
-
-The multi-connection feature is for creating separate state machines and using a coordinator to manage and control
-the different connections for sophisticated concurrent/parallel testing.
+- **Core Testing**: Basic connection testing and database operations
+- **Multi-Connection Testing**: Concurrent connection testing with coordination
+- **Transaction Testing**: Comprehensive transaction isolation and concurrency testing
+- **DDL Testing**: Data Definition Language operation testing
+- **Scale Testing**: Performance and scalability testing
+- **Python Plugin System**: Write test handlers in Python for rapid development
+- **Configuration Management**: JSON and TOML configuration files
+- **Command Line Interface**: Flexible CLI options for all tests
 
 ## Features
 
-- **Connection Testing**: Test basic database connectivity and simple queries
-- **Multi-Connection Testing**: Test multiple concurrent connections
-- **Isolation Testing**: Test transaction isolation levels
-- **Configuration Management**: JSON and TOML configuration files
-- **Command Line Interface**: Flexible CLI options for all tests
-- **Enhanced Error Handling**: Retry strategies, circuit breakers, and error context preservation
+### Core Framework
+- **State Machine Architecture**: Clean, extensible state-based testing workflows
+- **Connection Management**: Robust database connection handling with pooling
+- **Error Handling**: Comprehensive error handling with retry strategies and circuit breakers
+- **Configuration**: Flexible configuration via files, environment variables, and CLI
+- **Logging**: Structured logging with configurable levels and outputs
 
-## Enhanced Error Handling
-
-The framework includes sophisticated error handling capabilities for production-ready database operations:
-
-### Retry Strategies
-- **Exponential Backoff**: Configurable retry delays with exponential increase
-- **Jitter**: Random delay variation to prevent thundering herd problems
-- **Timeout Control**: Overall operation timeout with per-attempt limits
-- **Configurable Attempts**: Set maximum retry attempts per operation
-
-### Circuit Breaker Pattern
-- **Failure Threshold**: Open circuit after specified number of failures
-- **Recovery Timeout**: Wait period before attempting to close circuit
-- **Half-Open State**: Test service health before fully closing circuit
-- **Success Threshold**: Number of successful calls to close circuit
-
-### Error Context Preservation
-- **Rich Context**: Timestamp, operation name, attempt count, duration
-- **Connection Info**: Host, database, user information
-- **Custom Metadata**: Additional key-value pairs for debugging
-- **Builder Pattern**: Fluent API for building error contexts
-
-### Error Classification
-- **Transient Errors**: Automatically retried (connection failures, timeouts)
-- **Permanent Errors**: Fail fast (authentication, configuration errors)
-- **Recovery Strategies**: Appropriate handling based on error type
-
-### Usage Examples
-
-```rust
-use test_rig::{
-    ResilientConnectionManager,
-    create_db_retry_config,
-    create_db_circuit_breaker_config,
-    classify_error,
-    get_recovery_strategy,
-};
-
-// Create resilient connection manager
-let retry_config = create_db_retry_config();
-let circuit_config = create_db_circuit_breaker_config();
-let manager = ResilientConnectionManager::with_custom_config(
-    pool,
-    circuit_config,
-    retry_config,
-);
-
-// Execute with automatic retry and circuit breaker
-let result = manager.execute_with_resilience("critical_query", || {
-    // Your database operation here
-    perform_database_operation()
-}).await;
-
-// Error classification and recovery
-let error = ConnectError::Connection(mysql::Error::server_disconnected());
-match classify_error(&error) {
-    ErrorCategory::Transient => {
-        // Will be retried automatically
-        println!("Transient error, retrying...");
-    }
-    ErrorCategory::Permanent => {
-        // Fail fast
-        println!("Permanent error, failing immediately");
-    }
-    ErrorCategory::Unknown => {
-        // Retry with limits
-        println!("Unknown error, retrying with limits");
-    }
-}
-```
-
-## Python Plugin Support
-
-The framework now supports Python plugins for state handlers, allowing you to write test logic in Python while leveraging the Rust state machine infrastructure.
-
-### Features
-
-- **Python State Handlers**: Write state handlers in Python using the `PyStateHandler` base class
-- **Seamless Integration**: Python handlers integrate with the Rust state machine
+### Python Plugin System
+- **Python State Handlers**: Write test logic in Python using `PyStateHandler` base class
+- **Seamless Integration**: Python handlers integrate with Rust state machine
 - **Type Safety**: Full type hints and validation between Rust and Python
 - **Standalone Testing**: Python handlers can be tested independently
-- **Configuration Support**: Python scripts read from the same config files and environment variables
+- **Real Database Support**: Connect to real TiDB/MySQL servers or use mock connections
 
-### Quick Start with Python
-
-#### 1. Install Python Dependencies
-
-```bash
-# Install mysql-connector-python for database connections
-pip install mysql-connector-python
-```
-
-#### 2. Run Python Isolation Test
-
-```bash
-# Using environment variables
-export TIDB_HOST=tidb.a123456z.clusters.dev.tidb-cloud.com:4000
-export TIDB_USER=your_user
-export TIDB_PASSWORD=your_password
-export TIDB_DATABASE=your_database
-python3 examples/run_isolation_test.py
-
-# Using command line arguments
-python3 examples/run_isolation_test.py \
-  --host tidb.a123456z.clusters.dev.tidb-cloud.com:4000 \
-  --user your_user \
-  --password your_password \
-  --database your_database
-
-# Using configuration file
-python3 examples/run_isolation_test.py --config tidb_config.json
-```
-
-#### 3. Create Custom Python Handlers
-
-```python
-from test_rig_python import PyStateHandler, PyStateContext, PyState
-
-class MyCustomHandler(PyStateHandler):
-    def __init__(self):
-        super().__init__()
-        self.counter = 0
-    
-    def enter(self, context: PyStateContext) -> str:
-        print(f"Entering state with host: {context.host}")
-        return PyState.initial()
-    
-    def execute(self, context: PyStateContext) -> str:
-        self.counter += 1
-        print(f"Executing (attempt {self.counter})")
-        
-        if context.connection:
-            # Execute database operations
-            results = context.connection.execute_query("SELECT 1")
-            return PyState.completed()
-        else:
-            return PyState.connecting()
-    
-    def exit(self, context: PyStateContext) -> None:
-        print(f"Exiting state (total executions: {self.counter})")
-```
-
-### Python Handler Integration
-
-Python handlers can be integrated with the Rust state machine:
-
-```rust
-use test_rig::python_bindings::register_python_handler;
-
-// Register Python handler for a specific state
-let py_handler = load_python_handler("my_module.MyCustomHandler")?;
-register_python_handler(&mut state_machine, State::TestingConnection, py_handler)?;
-```
-
-### Available Python Examples
-
-- **`examples/python_handlers.py`**: Collection of example Python handlers
-- **`examples/run_isolation_test.py`**: Standalone Python isolation test
-- **`examples/test_rig_python.pyi`**: Type stubs for IDE support
-
-### Configuration Priority
-
-Python scripts follow the same configuration priority as Rust binaries:
-1. Command-line arguments (highest priority)
-2. Environment variables (`TIDB_HOST`, `TIDB_USER`, `TIDB_PASSWORD`, `TIDB_DATABASE`)
-3. Configuration file (`tidb_config.json` or `tidb_config.toml`)
-4. Default values (lowest priority)
-
-For more detailed information about the Python plugin system, see the [Python Plugin Documentation](docs/PYTHON_PLUGIN.md).
+### Test Suites
+- **DDL Tests**: Data Definition Language operations (CREATE, ALTER, DROP)
+- **Transaction Tests**: Transaction isolation, concurrency, deadlocks, savepoints
+- **Scale Tests**: Performance and scalability testing
+- **Multi-Connection Tests**: Concurrent connection testing with coordination
 
 ## Quick Start
 
-### 1. Generate Configuration
+### Prerequisites
 
-Create a configuration file using the config generator:
+1. **Rust**: Install Rust and Cargo
+2. **Python**: Python 3.8+ with development headers
+3. **Database**: TiDB or MySQL server (optional for mock testing)
+
+### Installation
 
 ```bash
-# Generate default JSON configuration
-cargo run --bin config_gen
+# Clone the repository
+git clone <repository-url>
+cd tidb_tests
 
-# Generate TOML configuration with custom settings
-cargo run --bin config_gen -- --format toml --host my-tidb:4000 --username myuser --database mydb
+# Build the project
+cargo build
+
+# Install Python dependencies (optional, for real database connections)
+pip install mysql-connector-python
 ```
 
-### 2. Run Tests
+### Basic Usage
 
-Use configuration files with any test:
+#### Run Basic Connection Test
+```bash
+cargo run --bin basic -- -H localhost:4000 -u root
+```
+
+#### Run Python Test Suites
+```bash
+# Run all Python test suites
+make run-python-tests
+
+# Run specific test suite
+make run-ddl-tests
+make run-txn-tests
+make run-scale-tests
+
+# Run with real database connection
+TIDB_HOST=your-tidb-host:4000 TIDB_USER=your-user TIDB_PASSWORD=your-password make run-txn-tests REAL_DB=1
+
+# Show SQL queries and output
+make run-txn-tests SHOW_SQL=1 SHOW_OUTPUT=1
+```
+
+#### Run Multi-Connection Tests
+```bash
+cargo run --bin simple_multi_connection --features multi_connection
+```
+
+#### Run Isolation Tests
+```bash
+cargo run --bin isolation --features isolation_test
+```
+
+## Python Plugin System
+
+The framework supports writing test handlers in Python, allowing rapid development and testing of database operations.
+
+### Writing Python Handlers
+
+```python
+from src.common.test_rig_python import PyStateHandler, PyStateContext, PyState
+
+class BasicTransactionHandler(PyStateHandler):
+    def enter(self, context: PyStateContext) -> str:
+        print(f"Connecting to {context.host}:{context.port}")
+        return PyState.connecting()
+    
+    def execute(self, context: PyStateContext) -> str:
+        if context.connection:
+            # Execute database operations
+            context.connection.execute_query("DROP TABLE IF EXISTS txn_test")
+            context.connection.execute_query("CREATE TABLE txn_test (id INT, name VARCHAR(50), balance DECIMAL(10,2))")
+            
+            # Test transactions
+            context.connection.start_transaction()
+            context.connection.execute_query("INSERT INTO txn_test (id, name, balance) VALUES (1, 'Alice', 100.00)")
+            context.connection.execute_query("INSERT INTO txn_test (id, name, balance) VALUES (2, 'Bob', 200.00)")
+            context.connection.rollback()
+            
+            return PyState.completed()
+        return PyState.connecting()
+    
+    def exit(self, context: PyStateContext) -> None:
+        print("Transaction test completed")
+```
+
+### Running Python Tests
 
 ```bash
-# Basic connection test with config file
-cargo run --bin basic -- -c tidb_config.json
+# Run with mock connections (default)
+make run-txn-tests
 
-# Import Job monitoring with config file
-cargo run --bin job_monitor --features import_jobs -- -c tidb_config.json
+# Run with real database
+TIDB_HOST=your-host:4000 TIDB_USER=your-user TIDB_PASSWORD=your-password make run-txn-tests REAL_DB=1
 
-# Isolation test with config file
-cargo run --bin isolation --features isolation_test -- -c tidb_config.json
+# Show SQL queries
+make run-txn-tests SHOW_SQL=1
+
+# Show all output
+make run-txn-tests SHOW_OUTPUT=1
 ```
 
 ## Configuration
 
-### Configuration File Format
+### Environment Variables
+```bash
+export TIDB_HOST="localhost:4000"
+export TIDB_USER="root"
+export TIDB_PASSWORD="your-password"
+export TIDB_DATABASE="test"
+```
 
-The framework supports both JSON and TOML configuration files:
+### Configuration Files
 
-#### JSON Example (`tidb_config.json`)
+#### JSON Configuration (`tidb_config.json`)
 ```json
 {
   "database": {
@@ -245,23 +170,16 @@ The framework supports both JSON and TOML configuration files:
   "logging": {
     "level": "info",
     "format": "text",
-    "file": null,
     "console": true
-  },
-  "test": {
-    "rows": 10,
-    "timeout_secs": 60,
-    "verbose": false
   }
 }
 ```
 
-#### TOML Example (`tidb_config.toml`)
+#### TOML Configuration (`tidb_config.toml`)
 ```toml
 [database]
 host = "localhost:4000"
 username = "root"
-# password = "your_password_here"
 database = "test"
 pool_size = 5
 timeout_secs = 30
@@ -270,298 +188,78 @@ timeout_secs = 30
 level = "info"
 format = "text"
 console = true
-
-[test]
-rows = 10
-timeout_secs = 60
-verbose = false
 ```
 
-### Environment Variables
+## Available Binaries
 
-You can override configuration settings using environment variables:
+- **`basic`**: Basic connection testing
+- **`simple_multi_connection`**: Multi-connection testing (requires `multi_connection` feature)
+- **`isolation`**: Transaction isolation testing (requires `isolation_test` feature)
+- **`job_monitor`**: Import job monitoring (requires `import_jobs` feature)
+- **`config_gen`**: Configuration file generation
+- **`python_demo`**: Python plugin demonstration (requires `python_plugins` feature)
+- **`python_test_runner`**: Python test suite runner (requires `python_plugins` feature)
+
+## Test Suites
+
+### DDL Tests (`src/ddl/`)
+- Basic DDL operations (CREATE, ALTER, DROP)
+- Concurrent DDL operations
+- Specialized object testing
+- User and index management
+
+### Transaction Tests (`src/txn/`)
+- Basic transaction operations
+- Transaction isolation levels
+- Deadlock detection and handling
+- MVCC version chain testing
+- Transaction concurrency
+- Savepoints and rollbacks
+- Transaction error handling
+- Performance testing
+
+### Scale Tests (`src/scale/`)
+- Basic scalability testing
+- Performance benchmarks
+
+## Makefile Targets
 
 ```bash
-export TIDB_HOST="my-tidb:4000"
-export TIDB_USERNAME="myuser"
-export TIDB_PASSWORD="mypassword"
-export TIDB_DATABASE="mydb"
-export TIDB_LOG_LEVEL="debug"
-export TIDB_TEST_ROWS="20"
-export TIDB_MONITOR_DURATION="600"
+# Python test suites
+make run-python-tests          # Run all Python test suites
+make run-ddl-tests            # Run DDL test suite
+make run-txn-tests            # Run transaction test suite
+make run-scale-tests          # Run scale test suite
+
+# With options
+make run-txn-tests REAL_DB=1 SHOW_SQL=1 SHOW_OUTPUT=1
+
+# Build and check
+make build                    # Build the project
+make check                    # Check compilation
+make format                   # Format code
+make lint                     # Run linter
 ```
 
-### Configuration Priority
+## Error Handling
 
-1. Command-line arguments (highest priority)
-2. Environment variables
-3. Configuration file
-4. Default values (lowest priority)
+The framework includes sophisticated error handling with:
 
-## Available Tests
+- **Retry Strategies**: Exponential backoff with jitter
+- **Circuit Breaker Pattern**: Automatic failure detection and recovery
+- **Error Classification**: Transient vs permanent error handling
+- **Context Preservation**: Rich error context for debugging
 
-### Basic Connection Test
-```bash
-cargo run --bin basic
-cargo run --bin basic -- -c config.json
-```
+## Contributing
 
-### Multi-Connection Test
-```bash
-cargo run --bin simple_multi_connection --features multi_connection
-cargo run --bin multi_connection --features multi_connection,import_jobs
-```
-
-### Isolation Test
-```bash
-cargo run --bin isolation --features isolation_test
-cargo run --bin isolation --features isolation_test -- --test-rows 20
-```
-
-### Job Monitoring
-```bash
-cargo run --bin job_monitor --features import_jobs
-cargo run --bin job_monitor --features import_jobs -- --monitor-duration 600
-```
-
-## Command Line Options
-
-All binaries support these common options:
-
-- `-c, --config <FILE>`: Configuration file path
-- `-H, --host <HOST>`: Database host (hostname:port)
-- `-u, --user <USER>`: Database username
-- `-d, --database <DB>`: Database name
-- `--password <PASSWORD>`: Database password
-- `--no-password-prompt`: Skip password prompt
-- `--log-level <LEVEL>`: Log level (debug, info, warn, error)
-- `--log-file`: Enable file logging
-- `--log-file-path <PATH>`: Log file path
-- `-v, --verbose`: Enable verbose logging
-
-### Test-Specific Options
-
-#### Job Monitor Options
-- `-t, --monitor-duration <SECONDS>`: Import job monitoring duration (default: 300)
-- `--import-config <FILE>`: Import job config file path (JSON or TOML)
-- `--update-interval <SECONDS>`: Status update interval
-- `--show-details`: Show detailed job information
-
-#### Isolation Test Options
-- `--test-rows <ROWS>`: Number of test rows to use
-- `--isolation-level <LEVEL>`: Database isolation level
-- `--concurrent-connections <COUNT>`: Number of concurrent connections
-
-## Project Structure
-
-```
-test_rig/
-├── src/
-│   ├── lib.rs                           # Main library with shared functionality and exports
-│   ├── cli.rs                           # CLI argument parsing and common arguments
-│   ├── config.rs                        # Configuration management (JSON/TOML)
-│   ├── config_extensions.rs             # Dynamic configuration extensions
-│   ├── errors.rs                        # Error types and handling
-│   ├── error_utils.rs                   # Error handling utilities and context
-│   ├── retry.rs                         # Retry strategies and circuit breakers
-│   ├── connection.rs                    # Low-level database connection utilities
-│   ├── connection_manager.rs            # High-level connection management
-│   ├── logging.rs                       # Structured logging configuration
-│   ├── lib_utils.rs                     # Common utility functions
-│   ├── state_machine.rs                 # Core state machine for standard workflows
-│   ├── state_machine_dynamic.rs         # Dynamic state machine for extensible workflows
-│   ├── common_states.rs                 # Shared state definitions for common workflows
-│   ├── state_handlers.rs                # State handlers for core state machine
-│   ├── multi_connection_state_machine.rs # Multi-connection coordination
-│   └── python_bindings.rs               # Python plugin system (PyO3)
-│
-├── src/bin/                             # Binary executables (separate workspace)
-│   ├── Cargo.toml                       # Binary package configuration
-│   ├── README.md                        # Binary-specific documentation
-│   ├── basic.rs                         # Basic connection test (core state machine)
-│   ├── config_gen.rs                    # Configuration file generator
-│   ├── isolation.rs                     # Transaction isolation test (dynamic states)
-│   ├── job_monitor.rs                   # Import job monitoring (dynamic states)
-│   ├── multi_connection.rs              # Multi-connection test
-│   ├── simple_multi_connection.rs       # Simple multi-connection test
-│   └── python_demo.rs                   # Python plugin demonstration
-│
-├── examples/                            # Example usage and demonstrations
-│   ├── enhanced_error_handling.rs       # Enhanced error handling examples
-│   ├── dynamic_state_example.rs         # Dynamic state machine examples
-│   ├── python_handlers.py               # Python handler examples
-│   ├── run_isolation_test.py            # Standalone Python isolation test
-│   └── test_rig_python.pyi              # Python type stubs for IDE support
-│
-├── docs/                                # Documentation
-│   ├── ARCHITECTURE.md                  # System architecture overview
-│   ├── ADVANCED_GUIDE.md                # Advanced usage and troubleshooting
-│   ├── DYNAMIC_STATES.md                # Dynamic state system guide
-│   └── PYTHON_PLUGINS.md                # Python plugin system documentation
-│
-├── Cargo.toml                           # Main package configuration (workspace)
-├── Cargo.lock                           # Dependency lock file
-├── README.md                            # This file
-├── LICENSE                              # Apache 2.0 license
-├── Makefile                             # Build and development tasks
-├── tidb_config.json                     # Example JSON configuration
-├── tidb_config.toml                     # Example TOML configuration
-└── get-pip.py                           # Python dependency installer
-```
-
-## State Management Architecture
-
-The framework provides two complementary state management systems:
-
-### Core State Machine (`state_machine.rs`)
-- **Static states**: `Initial`, `ParsingConfig`, `Connecting`, `TestingConnection`, `VerifyingDatabase`, `GettingVersion`, `Completed`, `Error`
-- **Use case**: Standard connection workflows in binaries like `basic.rs`
-- **Benefits**: Type-safe, compile-time validation, simple to use
-
-### Dynamic State Machine (`state_machine_dynamic.rs`)
-- **Dynamic states**: String-based states that can be defined at compile time for each test
-- **Use case**: Extensible workflows with test-specific states (isolation tests, job monitoring, etc.)
-- **Benefits**: Flexible, extensible, supports custom state handlers, no need to modify core library
-
-### Common States (`common_states.rs`)
-- **Shared definitions**: Common workflow states used across multiple binaries
-- **Benefits**: Eliminates code duplication, single source of truth for common states
-- **Available states**: `parsing_config()`, `connecting()`, `testing_connection()`, `verifying_database()`, `getting_version()`, `completed()`
-
-### Usage Examples
-
-#### Using Core State Machine (Basic Workflows)
-```rust
-use test_rig::{State, StateMachine, state_handlers::*};
-
-let mut machine = StateMachine::new();
-machine.register_handler(State::Initial, Box::new(InitialHandler));
-machine.register_handler(State::ParsingConfig, Box::new(ParsingConfigHandler::new(host, user, password, database)));
-// ... register other handlers
-```
-
-#### Using Dynamic State Machine (Extensible Workflows)
-```rust
-use test_rig::{DynamicStateMachine, common_states::*};
-
-let mut machine = DynamicStateMachine::new();
-machine.register_handler(parsing_config(), Box::new(ParsingConfigHandlerAdapter));
-machine.register_handler(connecting(), Box::new(ConnectingHandlerAdapter));
-machine.register_handler(creating_table(), Box::new(CreatingTableHandler));
-// ... register other handlers and test-specific states
-```
-
-## Development
-
-### Building
-
-```bash
-# Build entire workspace (library + binaries)
-cargo build --workspace
-
-# Build only the library
-cargo build
-
-# Build specific binary
-cargo build --bin basic
-
-# Build with features
-cargo build --bin job_monitor --features import_jobs
-```
-
-### Testing
-
-```bash
-# Run all tests in workspace
-cargo test --workspace
-
-# Run only library tests
-cargo test
-
-# Run with specific features
-cargo test --features import_jobs
-```
-
-### Code Quality
-
-```bash
-# Check code
-cargo check
-
-# Format code
-cargo fmt
-
-# Lint code
-cargo clippy
-```
-
-### Running Examples
-
-```bash
-# Run enhanced error handling example
-cargo run --example enhanced_error_handling
-```
-
-## Configuration Extension System
-
-The configuration generator (`config_gen.rs`) supports a plugin pattern for test-specific configuration options. This allows new tests to add their own CLI arguments and config logic without modifying the core generator.
-
-### How It Works
-- Each test binary can define a `ConfigExtension` implementing the `ConfigExtension` trait
-- The extension registers itself with the config generator at runtime
-- When you run `config_gen`, all registered extensions add their CLI options and config logic
-- This keeps test-specific config code in the test binary, not in the core generator
-
-### Example: Adding a Test-Specific Option
-To add a `--test-rows` option for the isolation test:
-
-**In `src/bin/isolation.rs`:**
-```rust
-use test_rig::{ConfigExtension, register_config_extension};
-use clap::Command;
-
-struct IsolationConfigExtension;
-
-impl ConfigExtension for IsolationConfigExtension {
-    fn add_cli_args(&self, app: Command) -> Command {
-        app.arg(
-            clap::Arg::new("test-rows")
-                .long("test-rows")
-                .help("Number of test rows to create for isolation testing")
-                .default_value("10")
-        )
-    }
-    fn build_config(&self, args: &clap::ArgMatches, config: &mut test_rig::config::AppConfig) -> std::result::Result<(), Box<dyn std::error::Error>> {
-        if let Some(test_rows) = args.get_one::<String>("test-rows") {
-            if let Ok(rows) = test_rows.parse::<u32>() {
-                config.test.rows = rows;
-            }
-        }
-        Ok(())
-    }
-    fn get_extension_name(&self) -> &'static str { "isolation_test" }
-    fn get_help_text(&self) -> &'static str { "Adds --test-rows option for isolation testing" }
-}
-
-fn register_extensions() {
-    register_config_extension(Box::new(IsolationConfigExtension));
-}
-
-// In your main function, call register_extensions() before parsing args:
-fn main() {
-    register_extensions();
-    // ... rest of main
-}
-```
-
-### Using the Extension
-Now, when you run the config generator, the `--test-rows` option will be available:
-
-```bash
-cargo run --bin config_gen -- --test-rows 25 --host my-tidb:4000 --username myuser
-```
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests for new functionality
+5. Ensure all tests pass
+6. Submit a pull request
 
 ## License
 
-[LICENSE file](LICENSE)
+This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
 

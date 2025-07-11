@@ -1,7 +1,7 @@
-# TiDB Multi-Connection Test Tool Architecture
+# TiDB Testing Framework Architecture
 
 ## Overview
-This project is a modular, extensible Rust tool for testing TiDB, database state, and import job monitoring. It supports both single and multiple concurrent connections, with a focus on clean state management, handler modularity, and robust error handling.
+This project is a modular, extensible Rust tool for testing TiDB database functionality with Python plugin support. It supports both single and multiple concurrent connections, with a focus on clean state management, handler modularity, and robust error handling.
 
 ---
 
@@ -28,31 +28,37 @@ The framework provides two complementary state management systems:
 - **Benefits**: Single source of truth, consistent behavior, easier maintenance.
 
 ### 2. Handler Modularity
-- Each state (e.g., Connecting, CheckingImportJobs) has its own handler struct implementing `StateHandler`.
+- Each state has its own handler struct implementing `StateHandler` or `DynamicStateHandler`.
 - Handlers can store and retrieve their own context, reducing global state bloat and improving maintainability.
 - New states/handlers can be added with minimal impact on the rest of the system.
 
-### 3. Secure & Flexible CLI
+### 3. Python Plugin System
+- **PyO3 Integration**: Seamless integration between Rust and Python using PyO3.
+- **Python State Handlers**: Write test logic in Python using `PyStateHandler` base class.
+- **Type Safety**: Full type hints and validation between Rust and Python.
+- **Mock and Real Connections**: Support for both mock connections (for testing) and real database connections.
+
+### 4. Secure & Flexible CLI
 - Uses `clap` for argument parsing.
 - Secure password input via `rpassword`.
-- Supports runtime configuration of host, user, database, and import job monitoring duration.
+- Supports runtime configuration of host, user, database, and test-specific options.
 
-### 4. Multi-Connection Coordination
+### 5. Multi-Connection Coordination
 - **MultiConnectionStateMachine**: Manages multiple `StateMachine` instances, each for a separate connection.
 - **ConnectionCoordinator**: Shared state and event/message passing for coordination between connections.
-- **SharedState**: Tracks global test status, connection results, import jobs, and coordination events.
+- **SharedState**: Tracks global test status, connection results, and coordination events.
 - **Tokio Tasks**: Each connection runs in its own async task for true concurrency.
 - **Examples**: See `src/bin/simple_multi_connection.rs` and `src/bin/multi_connection.rs` for usage patterns.
 
-## Multi-Connection Architecture (In-Depth)
+### 6. Test Suites
+- **DDL Tests** (`src/ddl/`): Data Definition Language operations testing
+- **Transaction Tests** (`src/txn/`): Transaction isolation, concurrency, and error handling
+- **Scale Tests** (`src/scale/`): Performance and scalability testing
+- **Python Test Runner**: Automated execution of Python test suites
 
-# Multi-Connection Architecture for TiDB Testing
+## Multi-Connection Architecture
 
-## Overview
-
-When extending the testing to multiple connections that need to coordinate with each other, there are several architectural approaches. This document outlines the recommended approach and provides implementation examples.
-
-## Recommended Approach: Multiple State Machines with Shared State
+### Recommended Approach: Multiple State Machines with Shared State
 
 **Why this approach?**
 - Better separation of concerns
@@ -61,9 +67,9 @@ When extending the testing to multiple connections that need to coordinate with 
 - Better for concurrent operations
 - Easier to test individual connections
 
-## Architecture Components
+### Architecture Components
 
-### 1. Individual State Machines
+#### 1. Individual State Machines
 Each connection gets its own state machine instance:
 ```rust
 let mut state_machine = StateMachine::new();
@@ -72,7 +78,7 @@ state_machine.register_handler(State::Initial, Box::new(InitialHandler));
 // ... other handlers
 ```
 
-### 2. Shared State Coordinator
+#### 2. Shared State Coordinator
 A coordinator manages shared state and coordinates between state machines:
 ```rust
 pub struct SimpleMultiConnectionCoordinator {
@@ -81,7 +87,7 @@ pub struct SimpleMultiConnectionCoordinator {
 }
 ```
 
-### 3. Concurrent Execution
+#### 3. Concurrent Execution
 Use Tokio tasks to run state machines concurrently:
 ```rust
 let handle = tokio::spawn(async move {
@@ -89,94 +95,88 @@ let handle = tokio::spawn(async move {
 });
 ```
 
-## Implementation Examples
+### Implementation Examples
 
-### Simple Approach (Recommended for most use cases)
+#### Simple Approach (Recommended for most use cases)
 See `src/bin/simple_multi_connection.rs` for a straightforward implementation that:
 - Creates multiple state machines
 - Runs them concurrently
 - Shares results through a simple coordinator
 - Provides easy status tracking
 
-### Advanced Approach (For complex coordination)
+#### Advanced Approach (For complex coordination)
 See `src/bin/multi_connection.rs` for a more sophisticated implementation with:
 - Message-passing coordination
 - Event-driven architecture
 - Complex state synchronization
-- Import job monitoring across connections
 
-## Key Benefits
+## Python Plugin Architecture
 
-1. **Scalability**: Easy to add more connections
-2. **Isolation**: Each connection's failures don't affect others
-3. **Concurrency**: True parallel execution
-4. **Maintainability**: Simple, focused components
-5. **Testability**: Each component can be tested independently
+### Core Components
 
-## When to Use Each Approach
+#### 1. Python Bindings (`python_bindings.rs`)
+- **PyStateContext**: Python wrapper for state context
+- **PyConnection**: Python wrapper for database connections
+- **PyState**: Python wrapper for state enums
+- **PyStateHandler**: Base class for Python handlers
 
-### Use Simple Approach When:
-- You have 2-10 connections
-- Basic coordination is sufficient
-- You want minimal complexity
-- Quick implementation is priority
+#### 2. Test Infrastructure (`common/test_rig_python.py`)
+- **Mock Connections**: `PyConnection` for testing without real database
+- **Real Connections**: `RealPyConnection` for actual database operations
+- **Multi-Connection Support**: `MultiConnectionTestHandler` for concurrent testing
 
-### Use Advanced Approach When:
-- You have many connections (>10)
-- Complex coordination logic is needed
-- Real-time status updates are required
-- Event-driven architecture is preferred
+#### 3. Test Runner (`python_test_runner.rs`)
+- **Test Discovery**: Automatically finds and runs Python test files
+- **Environment Support**: Handles configuration via environment variables
+- **Output Control**: Configurable output and SQL logging
 
-## Migration Path
+### Python Handler Interface
 
-1. Start with the simple approach
-2. Add complexity only when needed
-3. Extract common patterns into shared libraries
-4. Consider the advanced approach for large-scale deployments
+```python
+from src.common.test_rig_python import PyStateHandler, PyStateContext, PyState
 
-## Example Usage
-
-```rust
-// Create coordinator
-let mut coordinator = SimpleMultiConnectionCoordinator::new();
-
-// Add connections
-coordinator.add_connection(ConnectionConfig {
-    id: "primary".to_string(),
-    host: "tidb-primary.tidbcloud.com".to_string(),
-    port: 4000,
-    username: "user".to_string(),
-    password: "password".to_string(),
-    database: Some("test".to_string()),
-});
-
-// Run all connections concurrently
-coordinator.run_all_connections().await?;
-
-// Get results
-coordinator.print_results();
+class MyHandler(PyStateHandler):
+    def enter(self, context: PyStateContext) -> str:
+        # Called when entering the state
+        return PyState.connecting()
+    
+    def execute(self, context: PyStateContext) -> str:
+        # Called during state execution
+        if context.connection:
+            results = context.connection.execute_query("SELECT 1")
+        return PyState.completed()
+    
+    def exit(self, context: PyStateContext) -> None:
+        # Called when exiting the state
+        pass
 ```
 
-## Best Practices
+## Error Handling Architecture
 
-1. **Error Handling**: Each connection should handle its own errors
-2. **Resource Management**: Use connection pools for efficiency
-3. **Monitoring**: Implement health checks and status reporting
-4. **Configuration**: Use environment variables or config files
-5. **Logging**: Implement structured logging for debugging
+### Error Types
+- **ConnectError**: Unified error type for all database operations
+- **StateError**: State machine specific errors
+- **ConfigError**: Configuration related errors
+- **EnhancedError**: Rich error context with metadata
 
-## Conclusion
+### Error Handling Features
+- **Retry Strategies**: Exponential backoff with jitter
+- **Circuit Breaker Pattern**: Automatic failure detection and recovery
+- **Error Classification**: Transient vs permanent error handling
+- **Context Preservation**: Rich error context for debugging
 
-The multiple state machines with shared state approach provides the best balance of simplicity, scalability, and maintainability for most multi-connection testing scenarios. Start simple and add complexity only when the requirements demand it.
+## Configuration Architecture
 
-### 5. Extensibility & Best Practices
-- Add new states by implementing `StateHandler` and registering in the state machine.
-- Add new connection types or workflows by composing new state machines and/or coordinators.
-- Use handler-local context for state-specific data, keeping `StateContext` minimal.
-- All error types are unified as `StateError` for async compatibility.
-- Clippy and Rustfmt clean for code quality.
+### Configuration Sources
+1. **Command-line arguments** (highest priority)
+2. **Environment variables** (`TIDB_HOST`, `TIDB_USER`, etc.)
+3. **Configuration files** (JSON or TOML)
+4. **Default values** (lowest priority)
 
----
+### Configuration Extensions
+- **ConfigExtension trait**: Allows test binaries to add custom configuration options
+- **Runtime registration**: Extensions register themselves with the config system
+- **Plugin pattern**: Keeps test-specific config in test binaries
 
 ## Example Workflows
 
@@ -199,66 +199,35 @@ The multiple state machines with shared state approach provides the best balance
 7. **Custom States**: Test-specific states (e.g., `creating_table`, `populating_data`, `testing_isolation`).
 8. **Completed**: End state (from common states).
 
-### Multi-Connection Workflow
-- Each connection runs either the core or dynamic workflow in parallel.
-- Shared state tracks results, errors, and coordination events.
-- Coordinators can implement custom logic (e.g., wait for all connections to be ready before proceeding).
-
-
-
----
-
-## File Structure
-- `src/lib.rs`: Main library with shared functionality and exports.
-- `src/state_machine.rs`: Core state machine for standard workflows.
-- `src/state_machine_dynamic.rs`: Dynamic state machine for extensible workflows.
-- `src/common_states.rs`: Shared state definitions for common workflows.
-- `src/state_handlers.rs`: Handlers for core state machine states.
-- `src/bin/job_monitor.rs`: Import job monitoring with dynamic state handlers.
-- `src/connection.rs`: Connection utilities.
-- `src/connection_manager.rs`: Shared state and coordination for multi-connection mode.
-- `src/multi_connection_state_machine.rs`: Multi-connection state machine logic.
-- `src/bin/`: Binary executables for different test scenarios.
-  - `basic.rs`: Basic connection test using core state machine.
-  - `isolation.rs`: Isolation test using dynamic state machine.
-  - `job_monitor.rs`: Job monitoring using dynamic state machine.
-  - `simple_multi_connection.rs`: Simple multi-connection test.
-  - `python_demo.rs`: Python plugin demonstration.
-- `src/bin/`: Binary executables demonstrating both single and multi-connection workflows.
-
----
-
-## Extending the System
-
-### Adding New States
-
-#### For Core State Machine
-- **Add a new state**: Implement `StateHandler`, add to `State` enum, and register in the state machine.
-
-#### For Dynamic State Machine
-- **Add a new state**: Use `dynamic_state!` macro to create states, implement `DynamicStateHandler`, and register in the dynamic state machine.
-- **Use common states**: Import from `common_states` module to avoid duplication.
-
-### Adding New Workflows
-- **Add a new connection workflow**: Compose new state machines and/or coordinators.
-- **Add test-specific states**: Define custom states in your binary's state module, re-exporting common states as needed.
-
-### Adding New CLI Options
-- **Add new CLI options**: Extend the `Args` struct in your binary and pass to handlers as needed.
-- **Use configuration extensions**: Implement `ConfigExtension` trait for reusable CLI options.
-
-### Best Practices
-- **Use common states**: Always use the `common_states` module for standard workflow states.
-- **Keep binaries focused**: Each binary should only define states specific to its test scenario.
-- **Re-export common states**: Use `pub use test_rig::common_states::*` in your state modules.
-- **Document custom states**: Provide clear documentation for any test-specific states you create.
-- **Add new coordination logic**: Extend `ConnectionCoordinator` and `SharedState`.
-
----
+### Python Test Workflow
+1. **Test Discovery**: Find Python test files in test directories
+2. **Handler Loading**: Load and instantiate Python handlers
+3. **Context Creation**: Create test context with connection info
+4. **Handler Execution**: Execute enter, execute, and exit methods
+5. **Result Reporting**: Report test results and any errors
 
 ## Best Practices
-- Keep handler-local context for state-specific data.
-- Use async/await for all I/O and state transitions.
-- Handle errors at each state and propagate meaningful messages.
-- Use shared state and message passing for coordination, not global mutable state.
-- Keep the main state machine and context minimal and focused.
+
+### State Machine Design
+- Keep handlers focused on single responsibilities
+- Use handler-local context for state-specific data
+- Minimize global state in StateContext
+- Implement proper error handling in all handlers
+
+### Python Handler Development
+- Inherit from `PyStateHandler` for all handlers
+- Use type hints for better IDE support
+- Handle connection availability gracefully
+- Implement proper error handling
+
+### Multi-Connection Testing
+- Use connection pools for efficiency
+- Implement proper error isolation
+- Use shared state for coordination
+- Monitor connection health
+
+### Error Handling
+- Classify errors appropriately (transient vs permanent)
+- Implement retry strategies for transient errors
+- Preserve error context for debugging
+- Use circuit breakers for system protection

@@ -1,240 +1,588 @@
-# Advanced Guide: Extending, Architecture, Performance, and Troubleshooting
+# Advanced Guide
 
-This guide covers advanced usage, design decisions, performance notes, and troubleshooting for the TiDB Test Rig framework.
+This guide covers advanced features and usage patterns for the test_rig framework.
 
----
+## Advanced State Machine Usage
 
-## 1. Extending with Custom States and Handlers
+### Dynamic State Machine
 
-The framework uses a dual state machine pattern with both core and dynamic state systems. You can add custom states and handlers for new test phases or logic. Handlers can be written in **Rust** or **Python** (see Python Plugin Support below).
+The dynamic state machine allows you to define custom states at compile time for extensible workflows:
 
-### State Machine Types
-
-#### Core State Machine (for standard workflows)
-- **Use case**: Basic connection tests, standard workflows
-- **States**: Predefined enum (`Initial`, `ParsingConfig`, `Connecting`, etc.)
-- **Benefits**: Type-safe, compile-time validation
-
-#### Dynamic State Machine (for extensible workflows)
-- **Use case**: Test-specific workflows, custom test phases
-- **States**: String-based, defined at compile time for each test
-- **Benefits**: Flexible, extensible, supports custom data storage, no core library changes needed
-
-### Example: Adding a Custom State (Rust)
-
-#### For Core State Machine
 ```rust
-use test_rig::state_machine::{State, StateContext, StateHandler};
-use async_trait::async_trait;
+use test_rig::{DynamicStateMachine, DynamicStateHandler, DynamicStateContext, common_states::*};
 
-#[derive(Debug, Clone)]
-pub struct ReportingHandler;
+// Define custom states
+dynamic_state!(creating_table);
+dynamic_state!(populating_data);
+dynamic_state!(testing_isolation);
 
-#[async_trait]
-impl StateHandler for ReportingHandler {
-    async fn enter(&self, _context: &mut StateContext) -> test_rig::errors::Result<State> {
-        println!("Generating summary report...");
-        Ok(State::Reporting)
-    }
-    async fn execute(&self, context: &mut StateContext) -> test_rig::errors::Result<State> {
-        // Access test results from context, print or save as needed
-        println!("✓ Report generated");
-        Ok(State::Completed)
-    }
-    async fn exit(&self, _context: &mut StateContext) -> test_rig::errors::Result<()> {
-        Ok(())
-    }
-}
-
-// Register your custom state and handler:
-state_machine.register_handler(State::Reporting, Box::new(ReportingHandler));
-```
-
-#### For Dynamic State Machine
-```rust
-use test_rig::{
-    DynamicState, DynamicStateContext, DynamicStateHandler, DynamicStateMachine,
-    dynamic_state, common_states::*,
-};
-use async_trait::async_trait;
-
-#[derive(Debug, Clone)]
-pub struct CustomTestHandler;
-
-#[async_trait]
-impl DynamicStateHandler for CustomTestHandler {
-    async fn enter(&self, _context: &mut DynamicStateContext) -> test_rig::errors::Result<DynamicState> {
-        println!("Starting custom test...");
-        Ok(dynamic_state!("custom_test", "Custom Test"))
-    }
-    async fn execute(&self, context: &mut DynamicStateContext) -> test_rig::errors::Result<DynamicState> {
-        // Store custom data in context
-        context.set_custom_data("test_results".to_string(), vec!["result1", "result2"]);
-        println!("✓ Custom test completed");
-        Ok(completed())
-    }
-    async fn exit(&self, _context: &mut DynamicStateContext) -> test_rig::errors::Result<()> {
-        Ok(())
-    }
-}
-
-// Define your state module
-mod my_test_states {
-    use super::*;
-    
-    // Re-export common states
-    pub use test_rig::common_states::*;
-    
-    // Define custom states
-    pub fn custom_test() -> DynamicState {
-        dynamic_state!("custom_test", "Custom Test")
-    }
-}
-
-// Register your custom state and handler:
+// Create dynamic state machine
 let mut machine = DynamicStateMachine::new();
-machine.register_handler(my_test_states::custom_test(), Box::new(CustomTestHandler));
+
+// Register handlers for common states
+machine.register_handler(parsing_config(), Box::new(ParsingConfigHandlerAdapter));
+machine.register_handler(connecting(), Box::new(ConnectingHandlerAdapter));
+machine.register_handler(testing_connection(), Box::new(TestingConnectionHandlerAdapter));
+
+// Register handlers for custom states
+machine.register_handler(creating_table(), Box::new(CreatingTableHandler));
+machine.register_handler(populating_data(), Box::new(PopulatingDataHandler));
+machine.register_handler(testing_isolation(), Box::new(TestingIsolationHandler));
+
+// Run the machine
+machine.run().await?;
 ```
 
-### Example: Adding a Custom State (Python)
+### Custom State Handlers
 
-You can also write state handlers in Python and register them with the Rust state machine:
+Create custom state handlers for your specific testing needs:
+
+```rust
+use test_rig::{DynamicStateHandler, DynamicStateContext, ConnectError};
+
+pub struct CreatingTableHandler;
+
+#[async_trait]
+impl DynamicStateHandler for CreatingTableHandler {
+    async fn execute(&self, context: &mut DynamicStateContext) -> Result<String, ConnectError> {
+        if let Some(conn) = &mut context.connection {
+            // Create test table
+            conn.query_drop("DROP TABLE IF EXISTS test_table").await?;
+            conn.query_drop("CREATE TABLE test_table (id INT, name VARCHAR(50))").await?;
+            
+            // Store table info in context for other handlers
+            context.set_data("table_name", "test_table");
+            
+            Ok("populating_data".to_string())
+        } else {
+            Err(ConnectError::Connection("No database connection".into()))
+        }
+    }
+}
+```
+
+## Multi-Connection Testing
+
+### Simple Multi-Connection
+
+For basic multi-connection testing:
+
+```rust
+use test_rig::{SimpleMultiConnectionCoordinator, ConnectionConfig};
+
+let mut coordinator = SimpleMultiConnectionCoordinator::new();
+
+// Add connections
+coordinator.add_connection(ConnectionConfig {
+    id: "primary".to_string(),
+    host: "tidb-primary:4000".to_string(),
+    port: 4000,
+    username: "root".to_string(),
+    password: "".to_string(),
+    database: Some("test".to_string()),
+});
+
+coordinator.add_connection(ConnectionConfig {
+    id: "secondary".to_string(),
+    host: "tidb-secondary:4000".to_string(),
+    port: 4000,
+    username: "root".to_string(),
+    password: "".to_string(),
+    database: Some("test".to_string()),
+});
+
+// Run all connections concurrently
+coordinator.run_all_connections().await?;
+
+// Get results
+coordinator.print_results();
+```
+
+### Advanced Multi-Connection
+
+For complex coordination scenarios:
+
+```rust
+use test_rig::{MultiConnectionStateMachine, ConnectionCoordinator, SharedState};
+
+let shared_state = Arc::new(Mutex::new(SharedState::new()));
+let coordinator = Arc::new(ConnectionCoordinator::new(shared_state.clone()));
+
+let mut machine = MultiConnectionStateMachine::new(coordinator);
+
+// Add connections with custom handlers
+machine.add_connection("primary", Box::new(PrimaryConnectionHandler));
+machine.add_connection("secondary", Box::new(SecondaryConnectionHandler));
+
+// Run with coordination
+machine.run_with_coordination().await?;
+```
+
+## Python Plugin System
+
+### Advanced Python Handlers
+
+Create sophisticated Python handlers with custom logic:
 
 ```python
-from test_rig_python import PyStateHandler, PyStateContext, PyState
+from src.common.test_rig_python import PyStateHandler, PyStateContext, PyState
+import time
+import random
 
-class ReportingHandler(PyStateHandler):
+class AdvancedTransactionHandler(PyStateHandler):
+    def __init__(self):
+        super().__init__()
+        self.attempt_count = 0
+        self.max_attempts = 3
+    
     def enter(self, context: PyStateContext) -> str:
-        print("Generating summary report...")
-        return PyState.completed()
+        print(f"Starting advanced transaction test on {context.host}")
+        return PyState.connecting()
+    
     def execute(self, context: PyStateContext) -> str:
-        print("✓ Report generated")
-        return PyState.completed()
+        if not context.connection:
+            return PyState.connecting()
+        
+        self.attempt_count += 1
+        
+        try:
+            # Create test environment
+            context.connection.execute_query("DROP TABLE IF EXISTS advanced_test")
+            context.connection.execute_query("""
+                CREATE TABLE advanced_test (
+                    id INT PRIMARY KEY,
+                    name VARCHAR(50),
+                    value DECIMAL(10,2),
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            
+            # Simulate complex transaction scenario
+            context.connection.start_transaction()
+            
+            # Insert initial data
+            for i in range(5):
+                context.connection.execute_query(
+                    f"INSERT INTO advanced_test (id, name, value) VALUES ({i}, 'Item{i}', {i * 10.5})"
+                )
+            
+            # Simulate some processing time
+            time.sleep(0.1)
+            
+            # Update some records
+            context.connection.execute_query("UPDATE advanced_test SET value = value * 1.1 WHERE id % 2 = 0")
+            
+            # Simulate potential conflict
+            if random.random() < 0.3:  # 30% chance of rollback
+                print("Simulating transaction rollback")
+                context.connection.rollback()
+                if self.attempt_count < self.max_attempts:
+                    return PyState.connecting()  # Retry
+            else:
+                context.connection.commit()
+            
+            # Verify results
+            results = context.connection.execute_query("SELECT COUNT(*) FROM advanced_test")
+            print(f"Final record count: {results[0]['col_0']}")
+            
+            return PyState.completed()
+            
+        except Exception as e:
+            print(f"Error in attempt {self.attempt_count}: {e}")
+            if self.attempt_count < self.max_attempts:
+                return PyState.connecting()  # Retry
+            else:
+                return PyState.completed()  # Give up
+    
     def exit(self, context: PyStateContext) -> None:
-        pass
+        print(f"Advanced transaction test completed after {self.attempt_count} attempts")
 ```
 
-Register your Python handler using the Rust API:
-```rust
-use test_rig::python_bindings::register_python_handler;
-register_python_handler(&mut state_machine, State::Reporting, py_handler)?;
+### Multi-Connection Python Handlers
+
+Create Python handlers that work with multiple concurrent connections:
+
+```python
+from src.common.test_rig_python import MultiConnectionTestHandler, PyStateContext, PyState
+import threading
+import time
+
+class ConcurrentLoadTestHandler(MultiConnectionTestHandler):
+    def __init__(self):
+        super().__init__(connection_count=5)  # Use 5 concurrent connections
+    
+    def execute(self, context: PyStateContext) -> str:
+        # Create test table
+        if context.connection:
+            context.connection.execute_query("DROP TABLE IF EXISTS load_test")
+            context.connection.execute_query("""
+                CREATE TABLE load_test (
+                    id INT PRIMARY KEY,
+                    connection_id INT,
+                    operation_type VARCHAR(20),
+                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+        
+        # Define concurrent operations
+        operations = []
+        
+        # Each connection performs different operations
+        for conn_id in range(self.connection_count):
+            operations.extend([
+                {'connection_id': conn_id, 'operation': 'start_transaction'},
+                {'connection_id': conn_id, 'operation': 'query', 'query': f'INSERT INTO load_test (id, connection_id, operation_type) VALUES ({conn_id * 100 + 1}, {conn_id}, "INSERT")'},
+                {'connection_id': conn_id, 'operation': 'query', 'query': f'INSERT INTO load_test (id, connection_id, operation_type) VALUES ({conn_id * 100 + 2}, {conn_id}, "INSERT")'},
+                {'connection_id': conn_id, 'operation': 'query', 'query': f'UPDATE load_test SET operation_type = "UPDATED" WHERE connection_id = {conn_id}'},
+                {'connection_id': conn_id, 'operation': 'query', 'query': f'SELECT COUNT(*) FROM load_test WHERE connection_id = {conn_id}'},
+                {'connection_id': conn_id, 'operation': 'commit'},
+            ])
+        
+        # Execute operations concurrently
+        results = self.execute_concurrent_operations(operations)
+        
+        # Analyze results
+        if context.connection:
+            final_results = context.connection.execute_query("SELECT COUNT(*) FROM load_test")
+            print(f"Total records created: {final_results[0]['col_0']}")
+            
+            # Check for conflicts or issues
+            conflict_results = context.connection.execute_query("SELECT COUNT(*) FROM load_test WHERE operation_type = 'UPDATED'")
+            print(f"Records updated: {conflict_results[0]['col_0']}")
+        
+        return PyState.completed()
 ```
 
-### Using Common States
+## Error Handling and Resilience
 
-When creating custom states, always use the common states module to avoid duplication:
+### Retry Strategies
+
+Implement custom retry logic in your handlers:
 
 ```rust
-mod my_test_states {
-    use super::*;
-    
-    // Re-export common states to avoid duplication
-    pub use test_rig::common_states::{
-        parsing_config, connecting, testing_connection, 
-        verifying_database, getting_version, completed,
-    };
-    
-    // Define only test-specific states
-    pub fn my_custom_phase() -> DynamicState {
-        dynamic_state!("my_custom_phase", "My Custom Phase")
+use test_rig::{retry::RetryConfig, error_utils::classify_error};
+
+let retry_config = RetryConfig {
+    max_attempts: 5,
+    base_delay: Duration::from_secs(1),
+    max_delay: Duration::from_secs(30),
+    jitter: true,
+};
+
+let result = retry_config.execute("database_operation", || async {
+    // Your database operation here
+    perform_database_operation().await
+}).await;
+```
+
+### Circuit Breaker Pattern
+
+Use circuit breakers for system protection:
+
+```rust
+use test_rig::{retry::CircuitBreakerConfig, error_utils::classify_error};
+
+let circuit_config = CircuitBreakerConfig {
+    failure_threshold: 5,
+    recovery_timeout: Duration::from_secs(60),
+    success_threshold: 2,
+};
+
+let result = circuit_config.execute("critical_operation", || async {
+    // Your critical operation here
+    perform_critical_operation().await
+}).await;
+```
+
+### Error Classification
+
+Classify errors for appropriate handling:
+
+```rust
+use test_rig::error_utils::{classify_error, ErrorCategory};
+
+let error = ConnectError::Connection(mysql::Error::server_disconnected());
+match classify_error(&error) {
+    ErrorCategory::Transient => {
+        // Will be retried automatically
+        println!("Transient error, retrying...");
+    }
+    ErrorCategory::Permanent => {
+        // Fail fast
+        println!("Permanent error, failing immediately");
+    }
+    ErrorCategory::Unknown => {
+        // Retry with limits
+        println!("Unknown error, retrying with limits");
     }
 }
 ```
 
----
+## Configuration Management
 
-## 2. Python Plugin Support and Cross-Language Integration
+### Custom Configuration Extensions
 
-The framework supports Python plugins for state handlers, enabling rapid prototyping and cross-language test logic. Python handlers can be used alongside Rust handlers in the same state machine.
+Add test-specific configuration options:
 
-- Write handlers in Python using the `PyStateHandler` interface
-- Register Python handlers for any state
-- Use the standalone Python test runner for quick iteration
-- See [docs/PYTHON_PLUGIN.md](PYTHON_PLUGIN.md) for full details and examples
+```rust
+use test_rig::{ConfigExtension, register_config_extension};
+use clap::Command;
 
-### Configuration Compatibility
-- Python scripts use the same config files (`tidb_config.json`/`.toml`), environment variables, and CLI arguments as Rust binaries
-- Configuration priority: **CLI > Env > Config > Default** (for both Rust and Python)
+struct MyTestConfigExtension;
 
-### Example: Running a Python Isolation Test
-```bash
-export TIDB_HOST=tidb.example.com:4000
-export TIDB_USER=myuser
-export TIDB_PASSWORD=mypass
-export TIDB_DATABASE=mydb
-python3 examples/run_isolation_test.py
+impl ConfigExtension for MyTestConfigExtension {
+    fn add_cli_args(&self, app: Command) -> Command {
+        app.arg(
+            clap::Arg::new("test-rows")
+                .long("test-rows")
+                .help("Number of test rows to create")
+                .default_value("1000")
+        )
+        .arg(
+            clap::Arg::new("concurrent-users")
+                .long("concurrent-users")
+                .help("Number of concurrent users to simulate")
+                .default_value("10")
+        )
+    }
+    
+    fn build_config(&self, args: &clap::ArgMatches, config: &mut test_rig::config::AppConfig) -> Result<(), Box<dyn std::error::Error>> {
+        if let Some(test_rows) = args.get_one::<String>("test-rows") {
+            if let Ok(rows) = test_rows.parse::<u32>() {
+                config.test.rows = rows;
+            }
+        }
+        
+        if let Some(users) = args.get_one::<String>("concurrent-users") {
+            if let Ok(user_count) = users.parse::<u32>() {
+                config.test.concurrent_users = user_count;
+            }
+        }
+        
+        Ok(())
+    }
+    
+    fn get_extension_name(&self) -> &'static str { "my_test" }
+    fn get_help_text(&self) -> &'static str { "Adds test-specific options" }
+}
+
+// Register the extension
+fn register_extensions() {
+    register_config_extension(Box::new(MyTestConfigExtension));
+}
 ```
 
----
+### Dynamic Configuration
 
-## 3. Architecture Decision Records (ADRs)
+Load configuration dynamically based on environment:
 
-### Why a State Machine?
-- **Explicit test phases**: Each phase (connect, test, verify, report) is a state.
-- **Extensibility**: New states/handlers can be added in Rust or Python.
-- **Error isolation**: Failures in one phase don't corrupt others.
+```rust
+use test_rig::config::AppConfig;
 
-### Why Plugin-Based Config Extensions?
-- **Test-specific options**: Each test binary can add its own CLI/config logic.
-- **No core changes needed**: New options don't require editing the main config generator.
+let config = AppConfig::load_with_priority(&[
+    "config/production.toml",
+    "config/development.toml",
+    "config/default.toml",
+])?;
 
-### Error Handling and Retry Design
-- **Rich error types**: Each failure mode has a specific error variant.
-- **Retry/circuit breaker**: Resilience for transient DB/network issues.
-- **Error context**: All errors can carry operation, attempt, and connection info.
+// Override with environment variables
+let config = config.with_env_overrides()?;
+```
 
-### CLI/Environment/Config Precedence
-- **CLI > Env > Config > Default**: Most explicit wins, for user control and predictability.
-- **Python and Rust are now fully compatible in config precedence**
+## Performance Optimization
 
----
+### Connection Pooling
 
-## 4. Performance Characteristics
+Optimize connection usage with pooling:
 
-- **Throughput**: The framework is async and can run many connections in parallel (see multi-connection tests).
-- **Latency**: Each state transition adds a small overhead, but most time is spent in DB/network I/O.
-- **Logging**: Structured logging is efficient, but file logging can add I/O overhead if enabled.
-- **Scaling**: For high concurrency, increase connection pool size and use async handlers.
-- **Resource usage**: Memory usage is low unless you store large test results in context.
-- **Python plugin overhead**: Calling into Python from Rust adds some FFI overhead, but is negligible for most test logic.
+```rust
+use test_rig::connection_manager::ConnectionPool;
 
-**Tip:** For large-scale tests, run with `--release` and tune connection pool and async runtime settings.
+let pool = ConnectionPool::new(
+    pool_config,
+    connection_config,
+)?;
 
----
+// Use pooled connections
+let conn = pool.get_connection().await?;
+// ... use connection
+pool.return_connection(conn).await;
+```
 
-## 5. Troubleshooting Guide
+### Batch Operations
 
-### Common Issues
-- **Connection refused**: Check host/port, DB is running, firewall rules.
-- **Authentication failed**: Check username/password, user privileges.
-- **Unknown database**: Ensure the database exists and is accessible.
-- **Timeouts**: Increase `timeout_secs` in config, check network latency.
-- **State machine deadlock**: Ensure all states have handlers and transitions.
-- **Test hangs**: Enable verbose logging (`-v`), check for stuck async tasks.
-- **Python import errors**: Ensure `test_rig_python` is built and in your PYTHONPATH, or use the standalone Python runner for pure Python tests.
-- **Python environment issues**: Make sure dependencies (e.g., `mysql-connector-python`) are installed in the correct environment.
+Optimize database operations with batching:
 
-### Debugging Tips
-- **Enable verbose logging**: Use `-v` or `--log-level debug` for more output.
-- **Check error context**: Error messages include operation, attempt, and connection info.
-- **Use error context builder**: Add custom info to errors for easier debugging.
-- **Run with RUST_BACKTRACE=1**: Get full stack traces for panics.
-- **Use debug prints in Python handlers**: Print context and state transitions for troubleshooting.
+```rust
+// Batch inserts
+let mut batch = Vec::new();
+for i in 0..1000 {
+    batch.push(format!("({}, 'item{}', {})", i, i, i * 10.5));
+}
 
-### Interpreting Error Messages
-- **Transient errors**: Will be retried automatically (connection, timeout, network).
-- **Permanent errors**: Fail fast (auth, config, validation).
-- **Circuit breaker open**: Too many failures, wait for recovery timeout.
-- **Python handler errors**: Check Python stack trace and handler logic.
+let query = format!(
+    "INSERT INTO test_table (id, name, value) VALUES {}",
+    batch.join(",")
+);
 
-### What to Do If a Test Fails
-- Check the error message and context.
-- Try running with increased logging.
-- Validate your config and CLI arguments.
-- If using custom states, ensure all transitions are registered.
-- For persistent issues, file a bug with logs and error context.
-- For Python handler issues, check the [Python Plugin Documentation](PYTHON_PLUGIN.md).
+conn.query_drop(&query).await?;
+```
 
----
+### Async Operations
 
-For more, see the main README and [docs/PYTHON_PLUGIN.md](PYTHON_PLUGIN.md) for Python plugin details. 
+Leverage async/await for better performance:
+
+```rust
+use tokio::join;
+
+// Execute operations concurrently
+let (result1, result2, result3) = join!(
+    async_operation_1(),
+    async_operation_2(),
+    async_operation_3(),
+);
+```
+
+## Monitoring and Observability
+
+### Structured Logging
+
+Use structured logging for better debugging:
+
+```rust
+use tracing::{info, warn, error, instrument};
+
+#[instrument(skip(connection))]
+async fn perform_operation(connection: &mut mysql::Conn) -> Result<(), ConnectError> {
+    info!("Starting database operation");
+    
+    match connection.query_drop("SELECT 1").await {
+        Ok(_) => {
+            info!("Operation completed successfully");
+            Ok(())
+        }
+        Err(e) => {
+            error!(error = %e, "Operation failed");
+            Err(ConnectError::Database(e))
+        }
+    }
+}
+```
+
+### Metrics Collection
+
+Collect metrics for performance monitoring:
+
+```rust
+use std::time::Instant;
+
+let start_time = Instant::now();
+let result = perform_operation().await;
+let duration = start_time.elapsed();
+
+info!(
+    operation = "database_query",
+    duration_ms = duration.as_millis(),
+    success = result.is_ok(),
+);
+```
+
+## Testing Strategies
+
+### Test Isolation
+
+Ensure tests are isolated and don't affect each other:
+
+```rust
+// Use unique table names
+let table_name = format!("test_{}", uuid::Uuid::new_v4().simple());
+conn.query_drop(&format!("CREATE TABLE {} (id INT)", table_name)).await?;
+
+// Clean up after test
+conn.query_drop(&format!("DROP TABLE {}", table_name)).await?;
+```
+
+### Test Data Management
+
+Manage test data effectively:
+
+```rust
+// Create test data factory
+struct TestDataFactory {
+    connection: mysql::Conn,
+}
+
+impl TestDataFactory {
+    async fn create_test_user(&mut self, name: &str) -> Result<i32, ConnectError> {
+        self.connection.query_drop(&format!(
+            "INSERT INTO users (name) VALUES ('{}')",
+            name
+        )).await?;
+        
+        let result: Vec<mysql::Row> = self.connection.query("SELECT LAST_INSERT_ID()").await?;
+        Ok(result[0].get(0).unwrap())
+    }
+    
+    async fn cleanup(&mut self) -> Result<(), ConnectError> {
+        self.connection.query_drop("DELETE FROM users WHERE name LIKE 'test_%'").await?;
+        Ok(())
+    }
+}
+```
+
+### Concurrent Testing
+
+Test concurrent scenarios effectively:
+
+```rust
+use tokio::task::JoinSet;
+
+let mut tasks = JoinSet::new();
+
+// Spawn multiple concurrent operations
+for i in 0..10 {
+    let mut conn = pool.get_connection().await?;
+    tasks.spawn(async move {
+        perform_concurrent_operation(&mut conn, i).await
+    });
+}
+
+// Wait for all tasks to complete
+while let Some(result) = tasks.join_next().await {
+    match result {
+        Ok(Ok(_)) => println!("Task completed successfully"),
+        Ok(Err(e)) => println!("Task failed: {}", e),
+        Err(e) => println!("Task panicked: {}", e),
+    }
+}
+```
+
+## Best Practices
+
+### Code Organization
+
+1. **Separate concerns**: Keep state handlers focused on single responsibilities
+2. **Use common states**: Leverage the `common_states` module for standard workflows
+3. **Handler-local context**: Use handler-local context for state-specific data
+4. **Error propagation**: Properly propagate errors through the state machine
+
+### Performance
+
+1. **Connection pooling**: Use connection pools for efficiency
+2. **Batch operations**: Batch database operations when possible
+3. **Async operations**: Use async/await for I/O operations
+4. **Resource cleanup**: Clean up resources in the `exit` method
+
+### Testing
+
+1. **Test isolation**: Ensure tests don't interfere with each other
+2. **Mock connections**: Use mock connections for unit testing
+3. **Real database testing**: Test with real databases for integration testing
+4. **Concurrent testing**: Test concurrent scenarios thoroughly
+
+### Error Handling
+
+1. **Error classification**: Classify errors appropriately
+2. **Retry strategies**: Implement retry strategies for transient errors
+3. **Circuit breakers**: Use circuit breakers for system protection
+4. **Error context**: Preserve error context for debugging 

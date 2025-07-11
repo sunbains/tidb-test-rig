@@ -1,276 +1,605 @@
-# Dynamic States
+# Dynamic States System
 
-This document explains how to make the state system dynamic, allowing tests to define their own states without modifying the core library.
+This guide covers the dynamic states system in the test_rig framework, which allows you to create extensible workflows with custom states defined at compile time.
 
-## Approaches
+## Overview
 
-### 1. String-Based Dynamic States (Recommended)
+The dynamic states system provides a flexible way to define custom workflows without modifying the core state machine. It's particularly useful for test-specific scenarios that require custom states and logic.
 
-The `state_machine_dynamic` module provides a flexible string-based state system:
+## Key Components
 
-**Key Features:**
-- ✅ **Maximum Flexibility**: Tests can define any states they need at compile time
-- ✅ **No Core Library Changes**: States are defined in test code, not in the core library
-- ✅ **Type Safety**: Still maintains type safety through the `DynamicState` struct
-- ✅ **Validation**: Optional state transition validation
-- ✅ **Custom Data**: Test-specific data storage in context
-- ✅ **Backward Compatibility**: Can coexist with the enum-based system
+### Dynamic State Machine
 
-**Usage Example:**
+The `DynamicStateMachine` drives extensible workflows with custom states:
 
 ```rust
-use test_rig::{
-    dynamic_state, register_transitions, DynamicState, DynamicStateContext, DynamicStateHandler,
-    DynamicStateMachine, states,
-};
+use test_rig::{DynamicStateMachine, DynamicStateHandler, DynamicStateContext};
 
-// Define custom states
-let setup_state = dynamic_state!("setup_test_data", "Setting Up Test Data");
-let test_state = dynamic_state!("run_performance_test", "Running Performance Test");
-let cleanup_state = dynamic_state!("cleanup_test_data", "Cleaning Up Test Data");
-
-// Create state machine
 let mut machine = DynamicStateMachine::new();
-
-// Register handlers
-machine.register_handler(setup_state.clone(), Box::new(SetupHandler));
-machine.register_handler(test_state.clone(), Box::new(TestHandler));
-machine.register_handler(cleanup_state.clone(), Box::new(CleanupHandler));
-
-// Register valid transitions
-register_transitions!(machine, states::initial(), [setup_state.clone()]);
-register_transitions!(machine, setup_state, [test_state.clone()]);
-register_transitions!(machine, test_state, [cleanup_state.clone()]);
-register_transitions!(machine, cleanup_state, [states::completed()]);
-
-// Run the machine
+// Register handlers for custom states
 machine.run().await?;
 ```
 
-### 2. Enum Extension with Macros
+### Dynamic States
 
-Extend the existing enum system with macros:
+Dynamic states are string-based and can be defined at compile time:
 
 ```rust
-// In test code
-macro_rules! define_test_states {
-    ($($name:ident),*) => {
-        #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-        pub enum TestState {
-            $($name),*
-        }
-        
-        impl From<TestState> for State {
-            fn from(test_state: TestState) -> Self {
-                match test_state {
-                    $(TestState::$name => State::Custom(stringify!($name))),*
-                }
-            }
-        }
-    };
-}
-
-define_test_states!(SetupData, RunTest, ValidateResults, Cleanup);
+// Define custom states using the macro
+dynamic_state!(creating_table);
+dynamic_state!(populating_data);
+dynamic_state!(testing_isolation);
+dynamic_state!(cleanup);
 ```
 
-### 3. Plugin-Based State Registration
+### Dynamic State Handlers
 
-Register states at runtime:
+Handlers implement the `DynamicStateHandler` trait:
 
 ```rust
-// In core library
-pub struct StateRegistry {
-    states: HashMap<String, Box<dyn StateHandler + Send + Sync>>,
-}
+use test_rig::{DynamicStateHandler, DynamicStateContext, ConnectError};
 
-impl StateRegistry {
-    pub fn register_state(&mut self, name: &str, handler: Box<dyn StateHandler + Send + Sync>) {
-        self.states.insert(name.to_string(), handler);
+pub struct CreatingTableHandler;
+
+#[async_trait]
+impl DynamicStateHandler for CreatingTableHandler {
+    async fn execute(&self, context: &mut DynamicStateContext) -> Result<String, ConnectError> {
+        // Your custom logic here
+        Ok("populating_data".to_string())
     }
 }
 ```
 
-## Comparison
+## Usage Patterns
 
-| Approach | Flexibility | Type Safety | Performance | Complexity |
-|----------|-------------|-------------|-------------|------------|
-| String-Based | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐ |
-| Enum Extension | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ |
-| Plugin Registration | ⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐ |
+### Basic Dynamic Workflow
 
-## Recommended Approach: String-Based Dynamic States
-
-The string-based approach is recommended because it provides:
-
-1. **Maximum Flexibility**: Tests can define any states they need at compile time
-2. **No Breaking Changes**: Doesn't require modifying the core library
-3. **Excellent Performance**: Compile-time state definitions with minimal runtime overhead
-4. **Type Safety**: Still maintains compile-time safety where possible
-5. **Validation**: Optional state transition validation prevents invalid flows
-
-## Implementation Details
-
-### DynamicState Structure
+Create a simple dynamic workflow:
 
 ```rust
-pub struct DynamicState {
-    name: String,           // Internal identifier
-    display_name: Option<String>, // Human-readable name
+use test_rig::{DynamicStateMachine, DynamicStateHandler, DynamicStateContext, common_states::*};
+
+// Define custom states
+dynamic_state!(creating_table);
+dynamic_state!(populating_data);
+dynamic_state!(testing_queries);
+
+// Create handlers
+struct CreatingTableHandler;
+struct PopulatingDataHandler;
+struct TestingQueriesHandler;
+
+#[async_trait]
+impl DynamicStateHandler for CreatingTableHandler {
+    async fn execute(&self, context: &mut DynamicStateContext) -> Result<String, ConnectError> {
+        if let Some(conn) = &mut context.connection {
+            conn.query_drop("DROP TABLE IF EXISTS test_table").await?;
+            conn.query_drop("CREATE TABLE test_table (id INT, name VARCHAR(50))").await?;
+            Ok("populating_data".to_string())
+        } else {
+            Ok("connecting".to_string())
+        }
+    }
+}
+
+#[async_trait]
+impl DynamicStateHandler for PopulatingDataHandler {
+    async fn execute(&self, context: &mut DynamicStateContext) -> Result<String, ConnectError> {
+        if let Some(conn) = &mut context.connection {
+            for i in 1..=10 {
+                conn.query_drop(&format!(
+                    "INSERT INTO test_table (id, name) VALUES ({}, 'Item{}')",
+                    i, i
+                )).await?;
+            }
+            Ok("testing_queries".to_string())
+        } else {
+            Ok("connecting".to_string())
+        }
+    }
+}
+
+#[async_trait]
+impl DynamicStateHandler for TestingQueriesHandler {
+    async fn execute(&self, context: &mut DynamicStateContext) -> Result<String, ConnectError> {
+        if let Some(conn) = &mut context.connection {
+            let result: Vec<mysql::Row> = conn.query("SELECT COUNT(*) FROM test_table").await?;
+            println!("Table contains {} rows", result[0].get::<i32, _>(0).unwrap());
+            Ok("completed".to_string())
+        } else {
+            Ok("connecting".to_string())
+        }
+    }
+}
+
+// Create and run the machine
+let mut machine = DynamicStateMachine::new();
+
+// Register handlers for common states
+machine.register_handler(parsing_config(), Box::new(ParsingConfigHandlerAdapter));
+machine.register_handler(connecting(), Box::new(ConnectingHandlerAdapter));
+machine.register_handler(testing_connection(), Box::new(TestingConnectionHandlerAdapter));
+
+// Register handlers for custom states
+machine.register_handler(creating_table(), Box::new(CreatingTableHandler));
+machine.register_handler(populating_data(), Box::new(PopulatingDataHandler));
+machine.register_handler(testing_queries(), Box::new(TestingQueriesHandler));
+
+machine.run().await?;
+```
+
+### Advanced Dynamic Workflow
+
+Create a more complex workflow with conditional logic:
+
+```rust
+use test_rig::{DynamicStateMachine, DynamicStateHandler, DynamicStateContext, ConnectError};
+
+// Define states for a complex test scenario
+dynamic_state!(setup_environment);
+dynamic_state!(create_test_data);
+dynamic_state!(run_concurrent_operations);
+dynamic_state!(verify_results);
+dynamic_state!(cleanup_environment);
+
+struct SetupEnvironmentHandler;
+
+#[async_trait]
+impl DynamicStateHandler for SetupEnvironmentHandler {
+    async fn execute(&self, context: &mut DynamicStateContext) -> Result<String, ConnectError> {
+        if let Some(conn) = &mut context.connection {
+            // Create test database
+            conn.query_drop("CREATE DATABASE IF NOT EXISTS test_db").await?;
+            conn.query_drop("USE test_db").await?;
+            
+            // Store database name in context
+            context.set_data("database_name", "test_db");
+            
+            Ok("create_test_data".to_string())
+        } else {
+            Ok("connecting".to_string())
+        }
+    }
+}
+
+struct CreateTestDataHandler;
+
+#[async_trait]
+impl DynamicStateHandler for CreateTestDataHandler {
+    async fn execute(&self, context: &mut DynamicStateContext) -> Result<String, ConnectError> {
+        if let Some(conn) = &mut context.connection {
+            // Create test tables
+            conn.query_drop("DROP TABLE IF EXISTS users").await?;
+            conn.query_drop("DROP TABLE IF EXISTS orders").await?;
+            
+            conn.query_drop("""
+                CREATE TABLE users (
+                    id INT PRIMARY KEY,
+                    name VARCHAR(100),
+                    email VARCHAR(100),
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """).await?;
+            
+            conn.query_drop("""
+                CREATE TABLE orders (
+                    id INT PRIMARY KEY,
+                    user_id INT,
+                    amount DECIMAL(10,2),
+                    status VARCHAR(20),
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users(id)
+                )
+            """).await?;
+            
+            // Insert initial data
+            for i in 1..=5 {
+                conn.query_drop(&format!(
+                    "INSERT INTO users (id, name, email) VALUES ({}, 'User{}', 'user{}@example.com')",
+                    i, i, i
+                )).await?;
+            }
+            
+            Ok("run_concurrent_operations".to_string())
+        } else {
+            Ok("connecting".to_string())
+        }
+    }
+}
+
+struct RunConcurrentOperationsHandler;
+
+#[async_trait]
+impl DynamicStateHandler for RunConcurrentOperationsHandler {
+    async fn execute(&self, context: &mut DynamicStateContext) -> Result<String, ConnectError> {
+        if let Some(conn) = &mut context.connection {
+            // Simulate concurrent operations
+            let operations = vec![
+                "INSERT INTO orders (id, user_id, amount, status) VALUES (1, 1, 100.00, 'pending')",
+                "INSERT INTO orders (id, user_id, amount, status) VALUES (2, 2, 200.00, 'pending')",
+                "UPDATE orders SET status = 'completed' WHERE id = 1",
+                "SELECT COUNT(*) FROM orders WHERE status = 'completed'",
+            ];
+            
+            for operation in operations {
+                conn.query_drop(operation).await?;
+            }
+            
+            Ok("verify_results".to_string())
+        } else {
+            Ok("connecting".to_string())
+        }
+    }
+}
+
+struct VerifyResultsHandler;
+
+#[async_trait]
+impl DynamicStateHandler for VerifyResultsHandler {
+    async fn execute(&self, context: &mut DynamicStateContext) -> Result<String, ConnectError> {
+        if let Some(conn) = &mut context.connection {
+            // Verify test results
+            let user_count: Vec<mysql::Row> = conn.query("SELECT COUNT(*) FROM users").await?;
+            let order_count: Vec<mysql::Row> = conn.query("SELECT COUNT(*) FROM orders").await?;
+            let completed_orders: Vec<mysql::Row> = conn.query("SELECT COUNT(*) FROM orders WHERE status = 'completed'").await?;
+            
+            println!("Users: {}", user_count[0].get::<i32, _>(0).unwrap());
+            println!("Orders: {}", order_count[0].get::<i32, _>(0).unwrap());
+            println!("Completed orders: {}", completed_orders[0].get::<i32, _>(0).unwrap());
+            
+            // Store results in context
+            context.set_data("user_count", user_count[0].get::<i32, _>(0).unwrap());
+            context.set_data("order_count", order_count[0].get::<i32, _>(0).unwrap());
+            
+            Ok("cleanup_environment".to_string())
+        } else {
+            Ok("connecting".to_string())
+        }
+    }
+}
+
+struct CleanupEnvironmentHandler;
+
+#[async_trait]
+impl DynamicStateHandler for CleanupEnvironmentHandler {
+    async fn execute(&self, context: &mut DynamicStateContext) -> Result<String, ConnectError> {
+        if let Some(conn) = &mut context.connection {
+            // Clean up test data
+            conn.query_drop("DROP TABLE IF EXISTS orders").await?;
+            conn.query_drop("DROP TABLE IF EXISTS users").await?;
+            
+            // Get database name from context
+            if let Some(db_name) = context.get_data::<String>("database_name") {
+                conn.query_drop(&format!("DROP DATABASE IF EXISTS {}", db_name)).await?;
+            }
+            
+            Ok("completed".to_string())
+        } else {
+            Ok("completed".to_string())
+        }
+    }
 }
 ```
 
-### Context Extensions
+## Context Management
 
-The `DynamicStateContext` extends the base context with:
+### Using Dynamic State Context
+
+The `DynamicStateContext` provides flexible data storage:
 
 ```rust
-pub struct DynamicStateContext {
-    // ... base fields ...
-    custom_data: HashMap<String, Box<dyn Any + Send + Sync>>,
+use test_rig::DynamicStateContext;
+
+// Store data in context
+context.set_data("table_name", "my_test_table");
+context.set_data("row_count", 1000);
+context.set_data("test_config", TestConfig { timeout: 30 });
+
+// Retrieve data from context
+if let Some(table_name) = context.get_data::<String>("table_name") {
+    println!("Using table: {}", table_name);
+}
+
+if let Some(row_count) = context.get_data::<i32>("row_count") {
+    println!("Expected rows: {}", row_count);
+}
+
+if let Some(config) = context.get_data::<TestConfig>("test_config") {
+    println!("Timeout: {} seconds", config.timeout);
 }
 ```
 
-### Helper Macros
+### Type-Safe Context Data
+
+Create type-safe context data structures:
 
 ```rust
-// Create states easily
-let state = dynamic_state!("my_state", "My Custom State");
+#[derive(Clone)]
+struct TestConfig {
+    timeout: u32,
+    retry_count: u32,
+    batch_size: usize,
+}
 
-// Register transitions
-register_transitions!(machine, from_state, [to_state1, to_state2]);
+#[derive(Clone)]
+struct TestResults {
+    success_count: u32,
+    failure_count: u32,
+    total_duration: Duration,
+}
+
+// Store and retrieve typed data
+context.set_data("config", TestConfig {
+    timeout: 30,
+    retry_count: 3,
+    batch_size: 100,
+});
+
+if let Some(config) = context.get_data::<TestConfig>("config") {
+    println!("Test timeout: {} seconds", config.timeout);
+}
 ```
 
-## Migration Guide
+## Error Handling
 
-### From Enum-Based to Dynamic
+### Error Propagation
 
-1. **Replace State enum usage:**
-   ```rust
-   // Old
-   State::Connecting
-   
-   // New
-   states::connecting()
-   ```
+Handle errors properly in dynamic state handlers:
 
-2. **Update handlers:**
-   ```rust
-   // Old
-   impl StateHandler for MyHandler {
-       async fn execute(&self, context: &mut StateContext) -> Result<State> {
-           Ok(State::Completed)
-       }
-   }
-   
-   // New
-   impl DynamicStateHandler for MyHandler {
-       async fn execute(&self, context: &mut DynamicStateContext) -> Result<DynamicState> {
-           Ok(states::completed())
-       }
-   }
-   ```
+```rust
+#[async_trait]
+impl DynamicStateHandler for MyHandler {
+    async fn execute(&self, context: &mut DynamicStateContext) -> Result<String, ConnectError> {
+        if let Some(conn) = &mut context.connection {
+            match conn.query_drop("SELECT 1").await {
+                Ok(_) => {
+                    println!("Operation successful");
+                    Ok("next_state".to_string())
+                }
+                Err(e) => {
+                    println!("Operation failed: {}", e);
+                    // Return error state or retry
+                    Ok("error_state".to_string())
+                }
+            }
+        } else {
+            Err(ConnectError::Connection("No database connection".into()))
+        }
+    }
+}
+```
 
-3. **Register transitions (optional):**
-   ```rust
-   machine.register_transitions(
-       states::initial(),
-       vec![states::connecting(), custom_states::my_state()]
-   );
-   ```
+### Retry Logic
 
-## Best Practices
+Implement retry logic in handlers:
 
-1. **Use Descriptive Names**: Make state names self-documenting
-2. **Group Related States**: Use modules to organize custom states
-3. **Validate Transitions**: Register valid transitions to catch errors early
-4. **Store Test Data**: Use `set_custom_data()` for test-specific information
-5. **Provide Display Names**: Use `with_display_name()` for better logging
+```rust
+use std::time::Duration;
+use tokio::time::sleep;
 
-## Common States Module
+struct RetryableHandler {
+    max_attempts: u32,
+    attempt: u32,
+}
 
-The framework provides a `common_states` module that eliminates code duplication by sharing common workflow states across multiple binaries.
+#[async_trait]
+impl DynamicStateHandler for RetryableHandler {
+    async fn execute(&self, context: &mut DynamicStateContext) -> Result<String, ConnectError> {
+        self.attempt += 1;
+        
+        if let Some(conn) = &mut context.connection {
+            match perform_operation(conn).await {
+                Ok(_) => Ok("next_state".to_string()),
+                Err(e) => {
+                    if self.attempt < self.max_attempts {
+                        println!("Attempt {} failed, retrying...", self.attempt);
+                        sleep(Duration::from_secs(1)).await;
+                        Ok("current_state".to_string()) // Retry same state
+                    } else {
+                        println!("Max attempts reached, giving up");
+                        Ok("error_state".to_string())
+                    }
+                }
+            }
+        } else {
+            Ok("connecting".to_string())
+        }
+    }
+}
+```
 
-### Available Common States
+## Integration with Common States
+
+### Using Common States
+
+Leverage common states for standard workflow steps:
 
 ```rust
 use test_rig::common_states::*;
 
-// Core workflow states available to all binaries
-parsing_config()      // "Parsing Configuration"
-connecting()          // "Connecting to TiDB"
-testing_connection()  // "Testing Connection"
-verifying_database()  // "Verifying Database"
-getting_version()     // "Getting Server Version"
-completed()           // "Completed"
-```
-
-### Using Common States in Your Binary
-
-```rust
-mod my_test_states {
-    use super::*;
-    use test_rig::common_states::*;
-
-    // Re-export common states
-    pub use test_rig::common_states::{
-        parsing_config, connecting, testing_connection, 
-        verifying_database, getting_version, completed,
-    };
-
-    // Define test-specific states
-    pub fn my_custom_state() -> DynamicState {
-        dynamic_state!("my_custom", "My Custom State")
-    }
-    
-    pub fn another_custom_state() -> DynamicState {
-        dynamic_state!("another_custom", "Another Custom State")
-    }
-}
-```
-
-### Benefits of Common States
-
-1. **Eliminates Duplication**: No need to redefine common workflow states in each binary
-2. **Single Source of Truth**: Changes to common states only need to be made in one place
-3. **Consistency**: All binaries use the same state definitions for common operations
-4. **Maintainability**: Easier to maintain and update common workflow logic
-
-## Example: Performance Test
-
-```rust
-mod performance_states {
-    use super::*;
-    use test_rig::common_states::*;
-    
-    // Re-export common states
-    pub use test_rig::common_states::{
-        parsing_config, connecting, testing_connection, 
-        verifying_database, getting_version, completed,
-    };
-    
-    // Performance test specific states
-    pub fn setup_data() -> DynamicState {
-        dynamic_state!("perf_setup", "Setting Up Performance Test Data")
-    }
-    
-    pub fn run_benchmark() -> DynamicState {
-        dynamic_state!("perf_benchmark", "Running Performance Benchmark")
-    }
-    
-    pub fn analyze_results() -> DynamicState {
-        dynamic_state!("perf_analyze", "Analyzing Performance Results")
-    }
-}
-
-// Usage in test
 let mut machine = DynamicStateMachine::new();
-machine.register_handler(performance_states::setup_data(), Box::new(SetupHandler));
-machine.register_handler(performance_states::run_benchmark(), Box::new(BenchmarkHandler));
-machine.register_handler(performance_states::analyze_results(), Box::new(AnalyzeHandler));
 
-// Store test configuration
-context.set_custom_data("benchmark_iterations".to_string(), 1000u32);
-context.set_custom_data("benchmark_timeout".to_string(), Duration::from_secs(60));
+// Register handlers for common states
+machine.register_handler(parsing_config(), Box::new(ParsingConfigHandlerAdapter));
+machine.register_handler(connecting(), Box::new(ConnectingHandlerAdapter));
+machine.register_handler(testing_connection(), Box::new(TestingConnectionHandlerAdapter));
+machine.register_handler(verifying_database(), Box::new(VerifyingDatabaseHandlerAdapter));
+machine.register_handler(getting_version(), Box::new(GettingVersionHandlerAdapter));
+
+// Register handlers for custom states
+machine.register_handler(creating_table(), Box::new(CreatingTableHandler));
+machine.register_handler(populating_data(), Box::new(PopulatingDataHandler));
+machine.register_handler(testing_queries(), Box::new(TestingQueriesHandler));
 ```
 
-This approach gives you complete flexibility while maintaining the benefits of the state machine pattern. 
+### State Transitions
+
+Handle state transitions properly:
+
+```rust
+#[async_trait]
+impl DynamicStateHandler for MyHandler {
+    async fn execute(&self, context: &mut DynamicStateContext) -> Result<String, ConnectError> {
+        // Check prerequisites
+        if !context.connection.is_some() {
+            return Ok("connecting".to_string());
+        }
+        
+        // Perform operation
+        match perform_operation(context).await {
+            Ok(_) => Ok("next_custom_state".to_string()),
+            Err(e) => {
+                // Handle different error types
+                match e {
+                    ConnectError::Connection(_) => Ok("connecting".to_string()),
+                    ConnectError::Database(_) => Ok("error_state".to_string()),
+                    _ => Ok("completed".to_string()),
+                }
+            }
+        }
+    }
+}
+```
+
+## Best Practices
+
+### State Design
+
+1. **Keep states focused**: Each state should have a single responsibility
+2. **Use descriptive names**: State names should clearly indicate their purpose
+3. **Handle errors gracefully**: Always handle potential errors in state handlers
+4. **Use common states**: Leverage common states for standard workflow steps
+
+### Handler Implementation
+
+1. **Check prerequisites**: Always check if required resources are available
+2. **Return appropriate states**: Return the correct next state based on conditions
+3. **Use context effectively**: Store and retrieve data from context as needed
+4. **Clean up resources**: Clean up resources in error cases
+
+### Error Handling
+
+1. **Classify errors**: Distinguish between transient and permanent errors
+2. **Implement retry logic**: Retry transient errors with appropriate backoff
+3. **Provide meaningful errors**: Include context in error messages
+4. **Graceful degradation**: Handle partial failures gracefully
+
+### Performance
+
+1. **Minimize state transitions**: Avoid unnecessary state transitions
+2. **Use async operations**: Leverage async/await for I/O operations
+3. **Batch operations**: Batch database operations when possible
+4. **Resource management**: Properly manage database connections and other resources
+
+## Examples
+
+### Complete Dynamic Workflow Example
+
+```rust
+use test_rig::{DynamicStateMachine, DynamicStateHandler, DynamicStateContext, ConnectError, common_states::*};
+use async_trait::async_trait;
+
+// Define custom states
+dynamic_state!(setup_test);
+dynamic_state!(run_test);
+dynamic_state!(verify_results);
+dynamic_state!(cleanup);
+
+// Handler implementations
+struct SetupTestHandler;
+
+#[async_trait]
+impl DynamicStateHandler for SetupTestHandler {
+    async fn execute(&self, context: &mut DynamicStateContext) -> Result<String, ConnectError> {
+        if let Some(conn) = &mut context.connection {
+            conn.query_drop("CREATE TABLE IF NOT EXISTS test_data (id INT, value VARCHAR(50))").await?;
+            context.set_data("table_created", true);
+            Ok("run_test".to_string())
+        } else {
+            Ok("connecting".to_string())
+        }
+    }
+}
+
+struct RunTestHandler;
+
+#[async_trait]
+impl DynamicStateHandler for RunTestHandler {
+    async fn execute(&self, context: &mut DynamicStateContext) -> Result<String, ConnectError> {
+        if let Some(conn) = &mut context.connection {
+            // Insert test data
+            for i in 1..=10 {
+                conn.query_drop(&format!(
+                    "INSERT INTO test_data (id, value) VALUES ({}, 'test{}')",
+                    i, i
+                )).await?;
+            }
+            
+            // Perform test operations
+            conn.query_drop("UPDATE test_data SET value = CONCAT(value, '_updated') WHERE id % 2 = 0").await?;
+            
+            context.set_data("test_completed", true);
+            Ok("verify_results".to_string())
+        } else {
+            Ok("connecting".to_string())
+        }
+    }
+}
+
+struct VerifyResultsHandler;
+
+#[async_trait]
+impl DynamicStateHandler for VerifyResultsHandler {
+    async fn execute(&self, context: &mut DynamicStateContext) -> Result<String, ConnectError> {
+        if let Some(conn) = &mut context.connection {
+            let result: Vec<mysql::Row> = conn.query("SELECT COUNT(*) FROM test_data").await?;
+            let count = result[0].get::<i32, _>(0).unwrap();
+            
+            println!("Test data contains {} rows", count);
+            
+            if count == 10 {
+                println!("✓ Test verification passed");
+                Ok("cleanup".to_string())
+            } else {
+                println!("✗ Test verification failed");
+                Ok("error_state".to_string())
+            }
+        } else {
+            Ok("connecting".to_string())
+        }
+    }
+}
+
+struct CleanupHandler;
+
+#[async_trait]
+impl DynamicStateHandler for CleanupHandler {
+    async fn execute(&self, context: &mut DynamicStateContext) -> Result<String, ConnectError> {
+        if let Some(conn) = &mut context.connection {
+            conn.query_drop("DROP TABLE IF EXISTS test_data").await?;
+            println!("✓ Cleanup completed");
+        }
+        Ok("completed".to_string())
+    }
+}
+
+// Create and run the machine
+async fn run_dynamic_workflow() -> Result<(), ConnectError> {
+    let mut machine = DynamicStateMachine::new();
+    
+    // Register common state handlers
+    machine.register_handler(parsing_config(), Box::new(ParsingConfigHandlerAdapter));
+    machine.register_handler(connecting(), Box::new(ConnectingHandlerAdapter));
+    machine.register_handler(testing_connection(), Box::new(TestingConnectionHandlerAdapter));
+    
+    // Register custom state handlers
+    machine.register_handler(setup_test(), Box::new(SetupTestHandler));
+    machine.register_handler(run_test(), Box::new(RunTestHandler));
+    machine.register_handler(verify_results(), Box::new(VerifyResultsHandler));
+    machine.register_handler(cleanup(), Box::new(CleanupHandler));
+    
+    machine.run().await
+}
+```
+
+This dynamic states system provides a powerful and flexible way to create custom workflows while maintaining the benefits of the state machine architecture. 
