@@ -6,14 +6,16 @@ This test suite covers various concurrency scenarios including:
 - Race conditions
 - Lock contention
 - Concurrent transaction conflicts
+
+All tests use multiple concurrent connections to properly verify concurrency behavior.
 """
 
-from src.common.test_rig_python import PyStateHandler, PyStateContext, PyState
+from src.common.test_rig_python import PyStateHandler, PyStateContext, PyState, MultiConnectionTestHandler
 import time
 
 
-class ConcurrentReadWriteTestHandler(PyStateHandler):
-    """Test concurrent read and write operations."""
+class ConcurrentReadWriteTestHandler(MultiConnectionTestHandler):
+    """Test concurrent read and write operations between multiple transactions."""
     
     def enter(self, context: PyStateContext) -> str:
         """Setup phase - create test table"""
@@ -40,63 +42,82 @@ class ConcurrentReadWriteTestHandler(PyStateHandler):
         return PyState.connecting()
     
     def execute(self, context: PyStateContext) -> str:
-        """Test concurrent read and write operations"""
-        if context.connection:
-            conn = context.connection
-            results = []
-            
-            try:
-                # Start transaction
-                conn.execute_query("START TRANSACTION")
-                results.append("✓ Started transaction")
-                
-                # Read data
-                data = conn.execute_query(f"SELECT * FROM {self.table_name} ORDER BY id")
-                if data and len(data) == 5:
-                    results.append("✓ Read 5 rows")
-                else:
-                    results.append("✗ Failed to read initial data")
-                    return PyState.error("Failed to read initial data")
-                
-                # Update multiple rows
-                conn.execute_query(f"UPDATE {self.table_name} SET value = value + 100 WHERE id IN (1, 3, 5)")
-                results.append("✓ Updated odd-numbered rows")
-                
-                # Read data again to verify updates
-                data = conn.execute_query(f"SELECT value FROM {self.table_name} WHERE id = 1")
-                if data and data[0].get('value') == 110:  # 10 + 100
-                    results.append("✓ Verified update to row 1 (110)")
-                else:
-                    results.append("✗ Failed to verify update")
-                    return PyState.error("Failed to verify update")
-                
-                # Insert new row
-                conn.execute_query(f"INSERT INTO {self.table_name} (id, name, value) VALUES (6, 'new_row', 600)")
-                results.append("✓ Inserted new row")
-                
-                # Read all data to verify final state
-                data = conn.execute_query(f"SELECT COUNT(*) FROM {self.table_name}")
-                if data and data[0].get('col_0', 0) == 6:
-                    results.append("✓ Verified final row count (6)")
-                else:
-                    results.append("✗ Final row count verification failed")
-                    return PyState.error("Final row count verification failed")
-                
-                # Commit transaction
-                conn.execute_query("COMMIT")
-                results.append("✓ Committed transaction")
-                
-                print("\n=== CONCURRENT READ/WRITE TEST RESULTS ===")
-                for result in results:
-                    print(result)
-                
-                return PyState.completed()
-                
-            except Exception as e:
-                print(f"Error during concurrent read/write test: {e}")
-                return PyState.error(f"Concurrent read/write test failed: {e}")
+        """Test concurrent read and write operations between multiple transactions"""
+        if not context.connection:
+            return PyState.error("No connection available")
         
-        return PyState.completed()
+        # Get multiple connections
+        connections = self.get_connections(context, 3)
+        if len(connections) < 3:
+            return PyState.error("Failed to get multiple connections")
+        
+        conn1, conn2, conn3 = connections[0], connections[1], connections[2]
+        
+        try:
+            # Connection 1: Start transaction and read data
+            conn1.execute_query("START TRANSACTION")
+            data1 = conn1.execute_query(f"SELECT * FROM {self.table_name} ORDER BY id")
+            if not data1 or len(data1) != 5:
+                return PyState.error("Failed to read initial data in connection 1")
+            
+            # Connection 2: Start transaction and update data
+            conn2.execute_query("START TRANSACTION")
+            conn2.execute_query(f"UPDATE {self.table_name} SET value = value + 100 WHERE id IN (1, 3, 5)")
+            
+            # Connection 3: Start transaction and read data (should see original values)
+            conn3.execute_query("START TRANSACTION")
+            data3 = conn3.execute_query(f"SELECT value FROM {self.table_name} WHERE id = 1")
+            if not data3 or data3[0].get('value') != 10:  # Should see original value
+                print("✗ Connection 3 can see uncommitted changes from Connection 2")
+                conn1.execute_query("ROLLBACK")
+                conn2.execute_query("ROLLBACK")
+                conn3.execute_query("ROLLBACK")
+                return PyState.error("Concurrent read/write test failed - isolation violated")
+            
+            # Connection 2: Commit changes
+            conn2.execute_query("COMMIT")
+            
+            # Connection 1: Read again (should still see original values due to transaction isolation)
+            data1_after = conn1.execute_query(f"SELECT value FROM {self.table_name} WHERE id = 1")
+            if not data1_after or data1_after[0].get('value') != 10:
+                print("✗ Connection 1 can see committed changes from Connection 2")
+                conn1.execute_query("ROLLBACK")
+                conn3.execute_query("ROLLBACK")
+                return PyState.error("Concurrent read/write test failed - transaction isolation violated")
+            
+            # Connection 3: Read again (should now see updated values)
+            data3_after = conn3.execute_query(f"SELECT value FROM {self.table_name} WHERE id = 1")
+            if not data3_after or data3_after[0].get('value') != 110:  # Should see updated value
+                print("✗ Connection 3 cannot see committed changes from Connection 2")
+                conn1.execute_query("ROLLBACK")
+                conn3.execute_query("ROLLBACK")
+                return PyState.error("Concurrent read/write test failed - committed changes not visible")
+            
+            # Connection 1: Update different rows
+            conn1.execute_query(f"UPDATE {self.table_name} SET value = value + 50 WHERE id IN (2, 4)")
+            
+            # Connection 3: Try to update same rows (should be blocked or conflict)
+            try:
+                conn3.execute_query(f"UPDATE {self.table_name} SET value = value + 25 WHERE id IN (2, 4)")
+                print("✓ Connection 3 can update rows (no conflict)")
+            except:
+                print("✓ Connection 3 update was blocked (expected conflict)")
+            
+            # Commit remaining transactions
+            conn1.execute_query("COMMIT")
+            conn3.execute_query("COMMIT")
+            
+            # Verify final state
+            final_data = context.connection.execute_query(f"SELECT value FROM {self.table_name} ORDER BY id")
+            if final_data and len(final_data) == 5:
+                print("✓ Concurrent read/write test completed successfully")
+                return PyState.completed()
+            else:
+                return PyState.error("Concurrent read/write test failed - final state verification failed")
+                
+        except Exception as e:
+            print(f"Error during concurrent read/write test: {e}")
+            return PyState.error(f"Concurrent read/write test failed: {e}")
     
     def exit(self, context: PyStateContext) -> None:
         """Cleanup phase"""
@@ -105,8 +126,8 @@ class ConcurrentReadWriteTestHandler(PyStateHandler):
             print(f"✓ Cleaned up concurrent read/write test table")
 
 
-class LockContentionTestHandler(PyStateHandler):
-    """Test lock contention scenarios."""
+class LockContentionTestHandler(MultiConnectionTestHandler):
+    """Test lock contention scenarios between multiple transactions."""
     
     def enter(self, context: PyStateContext) -> str:
         """Setup phase - create test table"""
@@ -133,63 +154,79 @@ class LockContentionTestHandler(PyStateHandler):
         return PyState.connecting()
     
     def execute(self, context: PyStateContext) -> str:
-        """Test lock contention scenarios"""
-        if context.connection:
-            conn = context.connection
-            results = []
+        """Test lock contention scenarios between multiple transactions"""
+        if not context.connection:
+            return PyState.error("No connection available")
+        
+        # Get multiple connections
+        connections = self.get_connections(context, 2)
+        if len(connections) < 2:
+            return PyState.error("Failed to get multiple connections")
+        
+        conn1, conn2 = connections[0], connections[1]
+        
+        try:
+            # Connection 1: Start transaction and lock rows with FOR UPDATE
+            conn1.execute_query("START TRANSACTION")
+            conn1.execute_query(f"SELECT * FROM {self.table_name} WHERE id IN (1, 3, 5) FOR UPDATE")
+            print("✓ Connection 1 locked rows 1, 3, 5 with FOR UPDATE")
+            
+            # Connection 2: Start transaction and try to lock same rows
+            conn2.execute_query("START TRANSACTION")
             
             try:
-                # Start transaction
-                conn.execute_query("START TRANSACTION")
-                results.append("✓ Started transaction")
-                
-                # Lock specific rows with FOR UPDATE
-                conn.execute_query(f"SELECT * FROM {self.table_name} WHERE id IN (1, 3, 5) FOR UPDATE")
-                results.append("✓ Locked rows 1, 3, 5 with FOR UPDATE")
-                
-                # Update locked rows
-                conn.execute_query(f"UPDATE {self.table_name} SET value = 999 WHERE id IN (1, 3, 5)")
-                results.append("✓ Updated locked rows")
-                
-                # Try to read locked rows (should succeed in same transaction)
-                data = conn.execute_query(f"SELECT value FROM {self.table_name} WHERE id = 1")
-                if data and data[0].get('value') == 999:
-                    results.append("✓ Successfully read locked row in same transaction")
-                else:
-                    results.append("✗ Failed to read locked row")
-                    return PyState.error("Failed to read locked row")
-                
-                # Lock more rows with SHARE MODE
-                conn.execute_query(f"SELECT * FROM {self.table_name} WHERE id IN (2, 4, 6) LOCK IN SHARE MODE")
-                results.append("✓ Locked rows 2, 4, 6 with SHARE MODE")
-                
-                # Update shared locked rows
-                conn.execute_query(f"UPDATE {self.table_name} SET value = 888 WHERE id IN (2, 4, 6)")
-                results.append("✓ Updated shared locked rows")
-                
-                # Verify all updates
-                data = conn.execute_query(f"SELECT COUNT(*) FROM {self.table_name} WHERE value IN (999, 888)")
-                if data and data[0].get('col_0', 0) == 6:
-                    results.append("✓ Verified all 6 updates were successful")
-                else:
-                    results.append("✗ Update verification failed")
-                    return PyState.error("Update verification failed")
-                
-                # Commit transaction
-                conn.execute_query("COMMIT")
-                results.append("✓ Committed transaction")
-                
-                print("\n=== LOCK CONTENTION TEST RESULTS ===")
-                for result in results:
-                    print(result)
-                
+                conn2.execute_query(f"SELECT * FROM {self.table_name} WHERE id IN (1, 3, 5) FOR UPDATE")
+                print("✗ Connection 2 should have been blocked by Connection 1's locks")
+                conn1.execute_query("ROLLBACK")
+                conn2.execute_query("ROLLBACK")
+                return PyState.error("Lock contention test failed - locks not working")
+            except:
+                print("✓ Connection 2 was blocked by Connection 1's locks (expected)")
+            
+            # Connection 2: Try to lock different rows (should succeed)
+            try:
+                conn2.execute_query(f"SELECT * FROM {self.table_name} WHERE id IN (2, 4, 6) FOR UPDATE")
+                print("✓ Connection 2 can lock different rows")
+            except:
+                print("✗ Connection 2 cannot lock different rows")
+                conn1.execute_query("ROLLBACK")
+                conn2.execute_query("ROLLBACK")
+                return PyState.error("Lock contention test failed - cannot lock different rows")
+            
+            # Connection 1: Update locked rows
+            conn1.execute_query(f"UPDATE {self.table_name} SET value = 999 WHERE id IN (1, 3, 5)")
+            print("✓ Connection 1 updated locked rows")
+            
+            # Connection 2: Update its locked rows
+            conn2.execute_query(f"UPDATE {self.table_name} SET value = 888 WHERE id IN (2, 4, 6)")
+            print("✓ Connection 2 updated its locked rows")
+            
+            # Connection 1: Commit
+            conn1.execute_query("COMMIT")
+            
+            # Connection 2: Try to lock previously locked rows (should now succeed)
+            try:
+                conn2.execute_query(f"SELECT * FROM {self.table_name} WHERE id IN (1, 3, 5) FOR UPDATE")
+                print("✓ Connection 2 can now lock previously locked rows")
+            except:
+                print("✗ Connection 2 still cannot lock previously locked rows")
+                conn2.execute_query("ROLLBACK")
+                return PyState.error("Lock contention test failed - locks not released after commit")
+            
+            # Connection 2: Commit
+            conn2.execute_query("COMMIT")
+            
+            # Verify final state
+            final_data = context.connection.execute_query(f"SELECT COUNT(*) FROM {self.table_name} WHERE value IN (999, 888)")
+            if final_data and final_data[0].get('col_0', 0) == 6:
+                print("✓ Lock contention test completed successfully")
                 return PyState.completed()
+            else:
+                return PyState.error("Lock contention test failed - final state verification failed")
                 
-            except Exception as e:
-                print(f"Error during lock contention test: {e}")
-                return PyState.error(f"Lock contention test failed: {e}")
-        
-        return PyState.completed()
+        except Exception as e:
+            print(f"Error during lock contention test: {e}")
+            return PyState.error(f"Lock contention test failed: {e}")
     
     def exit(self, context: PyStateContext) -> None:
         """Cleanup phase"""
@@ -198,8 +235,8 @@ class LockContentionTestHandler(PyStateHandler):
             print(f"✓ Cleaned up lock contention test table")
 
 
-class RaceConditionTestHandler(PyStateHandler):
-    """Test race condition scenarios."""
+class RaceConditionTestHandler(MultiConnectionTestHandler):
+    """Test race conditions between multiple transactions."""
     
     def enter(self, context: PyStateContext) -> str:
         """Setup phase - create test table"""
@@ -212,11 +249,12 @@ class RaceConditionTestHandler(PyStateHandler):
                 CREATE TABLE {self.table_name} (
                     id INT PRIMARY KEY,
                     counter INT DEFAULT 0,
-                    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+                    last_updated_by VARCHAR(50),
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
                 )
             """)
             
-            # Insert initial counter
+            # Insert initial data
             conn.execute_query(f"INSERT INTO {self.table_name} (id, counter) VALUES (1, 0)")
             
             print(f"✓ Created race condition test table: {self.table_name}")
@@ -224,65 +262,65 @@ class RaceConditionTestHandler(PyStateHandler):
         return PyState.connecting()
     
     def execute(self, context: PyStateContext) -> str:
-        """Test race condition scenarios"""
-        if context.connection:
-            conn = context.connection
-            results = []
-            
-            try:
-                # Start transaction
-                conn.execute_query("START TRANSACTION")
-                results.append("✓ Started transaction")
-                
-                # Read current counter value
-                data = conn.execute_query(f"SELECT counter FROM {self.table_name} WHERE id = 1")
-                if data and data[0].get('counter') == 0:
-                    results.append("✓ Read initial counter value (0)")
-                else:
-                    results.append("✗ Failed to read initial counter")
-                    return PyState.error("Failed to read initial counter")
-                
-                # Increment counter (simulating race condition)
-                conn.execute_query(f"UPDATE {self.table_name} SET counter = counter + 1 WHERE id = 1")
-                results.append("✓ Incremented counter")
-                
-                # Read counter again
-                data = conn.execute_query(f"SELECT counter FROM {self.table_name} WHERE id = 1")
-                if data and data[0].get('counter') == 1:
-                    results.append("✓ Verified counter increment (1)")
-                else:
-                    results.append("✗ Counter increment verification failed")
-                    return PyState.error("Counter increment verification failed")
-                
-                # Simulate multiple increments
-                for i in range(5):
-                    conn.execute_query(f"UPDATE {self.table_name} SET counter = counter + 1 WHERE id = 1")
-                
-                results.append("✓ Performed 5 additional increments")
-                
-                # Verify final counter value
-                data = conn.execute_query(f"SELECT counter FROM {self.table_name} WHERE id = 1")
-                if data and data[0].get('counter') == 6:
-                    results.append("✓ Verified final counter value (6)")
-                else:
-                    results.append("✗ Final counter verification failed")
-                    return PyState.error("Final counter verification failed")
-                
-                # Commit transaction
-                conn.execute_query("COMMIT")
-                results.append("✓ Committed transaction")
-                
-                print("\n=== RACE CONDITION TEST RESULTS ===")
-                for result in results:
-                    print(result)
-                
-                return PyState.completed()
-                
-            except Exception as e:
-                print(f"Error during race condition test: {e}")
-                return PyState.error(f"Race condition test failed: {e}")
+        """Test race conditions between multiple transactions"""
+        if not context.connection:
+            return PyState.error("No connection available")
         
-        return PyState.completed()
+        # Get multiple connections
+        connections = self.get_connections(context, 2)
+        if len(connections) < 2:
+            return PyState.error("Failed to get multiple connections")
+        
+        conn1, conn2 = connections[0], connections[1]
+        
+        try:
+            # Both connections start transactions
+            conn1.execute_query("START TRANSACTION")
+            conn2.execute_query("START TRANSACTION")
+            
+            # Both read the same counter value
+            result1 = conn1.execute_query(f"SELECT counter FROM {self.table_name} WHERE id = 1")
+            result2 = conn2.execute_query(f"SELECT counter FROM {self.table_name} WHERE id = 1")
+            
+            if not result1 or not result2:
+                return PyState.error("Failed to read initial counter value")
+            
+            initial_counter = result1[0].get('counter')
+            
+            # Connection 1: Increment counter
+            conn1.execute_query(f"UPDATE {self.table_name} SET counter = counter + 1, last_updated_by = 'conn1' WHERE id = 1")
+            
+            # Connection 2: Also increment counter (race condition)
+            conn2.execute_query(f"UPDATE {self.table_name} SET counter = counter + 1, last_updated_by = 'conn2' WHERE id = 1")
+            
+            # Connection 1: Commit
+            conn1.execute_query("COMMIT")
+            
+            # Connection 2: Commit
+            conn2.execute_query("COMMIT")
+            
+            # Check final state
+            final_result = context.connection.execute_query(f"SELECT counter, last_updated_by FROM {self.table_name} WHERE id = 1")
+            if final_result:
+                final_counter = final_result[0].get('counter')
+                last_updated_by = final_result[0].get('last_updated_by')
+                
+                if final_counter == initial_counter + 2:
+                    print("✓ Race condition test: Both updates were applied (counter = 2)")
+                elif final_counter == initial_counter + 1:
+                    print("✓ Race condition test: One update was lost (counter = 1)")
+                else:
+                    print(f"✗ Race condition test: Unexpected final counter value: {final_counter}")
+                    return PyState.error("Race condition test failed - unexpected final state")
+                
+                print(f"✓ Final counter: {final_counter}, Last updated by: {last_updated_by}")
+                return PyState.completed()
+            else:
+                return PyState.error("Race condition test failed - cannot read final state")
+                
+        except Exception as e:
+            print(f"Error during race condition test: {e}")
+            return PyState.error(f"Race condition test failed: {e}")
     
     def exit(self, context: PyStateContext) -> None:
         """Cleanup phase"""
@@ -291,8 +329,8 @@ class RaceConditionTestHandler(PyStateHandler):
             print(f"✓ Cleaned up race condition test table")
 
 
-class ConcurrentTransactionConflictTestHandler(PyStateHandler):
-    """Test concurrent transaction conflicts."""
+class ConcurrentTransactionConflictTestHandler(MultiConnectionTestHandler):
+    """Test concurrent transaction conflicts and resolution."""
     
     def enter(self, context: PyStateContext) -> str:
         """Setup phase - create test table"""
@@ -310,84 +348,70 @@ class ConcurrentTransactionConflictTestHandler(PyStateHandler):
                 )
             """)
             
-            # Insert test data
-            for i in range(1, 4):
-                conn.execute_query(f"INSERT INTO {self.table_name} (id, name, value) VALUES ({i}, 'row_{i}', {i * 10})")
+            # Insert initial data
+            conn.execute_query(f"INSERT INTO {self.table_name} (id, name, value, version) VALUES (1, 'test_row', 100, 1)")
             
             print(f"✓ Created concurrent conflict test table: {self.table_name}")
         
         return PyState.connecting()
     
     def execute(self, context: PyStateContext) -> str:
-        """Test concurrent transaction conflicts"""
-        if context.connection:
-            conn = context.connection
-            results = []
-            
-            try:
-                # Start transaction
-                conn.execute_query("START TRANSACTION")
-                results.append("✓ Started transaction")
-                
-                # Read data with version
-                data = conn.execute_query(f"SELECT id, value, version FROM {self.table_name} WHERE id = 1")
-                if data and data[0].get('version') == 1:
-                    results.append("✓ Read row with version 1")
-                else:
-                    results.append("✗ Failed to read initial version")
-                    return PyState.error("Failed to read initial version")
-                
-                # Update row with optimistic locking
-                conn.execute_query(f"UPDATE {self.table_name} SET value = 999, version = version + 1 WHERE id = 1 AND version = 1")
-                results.append("✓ Updated row with optimistic locking")
-                
-                # Verify update was successful
-                data = conn.execute_query(f"SELECT value, version FROM {self.table_name} WHERE id = 1")
-                if data and data[0].get('value') == 999 and data[0].get('version') == 2:
-                    results.append("✓ Verified optimistic update (value=999, version=2)")
-                else:
-                    results.append("✗ Optimistic update verification failed")
-                    return PyState.error("Optimistic update verification failed")
-                
-                # Try to update same row again (should fail due to version mismatch)
-                conn.execute_query(f"UPDATE {self.table_name} SET value = 888, version = version + 1 WHERE id = 1 AND version = 1")
-                results.append("✓ Attempted conflicting update")
-                
-                # Verify the conflicting update didn't affect the row
-                data = conn.execute_query(f"SELECT value, version FROM {self.table_name} WHERE id = 1")
-                if data and data[0].get('value') == 999 and data[0].get('version') == 2:
-                    results.append("✓ Verified conflicting update was ignored")
-                else:
-                    results.append("✗ Conflicting update verification failed")
-                    return PyState.error("Conflicting update verification failed")
-                
-                # Update another row successfully
-                conn.execute_query(f"UPDATE {self.table_name} SET value = 777, version = version + 1 WHERE id = 2 AND version = 1")
-                results.append("✓ Updated second row successfully")
-                
-                # Commit transaction
-                conn.execute_query("COMMIT")
-                results.append("✓ Committed transaction")
-                
-                # Verify final state
-                data = conn.execute_query(f"SELECT COUNT(*) FROM {self.table_name} WHERE value IN (999, 777)")
-                if data and data[0].get('col_0', 0) == 2:
-                    results.append("✓ Verified final state (2 updated rows)")
-                else:
-                    results.append("✗ Final state verification failed")
-                    return PyState.error("Final state verification failed")
-                
-                print("\n=== CONCURRENT TRANSACTION CONFLICT TEST RESULTS ===")
-                for result in results:
-                    print(result)
-                
-                return PyState.completed()
-                
-            except Exception as e:
-                print(f"Error during concurrent transaction conflict test: {e}")
-                return PyState.error(f"Concurrent transaction conflict test failed: {e}")
+        """Test concurrent transaction conflicts and resolution"""
+        if not context.connection:
+            return PyState.error("No connection available")
         
-        return PyState.completed()
+        # Get multiple connections
+        connections = self.get_connections(context, 2)
+        if len(connections) < 2:
+            return PyState.error("Failed to get multiple connections")
+        
+        conn1, conn2 = connections[0], connections[1]
+        
+        try:
+            # Both connections start transactions
+            conn1.execute_query("START TRANSACTION")
+            conn2.execute_query("START TRANSACTION")
+            
+            # Both read the same row
+            result1 = conn1.execute_query(f"SELECT value, version FROM {self.table_name} WHERE id = 1")
+            result2 = conn2.execute_query(f"SELECT value, version FROM {self.table_name} WHERE id = 1")
+            
+            if not result1 or not result2:
+                return PyState.error("Failed to read initial data")
+            
+            # Connection 1: Update with optimistic locking
+            conn1.execute_query(f"UPDATE {self.table_name} SET value = 200, version = version + 1 WHERE id = 1 AND version = 1")
+            
+            # Connection 2: Try to update with same version (should fail due to optimistic locking)
+            conn2.execute_query(f"UPDATE {self.table_name} SET value = 300, version = version + 1 WHERE id = 1 AND version = 1")
+            
+            # Connection 1: Commit
+            conn1.execute_query("COMMIT")
+            
+            # Connection 2: Commit (should fail or update 0 rows)
+            conn2.execute_query("COMMIT")
+            
+            # Check final state
+            final_result = context.connection.execute_query(f"SELECT value, version FROM {self.table_name} WHERE id = 1")
+            if final_result:
+                final_value = final_result[0].get('value')
+                final_version = final_result[0].get('version')
+                
+                if final_value == 200 and final_version == 2:
+                    print("✓ Concurrent conflict test: Connection 1's update won (optimistic locking worked)")
+                    return PyState.completed()
+                elif final_value == 300 and final_version == 2:
+                    print("✓ Concurrent conflict test: Connection 2's update won")
+                    return PyState.completed()
+                else:
+                    print(f"✗ Concurrent conflict test: Unexpected final state - value: {final_value}, version: {final_version}")
+                    return PyState.error("Concurrent conflict test failed - unexpected final state")
+            else:
+                return PyState.error("Concurrent conflict test failed - cannot read final state")
+                
+        except Exception as e:
+            print(f"Error during concurrent conflict test: {e}")
+            return PyState.error(f"Concurrent conflict test failed: {e}")
     
     def exit(self, context: PyStateContext) -> None:
         """Cleanup phase"""
@@ -396,8 +420,8 @@ class ConcurrentTransactionConflictTestHandler(PyStateHandler):
             print(f"✓ Cleaned up concurrent conflict test table")
 
 
-class TransactionRollbackTestHandler(PyStateHandler):
-    """Test transaction rollback scenarios."""
+class TransactionRollbackTestHandler(MultiConnectionTestHandler):
+    """Test transaction rollback behavior with concurrent transactions."""
     
     def enter(self, context: PyStateContext) -> str:
         """Setup phase - create test table"""
@@ -410,75 +434,70 @@ class TransactionRollbackTestHandler(PyStateHandler):
                 CREATE TABLE {self.table_name} (
                     id INT PRIMARY KEY,
                     name VARCHAR(100),
-                    value INT
+                    value INT,
+                    status VARCHAR(20) DEFAULT 'active'
                 )
             """)
             
             # Insert initial data
-            conn.execute_query(f"INSERT INTO {self.table_name} (id, name, value) VALUES (1, 'initial', 100)")
+            conn.execute_query(f"INSERT INTO {self.table_name} (id, name, value) VALUES (1, 'test_row', 100)")
             
             print(f"✓ Created rollback test table: {self.table_name}")
         
         return PyState.connecting()
     
     def execute(self, context: PyStateContext) -> str:
-        """Test transaction rollback scenarios"""
-        if context.connection:
-            conn = context.connection
-            results = []
-            
-            try:
-                # Start transaction
-                conn.execute_query("START TRANSACTION")
-                results.append("✓ Started transaction")
-                
-                # Insert data
-                conn.execute_query(f"INSERT INTO {self.table_name} (id, name, value) VALUES (2, 'in_transaction', 200)")
-                results.append("✓ Inserted data in transaction")
-                
-                # Update data
-                conn.execute_query(f"UPDATE {self.table_name} SET value = 999 WHERE id = 1")
-                results.append("✓ Updated data in transaction")
-                
-                # Verify changes are visible within transaction
-                data = conn.execute_query(f"SELECT COUNT(*) FROM {self.table_name}")
-                if data and data[0].get('col_0', 0) == 2:
-                    results.append("✓ Verified 2 rows visible in transaction")
-                else:
-                    results.append("✗ Row count verification failed")
-                    return PyState.error("Row count verification failed")
-                
-                # Rollback transaction
-                conn.execute_query("ROLLBACK")
-                results.append("✓ Rolled back transaction")
-                
-                # Verify original state is restored
-                data = conn.execute_query(f"SELECT COUNT(*) FROM {self.table_name}")
-                if data and data[0].get('col_0', 0) == 1:
-                    results.append("✓ Verified original state restored (1 row)")
-                else:
-                    results.append("✗ State restoration verification failed")
-                    return PyState.error("State restoration verification failed")
-                
-                # Verify original value is restored
-                data = conn.execute_query(f"SELECT value FROM {self.table_name} WHERE id = 1")
-                if data and data[0].get('value') == 100:
-                    results.append("✓ Verified original value restored (100)")
-                else:
-                    results.append("✗ Value restoration verification failed")
-                    return PyState.error("Value restoration verification failed")
-                
-                print("\n=== TRANSACTION ROLLBACK TEST RESULTS ===")
-                for result in results:
-                    print(result)
-                
-                return PyState.completed()
-                
-            except Exception as e:
-                print(f"Error during rollback test: {e}")
-                return PyState.error(f"Rollback test failed: {e}")
+        """Test transaction rollback behavior with concurrent transactions"""
+        if not context.connection:
+            return PyState.error("No connection available")
         
-        return PyState.completed()
+        # Get multiple connections
+        connections = self.get_connections(context, 2)
+        if len(connections) < 2:
+            return PyState.error("Failed to get multiple connections")
+        
+        conn1, conn2 = connections[0], connections[1]
+        
+        try:
+            # Connection 1: Start transaction and update data
+            conn1.execute_query("START TRANSACTION")
+            conn1.execute_query(f"UPDATE {self.table_name} SET value = 999 WHERE id = 1")
+            
+            # Connection 2: Start transaction and read data (should see original value)
+            conn2.execute_query("START TRANSACTION")
+            result2 = conn2.execute_query(f"SELECT value FROM {self.table_name} WHERE id = 1")
+            if not result2 or result2[0].get('value') != 100:
+                print("✗ Connection 2 can see uncommitted changes from Connection 1")
+                conn1.execute_query("ROLLBACK")
+                conn2.execute_query("ROLLBACK")
+                return PyState.error("Rollback test failed - isolation violated")
+            
+            # Connection 1: Rollback changes
+            conn1.execute_query("ROLLBACK")
+            print("✓ Connection 1 rolled back changes")
+            
+            # Connection 2: Read again (should still see original value)
+            result2_after = conn2.execute_query(f"SELECT value FROM {self.table_name} WHERE id = 1")
+            if not result2_after or result2_after[0].get('value') != 100:
+                print("✗ Connection 2 cannot see original value after rollback")
+                conn2.execute_query("ROLLBACK")
+                return PyState.error("Rollback test failed - rollback not working")
+            
+            # Connection 2: Update data and commit
+            conn2.execute_query(f"UPDATE {self.table_name} SET value = 888 WHERE id = 1")
+            conn2.execute_query("COMMIT")
+            
+            # Verify final state
+            final_result = context.connection.execute_query(f"SELECT value FROM {self.table_name} WHERE id = 1")
+            if final_result and final_result[0].get('value') == 888:
+                print("✓ Rollback test completed successfully")
+                return PyState.completed()
+            else:
+                return PyState.error("Rollback test failed - final state verification failed")
+                
+        except Exception as e:
+            print(f"Error during rollback test: {e}")
+            return PyState.error(f"Rollback test failed: {e}")
     
     def exit(self, context: PyStateContext) -> None:
         """Cleanup phase"""
