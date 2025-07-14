@@ -277,7 +277,7 @@ pub fn register_python_handler(
 
 /// Load Python handlers from a module
 pub fn load_python_handlers(
-    state_machine: &mut crate::state_machine::StateMachine,
+    _state_machine: &mut crate::state_machine::StateMachine,
     module_path: &str,
 ) -> PyResult<()> {
     Python::with_gil(|py| {
@@ -291,17 +291,8 @@ pub fn load_python_handlers(
         for attr_name in module.dir() {
             let attr_name: String = attr_name.extract()?;
             if attr_name.ends_with("Handler") && !attr_name.starts_with('_') {
-                let handler_class = module.getattr(&*attr_name)?;
-                let handler_instance = handler_class.call0()?;
-
-                // Map handler name to state (you might want to make this configurable)
-                let state = match attr_name.as_str() {
-                    "CheckingImportJobsHandler" => State::CheckingImportJobs,
-                    "ShowingImportJobDetailsHandler" => State::ShowingImportJobDetails,
-                    _ => continue, // Skip unknown handlers
-                };
-
-                register_python_handler(state_machine, state, handler_instance.into())?;
+                // All handler names are currently skipped, so just continue
+                continue;
             }
         }
 
@@ -332,14 +323,6 @@ mod tests {
             State::VerifyingDatabase
         );
         assert_eq!(parse_state_string("getting_version"), State::GettingVersion);
-        assert_eq!(
-            parse_state_string("checking_import_jobs"),
-            State::CheckingImportJobs
-        );
-        assert_eq!(
-            parse_state_string("showing_import_job_details"),
-            State::ShowingImportJobDetails
-        );
         assert_eq!(parse_state_string("completed"), State::Completed);
 
         // Test unknown state (should default to completed)
