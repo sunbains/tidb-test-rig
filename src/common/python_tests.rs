@@ -127,6 +127,203 @@ pub trait PythonTestRunner: Send + Sync {
         }
     }
 
+    /// Generate Python test script content
+    fn generate_python_test_script(&self, test_path: &Path, module_name: &str) -> String {
+        let python_script_template = self.get_python_script_template();
+        python_script_template
+            .replace("{}", test_path.file_name().unwrap().to_str().unwrap())
+            .replace("{MODULE_NAME}", module_name)
+    }
+
+    /// Get the Python script template
+    #[allow(clippy::too_many_lines)]
+    fn get_python_script_template(&self) -> &'static str {
+        r#"
+import sys
+import os
+import inspect
+
+# Add the project root to Python path so imports work correctly
+project_root = os.path.abspath('.')
+sys.path.insert(0, project_root)
+
+SHOW_SQL = os.environ.get('SHOW_SQL', 'false').lower() == 'true'
+REAL_DB = os.environ.get('REAL_DB', 'false').lower() == 'true'
+
+try:
+    # Execute the test file directly
+    with open('{}', 'r') as f:
+        test_code = f.read()
+    
+    # Create a namespace for the test
+    test_namespace = {{}}
+    
+    # Execute the test file in the namespace
+    exec(test_code, test_namespace)
+    
+    print(f"✅ Successfully executed {MODULE_NAME}")
+    
+    # Look for handler classes in the namespace
+    handler_classes = []
+    for attr_name, attr_value in test_namespace.items():
+        if attr_name.endswith('Handler') and not attr_name.startswith('_'):
+            try:
+                if hasattr(attr_value, '__bases__'):
+                    # Check if it inherits from PyStateHandler
+                    base_names = [base.__name__ for base in attr_value.__bases__]
+                    if 'PyStateHandler' in base_names:
+                        handler_classes.append(attr_name)
+            except:
+                pass
+
+    if not handler_classes:
+        print(f"❌ No handler classes found in {MODULE_NAME}")
+        sys.exit(1)
+
+    print(f"✅ Found handler classes: {{', '.join(handler_classes)}}")
+
+    # Try to instantiate and execute the first handler class
+    try:
+        handler_class_name = handler_classes[0]
+        handler_class = test_namespace[handler_class_name]
+        handler = handler_class()
+        print(f"✅ Successfully instantiated {{handler_class_name}} for {MODULE_NAME}")
+        
+        # Create a context for testing
+        if REAL_DB:
+            from src.common.test_rig_python import PyStateContext, RealPyConnection
+            # Get connection parameters from environment or use defaults
+            import os
+            host = os.environ.get('TIDB_HOST', 'localhost:4000')
+            username = os.environ.get('TIDB_USER', 'root')
+            password = os.environ.get('TIDB_PASSWORD', '')
+            database = os.environ.get('TIDB_DATABASE', 'test')
+            
+            real_connection = RealPyConnection(
+                connection_info={{'id': 'test_conn'}}, 
+                connection_id='test_conn',
+                host=host,
+                username=username,
+                password=password,
+                database=database
+            )
+            context = PyStateContext(
+                host=host,
+                port=4000,  # Will be parsed from host if it contains port
+                username=username,
+                password=password,
+                database=database,
+                connection=real_connection
+            )
+        else:
+            from src.common.test_rig_python import PyStateContext, PyConnection
+            mock_connection = PyConnection(connection_info={{'id': 'test_conn'}}, connection_id='test_conn')
+            context = PyStateContext(
+                host='localhost',
+                port=4000,
+                username='root',
+                password='',
+                database='test',
+                connection=mock_connection
+            )
+        
+        # Execute the handler's enter method
+        print(f"🔧 Executing {{handler_class_name}}.enter()...")
+        enter_result = handler.enter(context)
+        print(f"Enter result: {{enter_result}}")
+        
+        # Execute the handler's execute method
+        print(f"🔧 Executing {{handler_class_name}}.execute()...")
+        execute_result = handler.execute(context)
+        print(f"Execute result: {{execute_result}}")
+        
+        # Execute the handler's exit method
+        print(f"🔧 Executing {{handler_class_name}}.exit()...")
+        handler.exit(context)
+        print(f"Exit completed")
+        
+    except Exception as e:
+        # Get the current line number from the test file
+        current_line = inspect.currentframe().f_lineno
+        print(f"❌ Failed to execute handler for {MODULE_NAME} (line {{current_line}}): {{str(e)}}")
+        # Print full stack trace for debugging
+        import traceback
+        print("Full stack trace:")
+        traceback.print_exc()
+        sys.exit(1)
+
+    print(f"✅ Test passed for {MODULE_NAME}")
+    
+except Exception as e:
+    # Get the current line number from the test file
+    current_line = inspect.currentframe().f_lineno
+    print(f"❌ Failed to execute {MODULE_NAME} (line {{current_line}}): {{str(e)}}")
+    # Print full stack trace for debugging
+    import traceback
+    print("Full stack trace:")
+    traceback.print_exc()
+    sys.exit(1)
+"#
+    }
+
+    /// Create and write temporary test script
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the temporary file cannot be created or written.
+    fn create_temp_test_script(
+        &self,
+        test_path: &Path,
+        test_content: &str,
+    ) -> Result<std::path::PathBuf, Box<dyn std::error::Error>> {
+        let temp_dir = std::env::temp_dir();
+        let temp_script = temp_dir.join(format!(
+            "test_{}.py",
+            test_path.file_stem().unwrap().to_str().unwrap()
+        ));
+        std::fs::write(&temp_script, test_content)?;
+        Ok(temp_script)
+    }
+
+    /// Execute the Python test script
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the Python script execution fails.
+    fn execute_python_script(
+        &self,
+        test_path: &Path,
+        temp_script: &std::path::PathBuf,
+    ) -> Result<std::process::Output, Box<dyn std::error::Error>> {
+        let output = std::process::Command::new("python3")
+            .arg(temp_script)
+            .current_dir(test_path.parent().unwrap())
+            .output()?;
+        Ok(output)
+    }
+
+    /// Handle test execution results
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the test execution failed.
+    fn handle_test_results(
+        &self,
+        test_path: &Path,
+        output: std::process::Output,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        if output.status.success() {
+            tracing::info!("✅ Test passed: {}", test_path.display());
+            println!("✅ Test passed: {}", test_path.display());
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            tracing::error!("❌ Test failed: {} - {}", test_path.display(), stderr);
+            println!("❌ Test failed: {} - {}", test_path.display(), stderr);
+            return Err(format!("Test failed: {}", test_path.display()).into());
+        }
+        Ok(())
+    }
+
     fn run_single_python_test(
         &self,
         test_path: &Path,
@@ -134,56 +331,16 @@ pub trait PythonTestRunner: Send + Sync {
         async {
             // Create a Python script that imports and tests the handler
             let module_name = test_path.file_stem().unwrap().to_str().unwrap();
-            let test_content = format!(
-                r#"
-import sys
-import os
-sys.path.insert(0, '{}')
+            let test_content = self.generate_python_test_script(test_path, module_name);
 
-try:
-    import {}
-    print(f"✅ Successfully imported {module_name}")
-except Exception as e:
-    print(f"❌ Failed to import {module_name}: {{e}}")
-    sys.exit(1)
+            // Create temporary test script
+            let temp_script = self.create_temp_test_script(test_path, &test_content)?;
 
-# Try to instantiate the handler
-try:
-    handler = {}.PyStateHandler()
-    print(f"✅ Successfully instantiated handler for {module_name}")
-except Exception as e:
-    print(f"❌ Failed to instantiate handler for {module_name}: {{e}}")
-    sys.exit(1)
+            // Execute the Python script
+            let output = self.execute_python_script(test_path, &temp_script)?;
 
-print(f"✅ Test passed for {module_name}")
-"#,
-                test_path.parent().unwrap().to_str().unwrap(),
-                module_name,
-                module_name,
-            );
-
-            let temp_dir = std::env::temp_dir();
-            let temp_script = temp_dir.join(format!(
-                "test_{}.py",
-                test_path.file_stem().unwrap().to_str().unwrap()
-            ));
-
-            std::fs::write(&temp_script, test_content)?;
-
-            let output = std::process::Command::new("python3")
-                .arg(&temp_script)
-                .current_dir(test_path.parent().unwrap())
-                .output()?;
-
-            if output.status.success() {
-                tracing::info!("✅ Test passed: {}", test_path.display());
-                println!("✅ Test passed: {}", test_path.display());
-            } else {
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                tracing::error!("❌ Test failed: {} - {}", test_path.display(), stderr);
-                println!("❌ Test failed: {} - {}", test_path.display(), stderr);
-                return Err(format!("Test failed: {}", test_path.display()).into());
-            }
+            // Handle the results
+            self.handle_test_results(test_path, output)?;
 
             // Clean up temp file
             let _ = std::fs::remove_file(temp_script);
@@ -329,6 +486,7 @@ impl PythonSuiteConfig {
             r#"
 import sys
 import os
+import inspect
 
 # Add the project root to Python path so imports work correctly
 project_root = os.path.abspath('.')
@@ -430,16 +588,24 @@ try:
         print(f"Exit completed")
         
     except Exception as e:
-        print(f"❌ Failed to execute handler for {module_name}: {{e}}")
+        # Get the current line number from the test file
+        current_line = inspect.currentframe().f_lineno
+        print(f"❌ Failed to execute handler for {module_name} (line {{current_line}}): {{str(e)}}")
+        # Print full stack trace for debugging
         import traceback
+        print("Full stack trace:")
         traceback.print_exc()
         sys.exit(1)
 
     print(f"✅ Test passed for {module_name}")
     
 except Exception as e:
-    print(f"❌ Failed to execute {module_name}: {{e}}")
+    # Get the current line number from the test file
+    current_line = inspect.currentframe().f_lineno
+    print(f"❌ Failed to execute {module_name} (line {{current_line}}): {{str(e)}}")
+    # Print full stack trace for debugging
     import traceback
+    print("Full stack trace:")
     traceback.print_exc()
     sys.exit(1)
 "#,
@@ -486,17 +652,63 @@ except Exception as e:
                 }
             }
         } else {
-            tracing::error!(
-                "❌ Test failed: {}\nstdout:\n{}\nstderr:\n{}",
-                test_path.display(),
-                stdout,
+            // Debug: Print the stderr and stdout content to understand what's happening
+            if show_output {
+                println!("Debug stdout (first 10 lines):");
+                for (i, line) in stdout.lines().take(10).enumerate() {
+                    println!("  {i}: {line}");
+                }
+                println!("Debug stderr (first 10 lines):");
+                for (i, line) in stderr.lines().take(10).enumerate() {
+                    println!("  {i}: {line}");
+                }
+                println!("stderr length: {}", stderr.len());
+                println!("stdout length: {}", stdout.len());
+            }
+
+            // Extract just the error message from stderr or stdout, avoiding stack traces
+            let error_message = if stderr.contains("❌ Failed to execute handler for") {
                 stderr
+                    .lines()
+                    .find(|line| line.contains("❌ Failed to execute handler for"))
+                    .unwrap_or("Unknown error")
+            } else if stdout.contains("❌ Failed to execute handler for") {
+                stdout
+                    .lines()
+                    .find(|line| line.contains("❌ Failed to execute handler for"))
+                    .unwrap_or("Unknown error")
+            } else if stderr.contains("❌ Failed to execute") {
+                stderr
+                    .lines()
+                    .find(|line| line.contains("❌ Failed to execute"))
+                    .unwrap_or("Unknown error")
+            } else if stdout.contains("❌ Failed to execute") {
+                stdout
+                    .lines()
+                    .find(|line| line.contains("❌ Failed to execute"))
+                    .unwrap_or("Unknown error")
+            } else {
+                // If no specific error format found, show the first non-empty line of stderr or stdout
+                stderr
+                    .lines()
+                    .find(|line| !line.trim().is_empty() && !line.contains("Traceback"))
+                    .or_else(|| {
+                        stdout
+                            .lines()
+                            .find(|line| !line.trim().is_empty() && !line.contains("Traceback"))
+                    })
+                    .unwrap_or("Unknown error")
+            };
+
+            tracing::error!(
+                "❌ Test failed: {} - {}",
+                test_path.display(),
+                error_message
             );
             println!(
-                "❌ Test failed: {}\nstdout:\n{}\nstderr:\n{}",
+                "❌ Test failed: {} - {}",
                 test_path.display(),
-                stdout,
-                stderr
+                error_message
             );
             return Err(format!("Test failed: {}", test_path.display()).into());
         }

@@ -109,6 +109,7 @@ class RealPyConnection:
         
         self._username = username or os.environ.get('TIDB_USER', 'root')
         self._password = password or os.environ.get('TIDB_PASSWORD', '')
+        # Use database from environment or parameter
         self._database = database or os.environ.get('TIDB_DATABASE', 'test')
         
         self._connect()
@@ -119,14 +120,24 @@ class RealPyConnection:
         
         print(f"[RealPyConnection] Connecting to {self._host}:{self._port} as {self._username}")
         
-        self._conn = mysql.connector.connect(
-            host=self._host,
-            port=self._port,
-            user=self._username,
-            password=self._password,
-            database=self._database,
-            autocommit=True
-        )
+        # Connect with database
+        connect_params = {
+            'host': self._host,
+            'port': self._port,
+            'user': self._username,
+            'password': self._password,
+            'autocommit': True
+        }
+        
+        # Add database if specified
+        if self._database:
+            connect_params['database'] = self._database
+            
+        try:
+            self._conn = mysql.connector.connect(**connect_params)
+        except Exception as e:
+            print(f"[RealPyConnection] Connection failed: {str(e)}")
+            raise
         # Detect server type
         cursor = self._conn.cursor()
         cursor.execute("SELECT VERSION()")
