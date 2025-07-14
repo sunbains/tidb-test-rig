@@ -7,7 +7,7 @@ use crate::errors::{ConnectError, Result};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
-/// Main configuration structure for the TiDB connection and testing framework
+/// Main configuration structure for the `TiDB` connection and testing framework
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AppConfig {
     /// Database connection settings
@@ -158,6 +158,10 @@ fn default_test_timeout() -> u64 {
 
 impl AppConfig {
     /// Load configuration from a file
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be read or parsed.
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
         let path = path.as_ref();
         let extension = path
@@ -192,14 +196,22 @@ impl AppConfig {
         Ok(config)
     }
 
-    /// Load configuration with environment variable overrides
+    /// Load configuration from file with environment variable overrides
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be read or parsed.
     pub fn from_file_with_env<P: AsRef<Path>>(path: P) -> Result<Self> {
         let mut config = Self::from_file(path)?;
         config.apply_environment_overrides();
         Ok(config)
     }
 
-    /// Load configuration from environment variables only
+    /// Load configuration from environment variables
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if required environment variables are missing or invalid.
     pub fn from_env() -> Result<Self> {
         let mut config = Self::default();
         config.apply_environment_overrides();
@@ -245,6 +257,10 @@ impl AppConfig {
     }
 
     /// Save configuration to a file
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be written.
     pub fn save_to_file<P: AsRef<Path>>(&self, path: P) -> Result<()> {
         let path = path.as_ref();
         let extension = path
@@ -274,6 +290,7 @@ impl AppConfig {
     }
 
     /// Get the database password, checking environment variables if not set in config
+    #[must_use]
     pub fn get_password(&self) -> Option<String> {
         self.database
             .password
@@ -281,7 +298,11 @@ impl AppConfig {
             .or_else(|| std::env::var("TIDB_PASSWORD").ok())
     }
 
-    /// Validate the configuration
+    /// Validate configuration
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the configuration is invalid.
     pub fn validate(&self) -> Result<()> {
         if self.database.host.is_empty() {
             return Err(ConnectError::Configuration(
@@ -319,37 +340,44 @@ impl Default for ConfigBuilder {
 }
 
 impl ConfigBuilder {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             config: AppConfig::default(),
         }
     }
 
+    #[must_use]
     pub fn host(mut self, host: impl Into<String>) -> Self {
         self.config.database.host = host.into();
         self
     }
 
+    #[must_use]
     pub fn username(mut self, username: impl Into<String>) -> Self {
         self.config.database.username = username.into();
         self
     }
 
+    #[must_use]
     pub fn password(mut self, password: impl Into<String>) -> Self {
         self.config.database.password = Some(password.into());
         self
     }
 
+    #[must_use]
     pub fn database(mut self, database: impl Into<String>) -> Self {
         self.config.database.database = Some(database.into());
         self
     }
 
+    #[must_use]
     pub fn log_level(mut self, level: impl Into<String>) -> Self {
         self.config.logging.level = level.into();
         self
     }
 
+    #[must_use]
     pub fn test_rows(mut self, rows: u32) -> Self {
         self.config.test.rows = rows;
         self
@@ -357,6 +385,7 @@ impl ConfigBuilder {
 
     // Removed monitor_duration
 
+    #[must_use]
     pub fn build(self) -> AppConfig {
         self.config
     }

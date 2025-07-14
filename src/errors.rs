@@ -9,7 +9,7 @@ use std::pin::Pin;
 use std::time::Duration;
 use thiserror::Error;
 
-/// Main error type for the TiDB connection and testing framework
+/// Main error type for the `TiDB` connection and testing framework
 #[derive(Error, Debug)]
 pub enum ConnectError {
     #[error("Connection error: {0}")]
@@ -150,14 +150,26 @@ pub struct RetryStrategy {
 }
 
 impl RetryStrategy {
+    #[must_use]
     pub fn new(config: RetryConfig) -> Self {
         Self { config }
     }
 
+    #[must_use]
     pub fn with_default_config() -> Self {
         Self::new(RetryConfig::default())
     }
 
+    /// Retry an operation with exponential backoff
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails after all retry attempts.
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        clippy::cast_precision_loss
+    )]
     pub async fn retry<F, T, E>(&self, mut operation: F) -> std::result::Result<T, E>
     where
         F: FnMut() -> Pin<Box<dyn Future<Output = std::result::Result<T, E>> + Send>>,
@@ -181,7 +193,16 @@ impl RetryStrategy {
         unreachable!()
     }
 
-    /// Retry with custom error transformation
+    /// Retry an operation with exponential backoff and error transformation
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails after all retry attempts.
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        clippy::cast_precision_loss
+    )]
     pub async fn retry_with_transform<F, T, E, E2>(
         &self,
         mut operation: F,
@@ -322,6 +343,7 @@ pub struct ErrorContext {
 }
 
 impl ErrorContext {
+    #[must_use]
     pub fn new(operation: String) -> Self {
         Self {
             timestamp: std::time::Instant::now(),
@@ -335,31 +357,37 @@ impl ErrorContext {
         }
     }
 
+    #[must_use]
     pub fn with_attempt(mut self, attempt: usize) -> Self {
         self.attempt = attempt;
         self
     }
 
+    #[must_use]
     pub fn with_duration(mut self, duration: Duration) -> Self {
         self.duration = duration;
         self
     }
 
+    #[must_use]
     pub fn with_host(mut self, host: String) -> Self {
         self.host = Some(host);
         self
     }
 
+    #[must_use]
     pub fn with_database(mut self, database: String) -> Self {
         self.database = Some(database);
         self
     }
 
+    #[must_use]
     pub fn with_user(mut self, user: String) -> Self {
         self.user = Some(user);
         self
     }
 
+    #[must_use]
     pub fn with_info(mut self, key: String, value: String) -> Self {
         self.additional_info.insert(key, value);
         self
@@ -412,13 +440,9 @@ impl From<ConnectionError> for ConnectError {
             ConnectionError::Timeout { timeout_secs } => {
                 ConnectError::Timeout(format!("Connection timeout after {timeout_secs} seconds"))
             }
-            ConnectionError::ConnectionLost { reason: _ } => {
-                ConnectError::Connection(mysql::Error::server_disconnected())
-            }
-            ConnectionError::ConnectionRefused => {
-                ConnectError::Connection(mysql::Error::server_disconnected())
-            }
-            ConnectionError::SslError { message: _ } => {
+            ConnectionError::ConnectionLost { reason: _ }
+            | ConnectionError::ConnectionRefused
+            | ConnectionError::SslError { message: _ } => {
                 ConnectError::Connection(mysql::Error::server_disconnected())
             }
             ConnectionError::DnsResolutionFailed { host, message } => {

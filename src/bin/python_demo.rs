@@ -62,9 +62,9 @@ impl StateHandler for ParsingConfigHandlerAdapter {
         let (host, port) = test_rig::connection::parse_connection_string(&self.host)?;
         context.host = host;
         context.port = port;
-        context.username = self.user.clone();
-        context.password = self.password.clone();
-        context.database = self.database.clone();
+        context.username.clone_from(&self.user);
+        context.password.clone_from(&self.password);
+        context.database.clone_from(&self.database);
         Ok(State::Connecting)
     }
     async fn exit(&self, _context: &mut StateContext) -> test_rig::Result<()> {
@@ -132,7 +132,7 @@ impl StateHandler for VerifyingDatabaseHandlerAdapter {
             if let Some(ref db_name) = context.database {
                 let query = format!("USE `{db_name}`");
                 match conn.query_drop(query) {
-                    Ok(_) => Ok(State::GettingVersion),
+                    Ok(()) => Ok(State::GettingVersion),
                     Err(e) => Err(format!("Database verification failed: {e}").into()),
                 }
             } else {
@@ -241,7 +241,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Run the state machine
     println!("\nStarting state machine with mixed Rust and Python handlers...");
     match machine.run().await {
-        Ok(_) => {
+        Ok(()) => {
             println!("\n✓ State machine completed successfully");
             print_success("Python handlers demo completed!");
         }

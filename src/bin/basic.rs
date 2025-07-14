@@ -19,9 +19,19 @@ impl Args {
     pub fn print_connection_info(&self) {
         self.common.print_connection_info();
     }
+    /// Initialize logging system
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if logging initialization fails.
     pub fn init_logging(&self) -> Result<(), Box<dyn std::error::Error>> {
         self.common.init_logging()
     }
+    /// Get connection information
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if connection information cannot be obtained.
     pub fn get_connection_info(&self) -> test_rig::cli::ConnInfoResult {
         self.common.get_connection_info()
     }
@@ -53,7 +63,7 @@ async fn main() {
     machine.register_handler(State::GettingVersion, Box::new(GettingVersionHandler));
 
     match machine.run().await {
-        Ok(_) => print_success("Basic connection test completed successfully!"),
+        Ok(()) => print_success("Basic connection test completed successfully!"),
         Err(e) => print_error_and_exit("Basic connection test failed", &e),
     }
 }

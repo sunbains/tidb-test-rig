@@ -11,7 +11,7 @@ use crate::errors::Result;
 use crate::state_machine::{State, StateContext, StateHandler};
 use async_trait::async_trait;
 use mysql::prelude::*;
-use mysql::*;
+use mysql::{Error, Row};
 use tracing::{debug, error, info};
 
 /// Handler for the initial state
@@ -45,6 +45,7 @@ pub struct ParsingConfigHandler {
 }
 
 impl ParsingConfigHandler {
+    #[must_use]
     pub fn new(host: String, username: String, password: String, database: Option<String>) -> Self {
         Self {
             host,
@@ -69,9 +70,9 @@ impl StateHandler for ParsingConfigHandler {
         // Store configuration in context
         context.host = host;
         context.port = port;
-        context.username = self.username.clone();
-        context.password = self.password.clone();
-        context.database = self.database.clone();
+        context.username.clone_from(&self.username);
+        context.password.clone_from(&self.password);
+        context.database.clone_from(&self.database);
 
         info!("Configuration parsed: {}:{}", context.host, context.port);
         println!("✓ Configuration parsed: {}:{}", context.host, context.port);
@@ -187,7 +188,7 @@ impl StateHandler for VerifyingDatabaseHandler {
                 // Test if we can access the specified database
                 let query = format!("USE `{db_name}`");
                 match conn.query_drop(query) {
-                    Ok(_) => {
+                    Ok(()) => {
                         println!("✓ Database '{db_name}' verified");
                         Ok(State::Completed)
                     }
@@ -262,6 +263,7 @@ pub struct NextStateVersionHandler {
 }
 
 impl NextStateVersionHandler {
+    #[must_use]
     pub fn new(next_state: State) -> Self {
         Self { next_state }
     }

@@ -8,6 +8,7 @@ use std::path::PathBuf;
 use tracing::Level;
 
 /// Logging configuration
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub struct LogConfig {
     /// Log level (default: INFO)
@@ -16,7 +17,7 @@ pub struct LogConfig {
     pub console: bool,
     /// Whether to log to file
     pub file: bool,
-    /// Log file path (default: logs/tidb_connect.log)
+    /// Log file path (default: `logs/tidb_connect.log`)
     pub file_path: PathBuf,
     /// Maximum log file size in MB (default: 10)
     pub max_file_size: usize,
@@ -48,67 +49,81 @@ impl Default for LogConfig {
 
 impl LogConfig {
     /// Create a new log config with custom settings
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Set the log level
+    #[must_use]
     pub fn with_level(mut self, level: Level) -> Self {
         self.level = level;
         self
     }
 
     /// Enable/disable console logging
+    #[must_use]
     pub fn with_console(mut self, console: bool) -> Self {
         self.console = console;
         self
     }
 
     /// Enable/disable file logging
+    #[must_use]
     pub fn with_file(mut self, file: bool) -> Self {
         self.file = file;
         self
     }
 
     /// Set the log file path
+    #[must_use]
     pub fn with_file_path(mut self, path: PathBuf) -> Self {
         self.file_path = path;
         self
     }
 
     /// Set maximum file size in MB
+    #[must_use]
     pub fn with_max_file_size(mut self, size_mb: usize) -> Self {
         self.max_file_size = size_mb;
         self
     }
 
     /// Set maximum number of files to keep
+    #[must_use]
     pub fn with_max_files(mut self, count: usize) -> Self {
         self.max_files = count;
         self
     }
 
     /// Enable/disable timestamps
+    #[must_use]
     pub fn with_timestamps(mut self, include: bool) -> Self {
         self.include_timestamps = include;
         self
     }
 
     /// Enable/disable thread IDs
+    #[must_use]
     pub fn with_thread_ids(mut self, include: bool) -> Self {
         self.include_thread_ids = include;
         self
     }
 
     /// Enable/disable file and line numbers
+    #[must_use]
     pub fn with_file_line(mut self, include: bool) -> Self {
         self.include_file_line = include;
         self
     }
 }
 
-/// Initialize the logging system
-pub fn init_logging(config: LogConfig) -> Result<(), Box<dyn std::error::Error>> {
+/// Initialize logging system
+///
+/// # Errors
+///
+/// Returns an error if logging initialization fails.
+pub fn init_logging(config: &LogConfig) -> Result<(), Box<dyn std::error::Error>> {
     // Create logs directory if it doesn't exist
     if config.file
         && let Some(parent) = config.file_path.parent()
@@ -137,12 +152,20 @@ pub fn init_logging(config: LogConfig) -> Result<(), Box<dyn std::error::Error>>
     Ok(())
 }
 
-/// Initialize logging with default configuration
+/// Initialize default logging configuration
+///
+/// # Errors
+///
+/// Returns an error if logging initialization fails.
 pub fn init_default_logging() -> Result<(), Box<dyn std::error::Error>> {
-    init_logging(LogConfig::default())
+    init_logging(&LogConfig::default())
 }
 
 /// Initialize logging from environment variables
+///
+/// # Errors
+///
+/// Returns an error if logging initialization fails.
 pub fn init_logging_from_env() -> Result<(), Box<dyn std::error::Error>> {
     let mut config = LogConfig::default();
 
@@ -165,7 +188,7 @@ pub fn init_logging_from_env() -> Result<(), Box<dyn std::error::Error>> {
         config = config.with_file_path(PathBuf::from(file_path));
     }
 
-    init_logging(config)
+    init_logging(&config)
 }
 
 /// Logging macros for common operations
@@ -225,6 +248,7 @@ pub struct ErrorContext {
 }
 
 impl ErrorContext {
+    #[must_use]
     pub fn new(operation: &str, details: &str) -> Self {
         Self {
             operation: operation.to_string(),

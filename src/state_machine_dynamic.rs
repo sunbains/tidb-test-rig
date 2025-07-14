@@ -34,11 +34,13 @@ impl DynamicState {
     }
 
     /// Get the state name
+    #[must_use]
     pub fn name(&self) -> &str {
         &self.name
     }
 
     /// Get the display name (falls back to name if not set)
+    #[must_use]
     pub fn display_name(&self) -> &str {
         self.display_name.as_deref().unwrap_or(&self.name)
     }
@@ -66,30 +68,37 @@ impl From<String> for DynamicState {
 pub mod states {
     use super::DynamicState;
 
+    #[must_use]
     pub fn initial() -> DynamicState {
         DynamicState::with_display_name("initial", "Initial")
     }
 
+    #[must_use]
     pub fn parsing_config() -> DynamicState {
         DynamicState::with_display_name("parsing_config", "Parsing Configuration")
     }
 
+    #[must_use]
     pub fn connecting() -> DynamicState {
         DynamicState::with_display_name("connecting", "Connecting to TiDB")
     }
 
+    #[must_use]
     pub fn testing_connection() -> DynamicState {
         DynamicState::with_display_name("testing_connection", "Testing Connection")
     }
 
+    #[must_use]
     pub fn verifying_database() -> DynamicState {
         DynamicState::with_display_name("verifying_database", "Verifying Database")
     }
 
+    #[must_use]
     pub fn getting_version() -> DynamicState {
         DynamicState::with_display_name("getting_version", "Getting Server Version")
     }
 
+    #[must_use]
     pub fn completed() -> DynamicState {
         DynamicState::with_display_name("completed", "Completed")
     }
@@ -122,6 +131,7 @@ impl Default for DynamicStateContext {
 }
 
 impl DynamicStateContext {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             host: String::new(),
@@ -151,6 +161,7 @@ impl DynamicStateContext {
     }
 
     /// Retrieve handler-specific context
+    #[must_use]
     pub fn get_handler_context<T: Any + Send + Sync>(&self, state: &DynamicState) -> Option<&T> {
         self.handler_contexts
             .get(state)
@@ -173,6 +184,7 @@ impl DynamicStateContext {
     }
 
     /// Retrieve custom data
+    #[must_use]
     pub fn get_custom_data<T: Any + Send + Sync>(&self, key: &str) -> Option<&T> {
         self.custom_data
             .get(key)
@@ -214,6 +226,7 @@ impl Default for DynamicStateMachine {
 }
 
 impl DynamicStateMachine {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             current_state: states::initial(),
@@ -243,6 +256,7 @@ impl DynamicStateMachine {
     }
 
     /// Get the context
+    #[must_use]
     pub fn get_context(&self) -> &DynamicStateContext {
         &self.context
     }
@@ -253,11 +267,13 @@ impl DynamicStateMachine {
     }
 
     /// Get current state
+    #[must_use]
     pub fn get_current_state(&self) -> &DynamicState {
         &self.current_state
     }
 
     /// Check if a transition is valid
+    #[must_use]
     pub fn is_valid_transition(&self, from: &DynamicState, to: &DynamicState) -> bool {
         if let Some(valid_to_states) = self.valid_transitions.get(from) {
             valid_to_states.contains(to)
@@ -267,7 +283,11 @@ impl DynamicStateMachine {
         }
     }
 
-    /// Run the state machine
+    /// Run the dynamic state machine
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the state machine execution fails.
     pub async fn run(&mut self) -> Result<(), ConnectError> {
         println!("Starting dynamic TiDB connection state machine...");
 

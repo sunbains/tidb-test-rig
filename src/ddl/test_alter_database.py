@@ -22,7 +22,7 @@ class AlterDatabaseHandler(PyStateHandler):
             conn.execute_query("ALTER DATABASE test_db CHARACTER SET utf8mb4")
             
             # 2. ALTER DATABASE COLLATION
-            conn.execute_query("ALTER DATABASE test_db COLLATE latin1_swedish_ci")
+            conn.execute_query("ALTER DATABASE test_db COLLATE latin1_bin")
             conn.execute_query("ALTER DATABASE test_db COLLATE utf8mb4_unicode_ci")
             conn.execute_query("ALTER DATABASE test_db COLLATE utf8mb4_general_ci")
             

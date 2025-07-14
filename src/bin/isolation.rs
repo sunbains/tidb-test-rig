@@ -1,15 +1,15 @@
 //!
-//! # TiDB Isolation Test Binary
+//! # `TiDB` Isolation Test Binary
 //!
-//! This binary implements a simple test for TiDB's transaction isolation guarantees (such as repeatable read).
-//! It is designed to verify that TiDB enforces correct isolation semantics under concurrent transactions.
+//! This binary implements a simple test for `TiDB`'s transaction isolation guarantees (such as repeatable read).
+//! It is designed to verify that `TiDB` enforces correct isolation semantics under concurrent transactions.
 //!
 //! ## Overview
 //!
 //! The isolation test creates a dedicated test table, populates it with data, and then runs concurrent transactions
 //! to verify that isolation properties (e.g., repeatable read) are upheld. The test is useful for:
-//! - **Verifying Transaction Isolation**: Ensuring TiDB's isolation level is correctly implemented
-//! - **Regression Testing**: Detecting changes or regressions in isolation behavior across TiDB versions
+//! - **Verifying Transaction Isolation**: Ensuring `TiDB`'s isolation level is correctly implemented
+//! - **Regression Testing**: Detecting changes or regressions in isolation behavior across `TiDB` versions
 //! - **Database Correctness**: Validating that concurrent operations do not violate isolation guarantees
 //!
 //! ## Architecture
@@ -21,11 +21,11 @@
 //! ## State Flow
 //!
 //! The test progresses through these states:
-//! 1. **Initial** → **ParsingConfig** → **Connecting**
-//! 2. **CreatingTable**: Create a dedicated test table for isolation testing
-//! 3. **PopulatingData**: Insert test rows into the table
-//! 4. **TestingIsolation**: Run concurrent transactions to verify isolation
-//! 5. **VerifyingResults**: Check and report the results
+//! 1. **Initial** → **`ParsingConfig`** → **Connecting**
+//! 2. **`CreatingTable`**: Create a dedicated test table for isolation testing
+//! 3. **`PopulatingData`**: Insert test rows into the table
+//! 4. **`TestingIsolation`**: Run concurrent transactions to verify isolation
+//! 5. **`VerifyingResults`**: Check and report the results
 //! 6. **Completed**
 //!
 //! ## Features
@@ -64,7 +64,7 @@
 //!
 //! ## Extensibility
 //!
-//! This binary is intended as a robust, extensible foundation for isolation and concurrency testing in TiDB.
+//! This binary is intended as a robust, extensible foundation for isolation and concurrency testing in `TiDB`.
 //! Handlers and test logic can be extended to cover more advanced isolation scenarios as needed.
 
 use async_trait::async_trait;
@@ -168,14 +168,25 @@ impl IsolationTestArgs {
         self.common.print_connection_info();
         println!("  Test Rows: {}", self.test_rows);
     }
+    /// Initialize logging system
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if logging initialization fails.
     pub fn init_logging(&self) -> test_rig::errors::Result<()> {
         self.common
             .init_logging()
             .map_err(test_rig::errors::ConnectError::from)
     }
+    /// Get connection information
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if connection information cannot be obtained.
     pub fn get_connection_info(&self) -> test_rig::cli::ConnInfoResult {
         self.common.get_connection_info()
     }
+    #[must_use]
     pub fn get_database(&self) -> Option<String> {
         self.common.get_database()
     }
@@ -221,7 +232,7 @@ impl IsolationTestContext {
 
 // Define custom states for the workflow
 mod isolation_states {
-    use super::*;
+    use super::{DynamicState, dynamic_state};
 
     // Re-export common states
     pub use test_rig::common_states::{
@@ -275,9 +286,9 @@ impl DynamicStateHandler for ParsingConfigHandlerAdapter {
         let (host, port) = test_rig::connection::parse_connection_string(&self.host)?;
         context.host = host;
         context.port = port;
-        context.username = self.user.clone();
-        context.password = self.password.clone();
-        context.database = self.database.clone();
+        context.username.clone_from(&self.user);
+        context.password.clone_from(&self.password);
+        context.database.clone_from(&self.database);
         Ok(isolation_states::connecting())
     }
     async fn exit(&self, _context: &mut DynamicStateContext) -> test_rig::Result<()> {
@@ -345,7 +356,7 @@ impl DynamicStateHandler for VerifyingDatabaseHandlerAdapter {
             if let Some(ref db_name) = context.database {
                 let query = format!("USE `{db_name}`");
                 match conn.query_drop(query) {
-                    Ok(_) => Ok(isolation_states::getting_version()),
+                    Ok(()) => Ok(isolation_states::getting_version()),
                     Err(e) => Err(format!("Database verification failed: {e}").into()),
                 }
             } else {
@@ -417,7 +428,7 @@ impl DynamicStateHandler for CreatingTableHandler {
             );
 
             match conn.query_drop(&create_table_sql) {
-                Ok(_) => {
+                Ok(()) => {
                     println!("✓ Test table '{table_name}' created successfully");
                     Ok(isolation_states::populating_data())
                 }
@@ -573,11 +584,9 @@ impl DynamicStateHandler for VerifyingResultsHandler {
 
     async fn execute(&self, context: &mut DynamicStateContext) -> Result<DynamicState> {
         // Get test context
-        let test_context = if let Some(ctx) =
+        let Some(test_context) =
             context.get_custom_data_mut::<IsolationTestContext>("isolation_test_context")
-        {
-            ctx
-        } else {
+        else {
             return Err("Isolation test context not found".into());
         };
 
@@ -684,7 +693,7 @@ async fn main() -> test_rig::errors::Result<()> {
 
     // Run the state machine
     match machine.run().await {
-        Ok(_) => {
+        Ok(()) => {
             print_success("Isolation test completed successfully!");
         }
         Err(e) => {

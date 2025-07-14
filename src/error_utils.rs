@@ -20,6 +20,7 @@ pub struct ResilientConnectionManager {
 }
 
 impl ResilientConnectionManager {
+    #[must_use]
     pub fn new(pool: Pool, host: String, database: String, user: String) -> Self {
         let circuit_config = CircuitBreakerConfig::default();
         let retry_config = RetryConfig::default();
@@ -34,6 +35,7 @@ impl ResilientConnectionManager {
         }
     }
 
+    #[must_use]
     pub fn with_custom_config(
         pool: Pool,
         host: String,
@@ -52,7 +54,11 @@ impl ResilientConnectionManager {
         }
     }
 
-    /// Execute a database operation with retry and circuit breaker
+    /// Execute an operation with resilience and retry logic
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails after all retry attempts.
     pub async fn execute_with_resilience<F, T>(
         &self,
         operation: &str,
@@ -100,7 +106,11 @@ impl ResilientConnectionManager {
         }
     }
 
-    /// Get a connection with retry logic
+    /// Get a connection from the pool
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a connection cannot be obtained from the pool.
     pub async fn get_connection(&self) -> Result<PooledConn, EnhancedError> {
         self.execute_with_resilience("get_connection", || {
             self.pool.get_conn().map_err(ConnectError::from)
@@ -108,7 +118,11 @@ impl ResilientConnectionManager {
         .await
     }
 
-    /// Execute a query with retry logic
+    /// Execute a query with error handling
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the query execution fails.
     pub async fn execute_query<F, T>(&self, _query: &str, f: F) -> Result<T, EnhancedError>
     where
         F: Fn(&mut PooledConn) -> Result<T, ConnectError> + Send + Sync,
@@ -122,6 +136,7 @@ impl ResilientConnectionManager {
 }
 
 /// Helper function to create a retry configuration for database operations
+#[must_use]
 pub fn create_db_retry_config() -> RetryConfig {
     RetryConfig {
         max_retries: 5,
@@ -132,6 +147,7 @@ pub fn create_db_retry_config() -> RetryConfig {
 }
 
 /// Helper function to create a circuit breaker configuration for database operations
+#[must_use]
 pub fn create_db_circuit_breaker_config() -> CircuitBreakerConfig {
     CircuitBreakerConfig {
         failure_threshold: 3,
@@ -142,26 +158,27 @@ pub fn create_db_circuit_breaker_config() -> CircuitBreakerConfig {
 }
 
 /// Error classification for different types of failures
+#[must_use]
 pub fn classify_error(error: &ConnectError) -> ErrorCategory {
     match error {
-        ConnectError::Connection(_) => ErrorCategory::Transient,
-        ConnectError::Timeout(_) => ErrorCategory::Transient,
-        ConnectError::Network(_) => ErrorCategory::Transient,
-        ConnectError::Authentication(_) => ErrorCategory::Permanent,
-        ConnectError::Configuration(_) => ErrorCategory::Permanent,
-        ConnectError::Validation(_) => ErrorCategory::Permanent,
-        ConnectError::Parse(_) => ErrorCategory::Permanent,
-        ConnectError::Database(_) => ErrorCategory::Transient,
-        ConnectError::IsolationTest(_) => ErrorCategory::Transient,
-        ConnectError::StateMachine(_) => ErrorCategory::Transient,
-        ConnectError::CliArgument(_) => ErrorCategory::Permanent,
-        ConnectError::Logging(_) => ErrorCategory::Transient,
-        ConnectError::Io(_) => ErrorCategory::Transient,
-        ConnectError::Retry(_) => ErrorCategory::Transient,
-        ConnectError::CircuitBreaker(_) => ErrorCategory::Transient,
-        ConnectError::Protocol(_) => ErrorCategory::Transient,
-        ConnectError::Resource(_) => ErrorCategory::Transient,
-        ConnectError::Unknown(_) => ErrorCategory::Unknown,
+        ConnectError::Authentication(_)
+        | ConnectError::Configuration(_)
+        | ConnectError::Validation(_)
+        | ConnectError::Parse(_)
+        | ConnectError::CliArgument(_) => ErrorCategory::Permanent,
+        ConnectError::Connection(_)
+        | ConnectError::Timeout(_)
+        | ConnectError::Network(_)
+        | ConnectError::Database(_)
+        | ConnectError::IsolationTest(_)
+        | ConnectError::StateMachine(_)
+        | ConnectError::Logging(_)
+        | ConnectError::Io(_)
+        | ConnectError::Retry(_)
+        | ConnectError::CircuitBreaker(_)
+        | ConnectError::Protocol(_)
+        | ConnectError::Resource(_)
+        | ConnectError::Unknown(_) => ErrorCategory::Transient,
     }
 }
 
@@ -173,6 +190,7 @@ pub enum ErrorCategory {
 }
 
 /// Error recovery strategies
+#[must_use]
 pub fn get_recovery_strategy(error: &ConnectError) -> RecoveryStrategy {
     match classify_error(error) {
         ErrorCategory::Transient => RecoveryStrategy::Retry,
@@ -194,12 +212,14 @@ pub struct ErrorContextBuilder {
 }
 
 impl ErrorContextBuilder {
+    #[must_use]
     pub fn new(operation: String) -> Self {
         Self {
             context: ErrorContext::new(operation),
         }
     }
 
+    #[must_use]
     pub fn with_connection_info(mut self, host: String, database: String, user: String) -> Self {
         self.context = self
             .context
@@ -209,26 +229,31 @@ impl ErrorContextBuilder {
         self
     }
 
+    #[must_use]
     pub fn with_query(mut self, query: String) -> Self {
         self.context = self.context.with_info("query".to_string(), query);
         self
     }
 
+    #[must_use]
     pub fn with_attempt(mut self, attempt: usize) -> Self {
         self.context = self.context.with_attempt(attempt);
         self
     }
 
+    #[must_use]
     pub fn with_duration(mut self, duration: Duration) -> Self {
         self.context = self.context.with_duration(duration);
         self
     }
 
+    #[must_use]
     pub fn with_additional_info(mut self, key: String, value: String) -> Self {
         self.context = self.context.with_info(key, value);
         self
     }
 
+    #[must_use]
     pub fn build(self) -> ErrorContext {
         self.context
     }

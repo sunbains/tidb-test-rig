@@ -1,7 +1,7 @@
 //!
-//! # TiDB Configuration Generator Binary
+//! # `TiDB` Configuration Generator Binary
 //!
-//! This binary generates configuration files for the TiDB testing framework, providing a convenient
+//! This binary generates configuration files for the `TiDB` testing framework, providing a convenient
 //! way to create properly formatted configuration files with sensible defaults and customization options.
 //!
 //! ## Overview
@@ -26,7 +26,7 @@
 //!
 //! ## CLI Options
 //!
-//! - `--output, -o`: Output file path (default: tidb_config.json)
+//! - `--output, -o`: Output file path (default: `tidb_config.json`)
 //! - `--format, -f`: Output format: json or toml (default: json)
 //! - `--host`: Database host (default: localhost:4000)
 //! - `--username`: Database username (default: root)
@@ -131,7 +131,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let format = args.get_one::<String>("format").unwrap().to_string();
     let host = args.get_one::<String>("host").unwrap().to_string();
     let username = args.get_one::<String>("username").unwrap().to_string();
-    let database = args.get_one::<String>("database").map(|s| s.to_string());
+    let database = args
+        .get_one::<String>("database")
+        .map(std::string::ToString::to_string);
     let log_level = args.get_one::<String>("log-level").unwrap().to_string();
 
     // Create configuration using builder pattern

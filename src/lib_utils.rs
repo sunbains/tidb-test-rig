@@ -7,21 +7,25 @@ use crate::cli::CommonArgs;
 use crate::errors::{ConnectError, Result};
 use crate::state_handlers::InitialHandler;
 use crate::state_machine::{State, StateMachine};
-use clap::Parser;
 use std::process;
 
-/// Common setup for tests using the new CommonArgs approach
+/// Common setup for tests using the new `CommonArgs` approach
 pub struct TestSetup {
     pub args: CommonArgs,
 }
 
 impl TestSetup {
-    /// Create a new test setup with CommonArgs
+    /// Create a new test setup with `CommonArgs`
+    #[must_use]
     pub fn new(args: &CommonArgs) -> Self {
         Self { args: args.clone() }
     }
 
-    /// Run the basic connection workflow
+    /// Run the basic workflow
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the workflow execution fails.
     pub async fn run_basic_workflow(&self) -> Result<()> {
         // Get connection info
         let (host, user, password, database) = self
@@ -37,7 +41,7 @@ impl TestSetup {
 
         // Run the state machine
         match state_machine.run().await {
-            Ok(_) => {
+            Ok(()) => {
                 println!("Connection test completed successfully!");
                 Ok(())
             }
@@ -80,54 +84,6 @@ pub fn register_standard_handlers(
     // Use DynamicStateMachine for complex workflows with custom states
 }
 
-/// Common setup for tests using the new CommonArgs approach
-pub struct CommonArgsSetup {
-    pub args: CommonArgs,
-    pub state_machine: StateMachine,
-}
-
-impl CommonArgsSetup {
-    /// Create a new test setup with CommonArgs
-    pub fn new() -> std::result::Result<Self, Box<dyn std::error::Error>> {
-        // Parse command line arguments
-        let args = CommonArgs::parse();
-
-        // Initialize logging
-        args.init_logging()?;
-
-        // Print connection info
-        args.print_connection_info();
-
-        // Get connection info
-        let (host, user, password, database) = args.get_connection_info()?;
-
-        // Create and configure the state machine
-        let mut state_machine = StateMachine::new();
-
-        // Register standard state handlers
-        register_standard_handlers(&mut state_machine, host, user, password, database);
-
-        Ok(Self {
-            args,
-            state_machine,
-        })
-    }
-
-    /// Run the state machine with standard error handling
-    pub async fn run_with_error_handling(&mut self) -> Result<()> {
-        match self.state_machine.run().await {
-            Ok(_) => {
-                println!("Connection test completed successfully!");
-                Ok(())
-            }
-            Err(e) => {
-                TestSetup::handle_connection_error(&e);
-                Err(e)
-            }
-        }
-    }
-}
-
 /// Helper function to print a standard test header
 pub fn print_test_header(title: &str) {
     println!("{title}");
@@ -146,6 +102,7 @@ pub fn print_error_and_exit(message: &str, error: &dyn std::error::Error) {
 }
 
 /// Helper function to create a state machine with standard handlers for multi-connection scenarios
+#[must_use]
 pub fn create_state_machine_with_handlers(
     host: String,
     user: String,

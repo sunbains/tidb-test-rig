@@ -1,6 +1,6 @@
-//! # test_rig - TiDB Connection and Testing Framework
+//! # `test_rig` - `TiDB` Connection and Testing Framework
 //!
-//! A Rust framework for testing TiDB connections with state machine-based workflows,
+//! A Rust framework for testing `TiDB` connections with state machine-based workflows,
 //! Python plugin support, and comprehensive error handling.
 //!
 //! ## Core Features

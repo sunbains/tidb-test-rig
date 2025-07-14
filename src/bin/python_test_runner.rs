@@ -13,15 +13,56 @@ pub struct Args {
     /// Run all suites
     #[arg(long)]
     all: bool,
-    /// Print all output from test runs (stdout/stderr)
-    #[arg(long)]
-    show_output: bool,
-    /// Show all SQL queries being sent to the server with connection IDs
+    /// Output verbosity level
+    #[arg(long, default_value = "normal")]
+    output_level: OutputLevel,
+    /// Database connection type
+    #[arg(long, default_value = "mock")]
+    db_type: DatabaseType,
+    /// Show SQL queries in output
     #[arg(long)]
     show_sql: bool,
-    /// Use a real database connection instead of mock
+    /// Use real database connection instead of mock
     #[arg(long)]
     real_db: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OutputLevel {
+    Normal,
+    Verbose,
+    Debug,
+}
+
+impl std::str::FromStr for OutputLevel {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "normal" => Ok(OutputLevel::Normal),
+            "verbose" => Ok(OutputLevel::Verbose),
+            "debug" => Ok(OutputLevel::Debug),
+            _ => Err(format!("Unknown output level: {s}")),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DatabaseType {
+    Mock,
+    Real,
+}
+
+impl std::str::FromStr for DatabaseType {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "mock" => Ok(DatabaseType::Mock),
+            "real" => Ok(DatabaseType::Real),
+            _ => Err(format!("Unknown database type: {s}")),
+        }
+    }
 }
 
 #[tokio::main]
@@ -38,7 +79,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         include_thread_ids: false,
         include_file_line: true,
     };
-    init_logging(config)?;
+    init_logging(&config)?;
 
     let suites: Vec<&PythonSuiteConfig> = if args.all || args.suite.is_none() {
         PYTHON_SUITES.iter().collect()
@@ -62,11 +103,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut any_failed = false;
     for suite in suites {
         println!("\n=== Running Python test suite: {} ===", suite.name);
+        let show_output =
+            args.output_level == OutputLevel::Verbose || args.output_level == OutputLevel::Debug;
+        let show_sql = args.show_sql || args.output_level == OutputLevel::Debug;
+        let real_db = args.real_db || args.db_type == DatabaseType::Real;
+
         match suite
-            .run_suite_with_output(args.show_output, args.show_sql, args.real_db)
+            .run_suite_with_output(show_output, show_sql, real_db)
             .await
         {
-            Ok(_) => println!("✅ Suite '{}' completed successfully", suite.name),
+            Ok(()) => println!("✅ Suite '{}' completed successfully", suite.name),
             Err(e) => {
                 eprintln!("❌ Suite '{}' failed: {}", suite.name, e);
                 any_failed = true;

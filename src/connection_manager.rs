@@ -86,6 +86,7 @@ pub struct ConnectionInfo {
 }
 
 impl ConnectionCoordinator {
+    #[must_use]
     pub fn new(config: GlobalConfig) -> Self {
         let (tx, rx) = mpsc::channel(100);
         let shared_state = Arc::new(Mutex::new(SharedState {
@@ -133,16 +134,22 @@ impl ConnectionCoordinator {
     }
 
     /// Get shared state reference
+    #[must_use]
     pub fn get_shared_state(&self) -> Arc<Mutex<SharedState>> {
         Arc::clone(&self.shared_state)
     }
 
     /// Get sender for coordination messages
+    #[must_use]
     pub fn get_sender(&self) -> mpsc::Sender<CoordinationMessage> {
         self.tx.clone()
     }
 
-    /// Process coordination messages
+    /// Process incoming messages
+    ///
+    /// # Panics
+    ///
+    /// Panics if the shared state mutex is poisoned.
     pub async fn process_messages(&mut self) {
         while let Some(message) = self.rx.recv().await {
             match message {
@@ -170,13 +177,14 @@ impl ConnectionCoordinator {
                         .send(CoordinationMessage::ResponseGlobalState(state))
                         .await;
                 }
+                CoordinationMessage::ResponseGlobalState(_) => {}
                 CoordinationMessage::Shutdown => break,
-                _ => {}
             }
         }
     }
 
     /// Check if all connections are ready
+    #[must_use]
     pub fn all_connections_ready(&self) -> bool {
         if let Ok(state) = self.shared_state.lock() {
             state.connection_status.values().all(|status| {

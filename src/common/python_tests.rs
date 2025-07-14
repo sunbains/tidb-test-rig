@@ -113,7 +113,9 @@ pub trait PythonTestRunner: Send + Sync {
                     if let Some(file_name) = path.file_name()
                         && let Some(name_str) = file_name.to_str()
                         && name_str.starts_with("test_")
-                        && name_str.ends_with(".py")
+                        && std::path::Path::new(name_str)
+                            .extension()
+                            .is_some_and(|ext| ext.eq_ignore_ascii_case("py"))
                     {
                         test_files.push(path);
                     }
@@ -242,6 +244,11 @@ pub static PYTHON_SUITES: &[PythonSuiteConfig] = &[
 ];
 
 impl PythonSuiteConfig {
+    /// Run a test suite with output control
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the test suite execution fails.
     pub async fn run_suite_with_output(
         &self,
         show_output: bool,
@@ -259,13 +266,18 @@ impl PythonSuiteConfig {
                 show_output,
                 show_sql,
                 real_db,
-            )
-            .await?;
+            )?;
         }
         tracing::info!("All Python tests completed successfully for {}", self.name);
         Ok(())
     }
 
+    /// Discover test files in a directory
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the directory cannot be read.
+    #[allow(clippy::unused_async)]
     pub async fn discover_test_files(
         test_dir: &str,
     ) -> Result<Vec<std::path::PathBuf>, Box<dyn std::error::Error>> {
@@ -279,7 +291,9 @@ impl PythonSuiteConfig {
                 if let Some(file_name) = path.file_name()
                     && let Some(name_str) = file_name.to_str()
                     && name_str.starts_with("test_")
-                    && name_str.ends_with(".py")
+                    && std::path::Path::new(name_str)
+                        .extension()
+                        .is_some_and(|ext| ext.eq_ignore_ascii_case("py"))
                     && name_str != "test_rig_python.py"
                 {
                     test_files.push(path);
@@ -290,7 +304,17 @@ impl PythonSuiteConfig {
         Ok(test_files)
     }
 
-    pub async fn run_single_python_test(
+    /// Run a single Python test file
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the test execution fails.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the test path has an invalid file stem.
+    #[allow(clippy::too_many_lines)]
+    pub fn run_single_python_test(
         test_path: &std::path::Path,
         _module_prefix: &str,
         show_output: bool,

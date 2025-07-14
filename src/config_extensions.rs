@@ -13,7 +13,11 @@ pub trait ConfigExtension: Send + Sync {
     /// Add CLI arguments specific to this extension
     fn add_cli_args(&self, app: Command) -> Command;
 
-    /// Build configuration from CLI arguments
+    /// Build configuration from command line arguments
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the configuration cannot be built.
     fn build_config(
         &self,
         args: &ArgMatches,
@@ -44,6 +48,7 @@ pub fn get_extensions() -> Option<&'static Mutex<HashMap<String, Box<dyn ConfigE
 }
 
 /// Apply all registered extensions to a CLI command
+#[must_use]
 pub fn apply_extensions_to_command(mut app: Command) -> Command {
     if let Some(extensions) = get_extensions()
         && let Ok(extensions) = extensions.lock()
@@ -55,7 +60,11 @@ pub fn apply_extensions_to_command(mut app: Command) -> Command {
     app
 }
 
-/// Apply all registered extensions to build configuration
+/// Apply configuration extensions to the main configuration
+///
+/// # Errors
+///
+/// Returns an error if any extension fails to apply.
 pub fn apply_extensions_to_config(
     args: &ArgMatches,
     config: &mut AppConfig,

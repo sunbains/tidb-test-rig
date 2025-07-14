@@ -1,12 +1,12 @@
-//! # Advanced Multi-Connection TiDB Testing Binary
+//! # Advanced Multi-Connection `TiDB` Testing Binary
 //!
-//! This binary provides advanced multi-connection testing capabilities for TiDB databases,
+//! This binary provides advanced multi-connection testing capabilities for `TiDB` databases,
 //! implementing a sophisticated coordination system for managing multiple concurrent
 //! database connections with shared state management.
 //!
 //! ## Overview
 //!
-//! This test creates and manages multiple TiDB connections simultaneously,
+//! This test creates and manages multiple `TiDB` connections simultaneously,
 //! running them in parallel while coordinating their activities through a shared state
 //! management system. This is useful for testing:
 //!
@@ -18,17 +18,17 @@
 //!
 //! ### Core Components
 //!
-//! 1. **MultiConnectionStateMachine**: Orchestrates multiple individual state machines
+//! 1. **`MultiConnectionStateMachine`**: Orchestrates multiple individual state machines
 //!    - Each connection gets its own state machine instance
 //!    - Manages concurrent execution using Tokio tasks
 //!    - Coordinates state transitions across all connections
 //!
-//! 2. **ConnectionCoordinator**: Central coordination hub
+//! 2. **`ConnectionCoordinator`**: Central coordination hub
 //!    - Maintains shared state accessible to all connections
 //!    - Handles inter-connection communication via message passing
 //!    - Tracks connection status, import jobs, and coordination events
 //!
-//! 3. **SharedState**: Global state management
+//! 3. **`SharedState`**: Global state management
 //!    - Connection status for each connection (Connected, Testing, Error, etc.)
 //!    - Active import jobs across all connections
 //!    - Coordination events and timing information
@@ -37,8 +37,8 @@
 //! ### State Flow
 //!
 //! Each connection follows this state progression:
-//! 1. **Initial** → **ParsingConfig** → **Connecting** → **TestingConnection**
-//! 2. **VerifyingDatabase** → **GettingVersion** → **Completed**
+//! 1. **Initial** → **`ParsingConfig`** → **Connecting** → **`TestingConnection`**
+//! 2. **`VerifyingDatabase`** → **`GettingVersion`** → **Completed**
 //!
 //! All connections run these states concurrently, with the coordinator
 //! tracking progress and managing shared resources.
@@ -68,9 +68,9 @@
 //! ## Configuration
 //!
 //! The binary uses a `GlobalConfig` with these settings:
-//! - **test_duration**: 120 seconds (2 minutes) - Total test duration
-//! - **coordination_timeout**: 30 seconds - Timeout for coordination events
-//! - **max_connections**: 3 - Maximum number of concurrent connections
+//! - **`test_duration`**: 120 seconds (2 minutes) - Total test duration
+//! - **`coordination_timeout`**: 30 seconds - Timeout for coordination events
+//! - **`max_connections`**: 3 - Maximum number of concurrent connections
 //!
 //! ## Output
 //!
@@ -114,9 +114,19 @@ impl Args {
         self.common.print_connection_info();
         println!("  Connection Count: {}", self.connection_count);
     }
+    /// Initialize logging system
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if logging initialization fails.
     pub fn init_logging(&self) -> Result<(), Box<dyn std::error::Error>> {
         self.common.init_logging()
     }
+    /// Get connection information
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if connection information cannot be obtained.
     pub fn get_connection_info(&self) -> test_rig::cli::ConnInfoResult {
         self.common.get_connection_info()
     }

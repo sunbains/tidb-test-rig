@@ -52,6 +52,7 @@ pub struct CircuitBreaker {
 }
 
 impl CircuitBreaker {
+    #[must_use]
     pub fn new(config: CircuitBreakerConfig) -> Self {
         Self {
             config,
@@ -63,10 +64,21 @@ impl CircuitBreaker {
         }
     }
 
+    /// Get the current circuit breaker state
+    ///
+    /// # Panics
+    ///
+    /// Panics if the mutex is poisoned.
+    #[must_use]
     pub fn get_state(&self) -> CircuitState {
         *self.state.lock().unwrap()
     }
 
+    /// Execute a function with circuit breaker protection
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the function fails or the circuit breaker is open.
     pub fn call<F, T, E>(&self, f: F) -> Result<T, ConnectError>
     where
         F: FnOnce() -> Result<T, E>,
@@ -160,7 +172,16 @@ impl CircuitBreaker {
     }
 }
 
-/// Retry with exponential backoff
+/// Retry an operation with exponential backoff
+///
+/// # Errors
+///
+/// Returns an error if the operation fails after all retry attempts.
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss
+)]
 pub async fn retry_with_backoff<F, T, E>(
     config: &RetryConfig,
     operation: F,
@@ -196,6 +217,10 @@ where
 }
 
 /// Retry with circuit breaker
+///
+/// # Errors
+///
+/// Returns an error if the operation fails after all retry attempts or the circuit breaker is open.
 pub async fn retry_with_circuit_breaker<F, T, E>(
     circuit_breaker: &CircuitBreaker,
     retry_config: &RetryConfig,
@@ -220,6 +245,7 @@ pub struct ErrorContext {
 }
 
 impl ErrorContext {
+    #[must_use]
     pub fn new(operation: String) -> Self {
         Self {
             operation,
@@ -230,21 +256,25 @@ impl ErrorContext {
         }
     }
 
+    #[must_use]
     pub fn with_attempt(mut self, attempt: usize) -> Self {
         self.attempt = attempt;
         self
     }
 
+    #[must_use]
     pub fn with_duration(mut self, duration: Duration) -> Self {
         self.duration = duration;
         self
     }
 
+    #[must_use]
     pub fn with_circuit_state(mut self, state: CircuitState) -> Self {
         self.circuit_state = Some(state);
         self
     }
 
+    #[must_use]
     pub fn with_info(mut self, key: String, value: String) -> Self {
         self.additional_info.insert(key, value);
         self

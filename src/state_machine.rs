@@ -9,7 +9,7 @@ use mysql::PooledConn;
 use std::any::Any;
 use std::fmt;
 
-/// Represents the different states in the TiDB connection process
+/// Represents the different states in the `TiDB` connection process
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum State {
     Initial,
@@ -58,6 +58,7 @@ impl Default for StateContext {
 }
 
 impl StateContext {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             host: String::new(),
@@ -86,6 +87,7 @@ impl StateContext {
     }
 
     /// Retrieve handler-specific context
+    #[must_use]
     pub fn get_handler_context<T: Any + Send + Sync>(&self, state: &State) -> Option<&T> {
         self.handler_contexts
             .get(state)
@@ -155,6 +157,7 @@ impl Default for StateMachine {
 }
 
 impl StateMachine {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             current_state: State::Initial,
@@ -171,6 +174,7 @@ impl StateMachine {
         self.context = context;
     }
 
+    #[must_use]
     pub fn get_context(&self) -> &StateContext {
         &self.context
     }
@@ -179,11 +183,16 @@ impl StateMachine {
         &mut self.context
     }
 
+    /// Run the state machine
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the state machine execution fails.
     pub async fn run(&mut self) -> Result<(), ConnectError> {
         println!("Starting TiDB connection state machine...");
 
         while self.current_state != State::Completed
-            && self.current_state != State::Error("".to_string())
+            && self.current_state != State::Error(String::new())
         {
             if let Some(handler) = self.handlers.get(&self.current_state) {
                 // Enter state
@@ -209,6 +218,7 @@ impl StateMachine {
         Ok(())
     }
 
+    #[must_use]
     pub fn get_current_state(&self) -> &State {
         &self.current_state
     }

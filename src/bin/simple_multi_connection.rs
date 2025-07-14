@@ -1,13 +1,13 @@
 //!
-//! # Simple Multi-Connection TiDB Testing Binary
+//! # Simple Multi-Connection `TiDB` Testing Binary
 //!
-//! This binary demonstrates a straightforward approach to running multiple TiDB connections in parallel.
+//! This binary demonstrates a straightforward approach to running multiple `TiDB` connections in parallel.
 //! It is designed as an easy-to-understand example for basic concurrency and load testing scenarios,
 //! and serves as a starting point for more advanced multi-connection workflows.
 //!
 //! ## Overview
 //!
-//! This test creates and manages multiple TiDB connections simultaneously, running them in parallel
+//! This test creates and manages multiple `TiDB` connections simultaneously, running them in parallel
 //! with minimal coordination. Each connection is managed by its own state machine, and results are
 //! collected in a shared state for simple reporting at the end of the test.
 //!
@@ -18,15 +18,15 @@
 //!
 //! ## Architecture
 //!
-//! - **SimpleMultiConnectionCoordinator**: Manages a list of connection configs and a shared state for results
-//! - **StateMachine per Connection**: Each connection runs its own state machine independently
-//! - **SharedTestState**: Collects connection results and global status for reporting
+//! - **`SimpleMultiConnectionCoordinator`**: Manages a list of connection configs and a shared state for results
+//! - **`StateMachine` per Connection**: Each connection runs its own state machine independently
+//! - **`SharedTestState`**: Collects connection results and global status for reporting
 //!
 //! ## State Flow
 //!
 //! Each connection follows this state progression:
-//! 1. **Initial** → **ParsingConfig** → **Connecting** → **TestingConnection**
-//! 2. **VerifyingDatabase** → **GettingVersion** → **Completed**
+//! 1. **Initial** → **`ParsingConfig`** → **Connecting** → **`TestingConnection`**
+//! 2. **`VerifyingDatabase`** → **`GettingVersion`** → **Completed**
 //!
 //! All connections run these states concurrently, and their results are aggregated at the end.
 //!
@@ -97,9 +97,19 @@ impl Args {
         self.common.print_connection_info();
         println!("  Connection Count: {}", self.connection_count);
     }
+    /// Initialize logging system
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if logging initialization fails.
     pub fn init_logging(&self) -> Result<(), Box<dyn std::error::Error>> {
         self.common.init_logging()
     }
+    /// Get connection information
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if connection information cannot be obtained.
     pub fn get_connection_info(&self) -> test_rig::cli::ConnInfoResult {
         self.common.get_connection_info()
     }
@@ -201,9 +211,9 @@ impl DynamicStateHandler for ParsingConfigHandlerAdapter {
         let (host, port) = test_rig::connection::parse_connection_string(&self.host)?;
         context.host = host;
         context.port = port;
-        context.username = self.user.clone();
-        context.password = self.password.clone();
-        context.database = self.database.clone();
+        context.username.clone_from(&self.user);
+        context.password.clone_from(&self.password);
+        context.database.clone_from(&self.database);
         Ok(multi_connection_states::connecting())
     }
     async fn exit(&self, _context: &mut DynamicStateContext) -> test_rig::Result<()> {
@@ -271,7 +281,7 @@ impl DynamicStateHandler for VerifyingDatabaseHandlerAdapter {
             if let Some(ref db_name) = context.database {
                 let query = format!("USE `{db_name}`");
                 match conn.query_drop(query) {
-                    Ok(_) => Ok(multi_connection_states::getting_version()),
+                    Ok(()) => Ok(multi_connection_states::getting_version()),
                     Err(e) => Err(format!("Database verification failed: {e}").into()),
                 }
             } else {
@@ -314,6 +324,7 @@ impl DynamicStateHandler for GettingVersionHandlerAdapter {
 }
 
 impl SimpleMultiConnectionCoordinator {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             shared_state: Arc::new(Mutex::new(SharedTestState::default())),
@@ -338,11 +349,17 @@ impl SimpleMultiConnectionCoordinator {
         self.connections.push(config);
     }
 
+    #[must_use]
     pub fn get_shared_state(&self) -> Arc<Mutex<SharedTestState>> {
         Arc::clone(&self.shared_state)
     }
 
     /// Run all connections concurrently
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any connection fails.
+    #[allow(clippy::too_many_lines)]
     pub async fn run_all_connections(&self) -> Result<(), StateError> {
         println!(
             "Starting {} connections concurrently...",
@@ -435,7 +452,7 @@ impl SimpleMultiConnectionCoordinator {
 
                 // Run the state machine
                 match machine.run().await {
-                    Ok(_) => {
+                    Ok(()) => {
                         // Update status to completed
                         if let Ok(mut state) = shared_state.lock() {
                             if let Some(result) = state.connection_results.get_mut(&connection_id) {
@@ -467,7 +484,7 @@ impl SimpleMultiConnectionCoordinator {
         // Wait for all connections to complete
         for handle in handles {
             match handle.await {
-                Ok(Ok(_)) => {}
+                Ok(Ok(())) => {}
                 Ok(Err(e)) => eprintln!("Connection task failed: {e}"),
                 Err(e) => eprintln!("Task join failed: {e}"),
             }

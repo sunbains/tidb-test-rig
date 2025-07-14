@@ -12,6 +12,7 @@ use std::env;
 pub type ConnInfoResult =
     std::result::Result<(String, String, String, Option<String>), Box<dyn std::error::Error>>;
 
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Parser, Debug, Clone)]
 #[command(name = "tidb-tests")]
 #[command(about = "TiDB connection and testing tests")]
@@ -67,7 +68,11 @@ pub struct CommonArgs {
 }
 
 impl CommonArgs {
-    /// Load configuration from file if specified, otherwise use defaults
+    /// Load configuration from file and merge with command line arguments
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the configuration file cannot be read or parsed.
     pub fn load_config(&self) -> Result<AppConfig> {
         if let Some(ref config_path) = self.config {
             AppConfig::from_file_with_env(config_path)
@@ -90,21 +95,22 @@ impl CommonArgs {
     }
 
     /// Merge CLI arguments with configuration file settings
+    #[must_use]
     pub fn merge_with_config(&self, config: &AppConfig) -> AppConfig {
         let mut merged_config = config.clone();
 
         // Override with CLI arguments if provided
         if self.host != "localhost:4000" {
-            merged_config.database.host = self.host.clone();
+            merged_config.database.host.clone_from(&self.host);
         }
         if self.user != "root" {
-            merged_config.database.username = self.user.clone();
+            merged_config.database.username.clone_from(&self.user);
         }
         if let Some(ref database) = self.database {
             merged_config.database.database = Some(database.clone());
         }
         if self.log_level != "info" {
-            merged_config.logging.level = self.log_level.clone();
+            merged_config.logging.level.clone_from(&self.log_level);
         }
         if self.verbose {
             merged_config.test.verbose = true;
@@ -113,6 +119,11 @@ impl CommonArgs {
         merged_config
     }
 
+    /// Get password from command line argument or prompt user
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if password cannot be read from stdin.
     pub fn get_password(&self) -> std::result::Result<String, Box<dyn std::error::Error>> {
         if let Some(ref password) = self.password {
             return Ok(password.clone());
@@ -126,28 +137,36 @@ impl CommonArgs {
         Err("No password provided and password prompt is disabled".into())
     }
 
+    #[must_use]
     pub fn get_host(&self) -> String {
-        if self.host != "localhost:4000" {
-            self.host.clone()
-        } else {
+        if self.host == "localhost:4000" {
             env::var("TIDB_HOST").unwrap_or_else(|_| self.host.clone())
-        }
-    }
-
-    pub fn get_user(&self) -> String {
-        if self.user != "root" {
-            self.user.clone()
         } else {
-            env::var("TIDB_USER").unwrap_or_else(|_| self.user.clone())
+            self.host.clone()
         }
     }
 
+    #[must_use]
+    pub fn get_user(&self) -> String {
+        if self.user == "root" {
+            env::var("TIDB_USER").unwrap_or_else(|_| self.user.clone())
+        } else {
+            self.user.clone()
+        }
+    }
+
+    #[must_use]
     pub fn get_database(&self) -> Option<String> {
         self.database
             .clone()
             .or_else(|| env::var("TIDB_DATABASE").ok())
     }
 
+    /// Get connection information from command line arguments
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if required connection parameters are missing or invalid.
     pub fn get_connection_info(&self) -> ConnInfoResult {
         let password = self.get_password()?;
         Ok((
@@ -158,6 +177,11 @@ impl CommonArgs {
         ))
     }
 
+    /// Get connection information from configuration file
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the configuration file cannot be read or parsed.
     pub fn get_connection_info_from_config(
         &self,
     ) -> Result<(String, String, String, Option<String>)> {
@@ -182,6 +206,11 @@ impl CommonArgs {
         ))
     }
 
+    /// Validate command line arguments
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the arguments are invalid.
     pub fn validate(&self) -> std::result::Result<(), Box<dyn std::error::Error>> {
         if !self.host.contains(':') {
             return Err("Host must be in format 'hostname:port'".into());
@@ -212,6 +241,11 @@ impl CommonArgs {
         }
     }
 
+    /// Initialize logging system
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if logging initialization fails.
     pub fn init_logging(&self) -> std::result::Result<(), Box<dyn std::error::Error>> {
         use crate::logging::LogConfig;
         use std::path::PathBuf;
@@ -219,7 +253,6 @@ impl CommonArgs {
 
         let level = match self.log_level.to_lowercase().as_str() {
             "debug" => Level::DEBUG,
-            "info" => Level::INFO,
             "warn" => Level::WARN,
             "error" => Level::ERROR,
             _ => Level::INFO,
@@ -232,21 +265,25 @@ impl CommonArgs {
                 config = config.with_file_path(PathBuf::from(file_path));
             }
         }
-        crate::logging::init_logging(config)
+        crate::logging::init_logging(&config)
     }
 
+    /// Initialize logging from configuration
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if logging initialization fails.
     pub fn init_logging_from_config(&self) -> Result<()> {
-        let app_config = self.load_config()?;
-        let merged_config = self.merge_with_config(&app_config);
-
         use crate::logging::LogConfig;
         use std::path::PathBuf;
         use tracing::Level;
 
+        let app_config = self.load_config()?;
+        let merged_config = self.merge_with_config(&app_config);
+
         let level = match merged_config.logging.level.to_lowercase().as_str() {
             "trace" => Level::TRACE,
             "debug" => Level::DEBUG,
-            "info" => Level::INFO,
             "warn" => Level::WARN,
             "error" => Level::ERROR,
             _ => Level::INFO,
@@ -262,7 +299,7 @@ impl CommonArgs {
                 .with_file_path(PathBuf::from(file_path));
         }
 
-        crate::logging::init_logging(log_config)
+        crate::logging::init_logging(&log_config)
             .map_err(|e| crate::errors::ConnectError::Logging(e.to_string()))
     }
 }
@@ -346,12 +383,22 @@ mod tests {
     }
 }
 
+/// Parse command line arguments
+///
+/// # Errors
+///
+/// Returns an error if the arguments are invalid.
 pub fn parse_args() -> std::result::Result<CommonArgs, Box<dyn std::error::Error>> {
     let args = CommonArgs::parse();
     args.validate()?;
     Ok(args)
 }
 
+/// Get connection information from command line arguments
+///
+/// # Errors
+///
+/// Returns an error if the arguments are invalid or required parameters are missing.
 pub fn get_connection_info() -> ConnInfoResult {
     let args = parse_args()?;
     args.get_connection_info()

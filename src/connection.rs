@@ -7,7 +7,11 @@ use crate::errors::{ConnectionError, Result};
 use mysql::prelude::*;
 use mysql::{OptsBuilder, Pool, PooledConn};
 
-/// Parse host and port from a string in format "hostname:port"
+/// Parse host and port from a string in format "host:port"
+///
+/// # Errors
+///
+/// Returns an error if the string format is invalid or port cannot be parsed.
 pub fn parse_host_port(host_port: &str) -> Result<(String, u16)> {
     let parts: Vec<&str> = host_port.split(':').collect();
     if parts.len() != 2 {
@@ -31,12 +35,20 @@ pub fn parse_host_port(host_port: &str) -> Result<(String, u16)> {
     Ok((host, port))
 }
 
-/// Parse connection string (alias for parse_host_port for compatibility)
+/// Parse connection string in format "hostname:port"
+///
+/// # Errors
+///
+/// Returns an error if the connection string format is invalid.
 pub fn parse_connection_string(connection_string: &str) -> Result<(String, u16)> {
     parse_host_port(connection_string)
 }
 
-/// Parse username and password from a string in format "username:password"
+/// Parse username and password from string in format "user:pass"
+///
+/// # Errors
+///
+/// Returns an error if the format is invalid.
 pub fn parse_user_pass(user_pass: &str) -> Result<(String, String)> {
     let parts: Vec<&str> = user_pass.splitn(2, ':').collect();
     if parts.len() != 2 {
@@ -50,7 +62,11 @@ pub fn parse_user_pass(user_pass: &str) -> Result<(String, String)> {
     Ok((parts[0].to_string(), parts[1].to_string()))
 }
 
-/// Create a connection pool to TiDB using the provided parameters
+/// Create a connection pool
+///
+/// # Errors
+///
+/// Returns an error if the connection pool cannot be created.
 pub fn create_connection_pool(
     host: &str,
     port: u16,
@@ -72,7 +88,11 @@ pub fn create_connection_pool(
     Ok(pool)
 }
 
-/// Create a connection to TiDB using the provided parameters
+/// Create a single connection
+///
+/// # Errors
+///
+/// Returns an error if the connection cannot be established.
 pub fn create_connection(
     host: &str,
     port: u16,
@@ -86,20 +106,32 @@ pub fn create_connection(
     Ok(conn)
 }
 
-/// Verify that a database exists
+/// Verify if a database exists
+///
+/// # Errors
+///
+/// Returns an error if the query fails.
 pub fn verify_database_exists(conn: &mut PooledConn, database: &str) -> Result<bool> {
     let query = "SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = ?";
     let result: Option<String> = conn.exec_first(query, (database,))?;
     Ok(result.is_some())
 }
 
-/// Test the connection by executing a simple query
+/// Test database connection
+///
+/// # Errors
+///
+/// Returns an error if the connection test fails.
 pub fn test_connection(conn: &mut PooledConn) -> Result<()> {
     let _result: Option<i32> = conn.query_first("SELECT 1")?;
     Ok(())
 }
 
-/// Get the server version
+/// Get server version information
+///
+/// # Errors
+///
+/// Returns an error if the version query fails.
 pub fn get_server_version(conn: &mut PooledConn) -> Result<Option<String>> {
     let version: Option<String> = conn.query_first("SELECT VERSION()")?;
     Ok(version)

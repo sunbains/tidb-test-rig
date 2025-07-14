@@ -61,6 +61,7 @@ pub struct ImportJobContext {
 }
 
 impl ImportJobContext {
+    #[must_use]
     pub fn new(monitor_duration: u64) -> Self {
         Self {
             active_import_jobs: Vec::new(),
@@ -71,7 +72,7 @@ impl ImportJobContext {
 
 // Define custom states for the workflow
 mod job_monitor_states {
-    use super::*;
+    use super::{DynamicState, dynamic_state};
 
     // Re-export common states
     pub use test_rig::common_states::{
@@ -119,9 +120,9 @@ impl DynamicStateHandler for ParsingConfigHandlerAdapter {
         let (host, port) = test_rig::connection::parse_connection_string(&self.host)?;
         context.host = host;
         context.port = port;
-        context.username = self.user.clone();
-        context.password = self.password.clone();
-        context.database = self.database.clone();
+        context.username.clone_from(&self.user);
+        context.password.clone_from(&self.password);
+        context.database.clone_from(&self.database);
         Ok(job_monitor_states::connecting())
     }
     async fn exit(&self, _context: &mut DynamicStateContext) -> test_rig::Result<()> {
@@ -189,7 +190,7 @@ impl DynamicStateHandler for VerifyingDatabaseHandlerAdapter {
             if let Some(ref db_name) = context.database {
                 let query = format!("USE `{db_name}`");
                 match conn.query_drop(query) {
-                    Ok(_) => Ok(job_monitor_states::getting_version()),
+                    Ok(()) => Ok(job_monitor_states::getting_version()),
                     Err(e) => Err(format!("Database verification failed: {e}").into()),
                 }
             } else {
@@ -284,6 +285,7 @@ pub struct ShowingImportJobDetailsHandler {
 }
 
 impl ShowingImportJobDetailsHandler {
+    #[must_use]
     pub fn new(monitor_duration: u64) -> Self {
         Self { monitor_duration }
     }
@@ -334,9 +336,10 @@ impl DynamicStateHandler for ShowingImportJobDetailsHandler {
                                 "Job_ID: {} | Phase: {} | Start_Time: {} | Source_File_Size: {} | Imported_Rows: {} | Time elapsed: {:02}:{:02}:{:02}",
                                 job.Job_ID,
                                 job.Phase,
-                                job.Start_Time
-                                    .map(|t| t.format("%Y-%m-%d %H:%M:%S").to_string())
-                                    .unwrap_or_else(|| "N/A".to_string()),
+                                job.Start_Time.map_or_else(
+                                    || "N/A".to_string(),
+                                    |t| t.format("%Y-%m-%d %H:%M:%S").to_string()
+                                ),
                                 job.Source_File_Size,
                                 job.Imported_Rows.unwrap_or(0),
                                 elapsed_h,
@@ -347,9 +350,10 @@ impl DynamicStateHandler for ShowingImportJobDetailsHandler {
                             println!(
                                 "Job_ID: {} | Status: Completed | End_Time: {}",
                                 job.Job_ID,
-                                job.End_Time
-                                    .map(|t| t.format("%Y-%m-%d %H:%M:%S").to_string())
-                                    .unwrap_or_else(|| "N/A".to_string())
+                                job.End_Time.map_or_else(
+                                    || "N/A".to_string(),
+                                    |t| t.format("%Y-%m-%d %H:%M:%S").to_string()
+                                )
                             );
                         }
                     }
@@ -409,7 +413,11 @@ fn default_show_details() -> bool {
 }
 
 impl ImportJobConfig {
-    /// Load configuration from a file
+    /// Load configuration from file
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be read or parsed.
     pub fn from_file<P: AsRef<std::path::Path>>(path: P) -> Result<Self> {
         let path = path.as_ref();
         let extension = path
@@ -432,7 +440,11 @@ impl ImportJobConfig {
         Ok(config)
     }
 
-    /// Save configuration to a file
+    /// Save configuration to file
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be written.
     pub fn save_to_file<P: AsRef<std::path::Path>>(&self, path: P) -> Result<()> {
         let path = path.as_ref();
         let extension = path
@@ -471,7 +483,11 @@ impl ImportJobConfig {
         }
     }
 
-    /// Validate the configuration
+    /// Validate configuration
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the configuration is invalid.
     pub fn validate(&self) -> Result<()> {
         if self.monitor_duration == 0 {
             return Err("Monitor duration must be greater than 0".into());
@@ -619,7 +635,7 @@ async fn main() {
 
     // Run the state machine
     match machine.run().await {
-        Ok(_) => {
+        Ok(()) => {
             print_success("Job monitoring test completed successfully!");
         }
         Err(e) => {

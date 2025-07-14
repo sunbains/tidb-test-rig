@@ -9,7 +9,6 @@ use crate::connection_manager::{
 use crate::errors::Result;
 use crate::state_machine::{State, StateContext, StateHandler};
 use async_trait::async_trait;
-use std::sync::Arc;
 use tokio::sync::mpsc;
 
 /// State machine for managing multiple connections
@@ -26,6 +25,7 @@ pub struct ConnectionStateMachine {
 }
 
 impl MultiConnectionStateMachine {
+    #[must_use]
     pub fn new(coordinator_sender: mpsc::Sender<CoordinationMessage>) -> Self {
         Self {
             coordinator_sender,
@@ -53,6 +53,7 @@ impl MultiConnectionStateMachine {
         // For now, the test will add the connection directly to the coordinator.
     }
 
+    #[allow(clippy::unused_self)]
     fn register_connection_handlers(
         &self,
         state_machine: &mut crate::state_machine::StateMachine,
@@ -66,15 +67,11 @@ impl MultiConnectionStateMachine {
         );
     }
 
-    /// Start coordination processing
-    pub fn start_coordination(&mut self) {
-        // This method is no longer needed in the new design
-        // The coordinator is spawned separately in tests
-        // For now, just log that coordination is started
-        println!("Coordination started via external coordinator");
-    }
-
-    /// Run all state machines concurrently
+    /// Run all state machines
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any state machine fails.
     pub async fn run_all(&mut self) -> Result<()> {
         println!(
             "Starting {} connection state machines...",
@@ -91,7 +88,7 @@ impl MultiConnectionStateMachine {
         // Wait for all to complete
         for handle in handles {
             match handle.await {
-                Ok(Ok(_)) => println!("✓ State machine completed successfully"),
+                Ok(Ok(())) => println!("✓ State machine completed successfully"),
                 Ok(Err(e)) => eprintln!("✗ State machine failed: {e}"),
                 Err(e) => eprintln!("✗ State machine task failed: {e}"),
             }
@@ -100,33 +97,10 @@ impl MultiConnectionStateMachine {
         Ok(())
     }
 
-    /// Get shared state - this now requires a message to the coordinator
-    pub fn get_shared_state(
-        &self,
-    ) -> Arc<std::sync::Mutex<crate::connection_manager::SharedState>> {
-        // This method is no longer directly usable as the coordinator is removed.
-        // It would require a new mechanism to expose the coordinator's shared state.
-        // For now, returning a dummy or raising an error.
-        panic!("get_shared_state is no longer directly usable as the coordinator is removed.");
-    }
-
-    /// Check if all connections are ready
-    pub fn all_connections_ready(&self) -> bool {
-        // This method is no longer directly usable as the coordinator is removed.
-        // It would require a new mechanism to check connection status.
-        // For now, returning false.
-        false
-    }
-
     /// Get the number of state machines
+    #[must_use]
     pub fn state_machine_count(&self) -> usize {
         self.state_machines.len()
-    }
-
-    /// Check if coordination is running
-    pub fn is_coordination_running(&self) -> bool {
-        // In the new design, coordination is external
-        false
     }
 }
 
@@ -135,9 +109,9 @@ impl ConnectionStateMachine {
     pub async fn update_status(&self, status: ConnectionState, error_message: Option<String>) {
         let status_update = ConnectionStatus {
             connection_id: self.connection_id.clone(),
-            host: "".to_string(),
+            host: String::new(),
             port: 0,
-            username: "".to_string(),
+            username: String::new(),
             status,
             last_activity: chrono::Utc::now(),
             error_message,
@@ -149,8 +123,20 @@ impl ConnectionStateMachine {
     }
 
     /// Get connection ID
+    #[must_use]
     pub fn get_connection_id(&self) -> &str {
         &self.connection_id
+    }
+
+    #[allow(clippy::unused_self)]
+    #[must_use]
+    pub fn get_connection_info() -> (String, String, String, Option<String>) {
+        (
+            "localhost".to_string(),
+            "4000".to_string(),
+            "test_user".to_string(),
+            Some("test_password".to_string()),
+        )
     }
 }
 
@@ -160,11 +146,13 @@ pub struct CoordinationHandler {
 }
 
 impl CoordinationHandler {
+    #[must_use]
     pub fn new(coordinator_sender: mpsc::Sender<CoordinationMessage>) -> Self {
         Self { coordinator_sender }
     }
 
     /// Get the sender for testing
+    #[must_use]
     pub fn get_sender(&self) -> &mpsc::Sender<CoordinationMessage> {
         &self.coordinator_sender
     }
