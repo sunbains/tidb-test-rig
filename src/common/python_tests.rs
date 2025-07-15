@@ -388,6 +388,11 @@ pub static PYTHON_SUITES: &[PythonSuiteConfig] = &[
         module_prefix: "src.ddl",
     },
     PythonSuiteConfig {
+        name: "import",
+        test_dir: "src/import",
+        module_prefix: "src.import",
+    },
+    PythonSuiteConfig {
         name: "Scale",
         test_dir: "src/scale",
         module_prefix: "src.scale",
@@ -527,75 +532,76 @@ try:
 
     print(f"✅ Found handler classes: {{', '.join(handler_classes)}}")
 
-    # Try to instantiate and execute the first handler class
-    try:
-        handler_class_name = handler_classes[0]
-        handler_class = test_namespace[handler_class_name]
-        handler = handler_class()
-        print(f"✅ Successfully instantiated {{handler_class_name}} for {module_name}")
-        
-        # Create a context for testing
-        if REAL_DB:
-            from src.common.test_rig_python import PyStateContext, RealPyConnection
-            # Get connection parameters from environment or use defaults
-            import os
-            host = os.environ.get('TIDB_HOST', 'localhost:4000')
-            username = os.environ.get('TIDB_USER', 'root')
-            password = os.environ.get('TIDB_PASSWORD', '')
-            database = os.environ.get('TIDB_DATABASE', 'test')
+    # Try to instantiate and execute all handler classes
+    for handler_class_name in handler_classes:
+        try:
+            print(f"\n--- Executing {{handler_class_name}} ---")
+            handler_class = test_namespace[handler_class_name]
+            handler = handler_class()
+            print(f"✅ Successfully instantiated {{handler_class_name}} for {module_name}")
             
-            real_connection = RealPyConnection(
-                connection_info={{'id': 'test_conn'}}, 
-                connection_id='test_conn',
-                host=host,
-                username=username,
-                password=password,
-                database=database
-            )
-            context = PyStateContext(
-                host=host,
-                port=4000,  # Will be parsed from host if it contains port
-                username=username,
-                password=password,
-                database=database,
-                connection=real_connection
-            )
-        else:
-            from src.common.test_rig_python import PyStateContext, PyConnection
-            mock_connection = PyConnection(connection_info={{'id': 'test_conn'}}, connection_id='test_conn')
-            context = PyStateContext(
-                host='localhost',
-                port=4000,
-                username='root',
-                password='',
-                database='test',
-                connection=mock_connection
-            )
-        
-        # Execute the handler's enter method
-        print(f"🔧 Executing {{handler_class_name}}.enter()...")
-        enter_result = handler.enter(context)
-        print(f"Enter result: {{enter_result}}")
-        
-        # Execute the handler's execute method
-        print(f"🔧 Executing {{handler_class_name}}.execute()...")
-        execute_result = handler.execute(context)
-        print(f"Execute result: {{execute_result}}")
-        
-        # Execute the handler's exit method
-        print(f"🔧 Executing {{handler_class_name}}.exit()...")
-        handler.exit(context)
-        print(f"Exit completed")
-        
-    except Exception as e:
-        # Get the current line number from the test file
-        current_line = inspect.currentframe().f_lineno
-        print(f"❌ Failed to execute handler for {module_name} (line {{current_line}}): {{str(e)}}")
-        # Print full stack trace for debugging
-        import traceback
-        print("Full stack trace:")
-        traceback.print_exc()
-        sys.exit(1)
+            # Create a context for testing
+            if REAL_DB:
+                from src.common.test_rig_python import PyStateContext, RealPyConnection
+                # Get connection parameters from environment or use defaults
+                import os
+                host = os.environ.get('TIDB_HOST', 'localhost:4000')
+                username = os.environ.get('TIDB_USER', 'root')
+                password = os.environ.get('TIDB_PASSWORD', '')
+                database = os.environ.get('TIDB_DATABASE', 'test')
+                
+                real_connection = RealPyConnection(
+                    connection_info={{'id': 'test_conn'}}, 
+                    connection_id='test_conn',
+                    host=host,
+                    username=username,
+                    password=password,
+                    database=database
+                )
+                context = PyStateContext(
+                    host=host,
+                    port=4000,  # Will be parsed from host if it contains port
+                    username=username,
+                    password=password,
+                    database=database,
+                    connection=real_connection
+                )
+            else:
+                from src.common.test_rig_python import PyStateContext, PyConnection
+                mock_connection = PyConnection(connection_info={{'id': 'test_conn'}}, connection_id='test_conn')
+                context = PyStateContext(
+                    host='localhost',
+                    port=4000,
+                    username='root',
+                    password='',
+                    database='test',
+                    connection=mock_connection
+                )
+            
+            # Execute the handler's enter method
+            print(f"🔧 Executing {{handler_class_name}}.enter()...")
+            enter_result = handler.enter(context)
+            print(f"Enter result: {{enter_result}}")
+            
+            # Execute the handler's execute method
+            print(f"🔧 Executing {{handler_class_name}}.execute()...")
+            execute_result = handler.execute(context)
+            print(f"Execute result: {{execute_result}}")
+            
+            # Execute the handler's exit method
+            print(f"🔧 Executing {{handler_class_name}}.exit()...")
+            handler.exit(context)
+            print(f"Exit completed")
+            
+        except Exception as e:
+            # Get the current line number from the test file
+            current_line = inspect.currentframe().f_lineno
+            print(f"❌ Failed to execute handler {{handler_class_name}} for {module_name} (line {{current_line}}): {{str(e)}}")
+            # Print full stack trace for debugging
+            import traceback
+            print("Full stack trace:")
+            traceback.print_exc()
+            sys.exit(1)
 
     print(f"✅ Test passed for {module_name}")
     
@@ -633,6 +639,20 @@ except Exception as e:
             command.env("REAL_DB", "true");
         }
 
+        // Pass TiDB environment variables to the Python subprocess
+        if let Ok(host) = std::env::var("TIDB_HOST") {
+            command.env("TIDB_HOST", host);
+        }
+        if let Ok(user) = std::env::var("TIDB_USER") {
+            command.env("TIDB_USER", user);
+        }
+        if let Ok(password) = std::env::var("TIDB_PASSWORD") {
+            command.env("TIDB_PASSWORD", password);
+        }
+        if let Ok(database) = std::env::var("TIDB_DATABASE") {
+            command.env("TIDB_DATABASE", database);
+        }
+
         let output = command.output()?;
         let stdout = String::from_utf8_lossy(&output.stdout);
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -645,9 +665,40 @@ except Exception as e:
             }
             // Always print SQL logs if show_sql is set, even if show_output is not
             if show_sql && !stdout.is_empty() {
-                for line in stdout.lines() {
+                let lines: Vec<&str> = stdout.lines().collect();
+                let mut i = 0;
+                while i < lines.len() {
+                    let line = lines[i];
                     if line.contains("SQL [") || line.contains("🔍 SQL [") {
                         println!("{line}");
+                        // If this is a multi-line SQL statement, print the next lines until we hit another SQL statement or non-SQL line
+                        let mut j = i + 1;
+                        while j < lines.len() {
+                            let next_line = lines[j];
+                            if next_line.contains("SQL [") || next_line.contains("🔍 SQL [") {
+                                // Found another SQL statement, stop here
+                                break;
+                            } else if next_line.trim().is_empty() {
+                                // Empty line, skip it
+                                j += 1;
+                            } else if next_line.starts_with("🔧")
+                                || next_line.starts_with("✅")
+                                || next_line.starts_with("❌")
+                                || next_line.starts_with("Enter result:")
+                                || next_line.starts_with("Execute result:")
+                                || next_line.starts_with("Exit completed")
+                            {
+                                // Found a non-SQL line, stop here
+                                break;
+                            } else {
+                                // This is part of the SQL statement, print it
+                                println!("{next_line}");
+                                j += 1;
+                            }
+                        }
+                        i = j;
+                    } else {
+                        i += 1;
                     }
                 }
             }

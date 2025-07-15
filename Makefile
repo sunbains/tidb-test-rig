@@ -14,7 +14,7 @@ MONITOR_DURATION ?= 60
 .PHONY: help build db_tests clean db_tests build-test run-simple run-advanced check format lint \
 	run-cli-test run-logging-test \
 	run-basic-test run-basic-debug-test run-basic-verbose-test run-job-monitor-test \
-	run-python-tests run-all-python-tests run-ddl-tests run-scale-tests run-txn-tests \
+	run-python-tests run-all-python-tests run-ddl-tests run-scale-tests run-txn-tests run-import-tests \
 	run-python-suite
 
 # Default target
@@ -45,11 +45,12 @@ help:
 	@echo "  run-job-monitor-test - Run job monitoring db_tests"
 	@echo ""
 	@echo "Python Test Suite Targets:"
-	@echo "  run-python-tests       - Run all Python test suites (DDL, Scale, Txn)"
+	@echo "  run-python-tests       - Run all Python test suites (DDL, Scale, Txn, Import)"
 	@echo "  run-all-python-tests   - Alias for run-python-tests"
 	@echo "  run-ddl-tests          - Run DDL Python test suite only"
 	@echo "  run-scale-tests        - Run Scale Python test suite only"
 	@echo "  run-txn-tests          - Run Txn Python test suite only"
+	@echo "  run-import-tests       - Run Import Python test suite only"
 	@echo "  run-python-suite       - Run a specific Python test suite (use SUITE=name)"
 	@echo ""
 	@echo "Utility targets:"
@@ -66,6 +67,7 @@ help:
 	@echo "  make run-ddl-tests                       # Run only DDL tests"
 	@echo "  make run-python-suite SUITE=txn          # Run specific suite"
 	@echo "  make run-python-suite SUITE=scale        # Run specific suite"
+	@echo "  make run-python-suite SUITE=import       # Run specific suite"
 	@echo "  SHOW_OUTPUT         - Print all output from test runs (stdout/stderr) [default: unset]"
 	@echo "  SHOW_SQL            - Print all SQL queries sent to the server [default: unset]"
 	@echo "  REAL_DB             - Use a real database connection instead of mock [default: unset]"
@@ -124,10 +126,14 @@ run-txn-tests:
 	@echo "Running Txn Python test suite..."
 	RUST_LOG=$(RUST_LOG) cargo run --bin python_test_runner --features="python_plugins" -- --suite txn $(if $(SHOW_OUTPUT),--show-output) $(if $(SHOW_SQL),--show-sql) $(if $(REAL_DB),--real-db)
 
+run-import-tests:
+	@echo "Running Import Python test suite..."
+	RUST_LOG=$(RUST_LOG) cargo run --bin python_test_runner --features="python_plugins" -- --suite import $(if $(SHOW_OUTPUT),--output-level verbose) $(if $(SHOW_SQL),--show-sql) $(if $(REAL_DB),--real-db)
+
 run-python-suite:
 	@if [ -z "$(SUITE)" ]; then \
 		echo "Error: SUITE variable is required. Usage: make run-python-suite SUITE=<suite_name>"; \
-		echo "Available suites: ddl, scale, txn"; \
+		echo "Available suites: ddl, scale, txn, import"; \
 		exit 1; \
 	fi
 	@echo "Running Python test suite: $(SUITE)"

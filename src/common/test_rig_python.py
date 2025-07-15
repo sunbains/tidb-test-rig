@@ -41,8 +41,6 @@ class PyConnection:
         with self._lock:
             if SHOW_SQL:
                 print(f"🔍 SQL [{self.connection_id}]: {query}")
-            else:
-                print(f"Mock: [{self.connection_id}] Executing query: {query}")
             if "SHOW TABLES" in query:
                 return [{"col_0": "ddl_test"}]
             elif "SHOW DATABASES" in query:
@@ -70,24 +68,18 @@ class PyConnection:
         with self._lock:
             if SHOW_SQL:
                 print(f"🔍 SQL [{self.connection_id}]: START TRANSACTION")
-            else:
-                print(f"Mock: [{self.connection_id}] Starting transaction")
     
     def commit(self) -> None:
         """Commit the current transaction"""
         with self._lock:
             if SHOW_SQL:
                 print(f"🔍 SQL [{self.connection_id}]: COMMIT")
-            else:
-                print(f"Mock: [{self.connection_id}] Committing transaction")
     
     def rollback(self) -> None:
         """Rollback the current transaction"""
         with self._lock:
             if SHOW_SQL:
                 print(f"🔍 SQL [{self.connection_id}]: ROLLBACK")
-            else:
-                print(f"Mock: [{self.connection_id}] Rolling back transaction")
 
 class RealPyConnection:
     """Real database connection using mysql-connector-python"""
