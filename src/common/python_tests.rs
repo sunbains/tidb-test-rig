@@ -389,8 +389,8 @@ pub static PYTHON_SUITES: &[PythonSuiteConfig] = &[
     },
     PythonSuiteConfig {
         name: "import",
-        test_dir: "src/import",
-        module_prefix: "src.import",
+        test_dir: "src/load_data",
+        module_prefix: "src.load_data",
     },
     PythonSuiteConfig {
         name: "Scale",
@@ -421,6 +421,46 @@ impl PythonSuiteConfig {
         let test_files = PythonSuiteConfig::discover_test_files(self.test_dir).await?;
         tracing::info!("Found {} test files in {}", test_files.len(), self.test_dir);
         for test_file in test_files {
+            tracing::info!("Running test: {}", test_file.display());
+            PythonSuiteConfig::run_single_python_test(
+                &test_file,
+                self.module_prefix,
+                show_output,
+                show_sql,
+                real_db,
+            )?;
+        }
+        tracing::info!("All Python tests completed successfully for {}", self.name);
+        Ok(())
+    }
+
+    /// Run a test suite with output control, filtered by a specific test file.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no test file is found or the test suite execution fails.
+    pub async fn run_suite_with_output_filtered(
+        &self,
+        show_output: bool,
+        show_sql: bool,
+        real_db: bool,
+        test_file: Option<&str>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        tracing::info!("Running Python test suite: {}", self.name);
+        let test_files = PythonSuiteConfig::discover_test_files(self.test_dir).await?;
+        tracing::info!("Found {} test files in {}", test_files.len(), self.test_dir);
+        let filtered_files: Vec<_> = if let Some(file) = test_file {
+            test_files
+                .into_iter()
+                .filter(|f| f.file_name().map(|n| n == file).unwrap_or(false))
+                .collect()
+        } else {
+            test_files
+        };
+        if filtered_files.is_empty() {
+            return Err(format!("No test file '{}' found in suite {}", test_file.unwrap_or(""), self.name).into());
+        }
+        for test_file in filtered_files {
             tracing::info!("Running test: {}", test_file.display());
             PythonSuiteConfig::run_single_python_test(
                 &test_file,

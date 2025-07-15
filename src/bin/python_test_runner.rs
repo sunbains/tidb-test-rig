@@ -25,6 +25,9 @@ pub struct Args {
     /// Use real database connection instead of mock
     #[arg(long)]
     real_db: bool,
+    /// Only run a specific test file (e.g. test_import_large.py)
+    #[arg(long)]
+    test_file: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -109,7 +112,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let real_db = args.real_db || args.db_type == DatabaseType::Real;
 
         match suite
-            .run_suite_with_output(show_output, show_sql, real_db)
+            .run_suite_with_output_filtered(show_output, show_sql, real_db, args.test_file.as_deref())
             .await
         {
             Ok(()) => println!("✅ Suite '{}' completed successfully", suite.name),
