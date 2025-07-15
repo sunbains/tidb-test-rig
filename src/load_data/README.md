@@ -1,6 +1,6 @@
 # TiDB Import Test Suite
 
-This directory contains comprehensive tests for TiDB's IMPORT functionality, including both traditional LOAD DATA and modern IMPORT INTO statements.
+This directory contains tests for TiDB's IMPORT functionality, including both traditional LOAD DATA and modern IMPORT INTO statements.
 
 ## Directory Structure
 
@@ -531,13 +531,8 @@ make run-import-tests REAL_DB=1 SHOW_SQL=1
 ### Performance Testing
 - ✅ Small datasets (1k-10k rows)
 - ✅ Medium datasets (50k-100k rows)
-- ✅ Large datasets (200k+ rows)
-- ✅ Performance metrics (rows/sec)
-- ✅ Memory efficiency
-- ✅ Scalability testing
-- ✅ Multi-connection coordination
-- ✅ Real-time monitoring
-- ✅ Concurrent operations
+- TODO: Large datasets load from S3.
+
 
 ### Data Validation
 - ✅ Row count verification
@@ -601,7 +596,6 @@ When adding new tests:
 
 - All tests use temporary files that are automatically cleaned up
 - Large dataset tests may take significant time to complete
-- Performance metrics are logged for benchmarking
+- TODO: Performance metrics are logged for benchmarking
 - Tests are designed to be idempotent and safe to run multiple times
-- The test suite supports both development and production environments
 
